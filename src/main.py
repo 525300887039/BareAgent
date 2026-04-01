@@ -6,18 +6,27 @@ import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
 
 from src.core.context import assemble_system_prompt
+from src.core.loop import agent_loop
+from src.provider.base import BaseLLMProvider, ThinkingConfig
+from src.provider.factory import create_provider
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.toml"
 VALID_PERMISSION_MODES = {"default", "auto", "plan", "bypass"}
 VALID_THINKING_MODES = {"adaptive", "enabled", "disabled"}
 console = Console()
+DEFAULT_API_KEY_ENV_BY_PROVIDER = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+}
 
 
 @dataclass(slots=True)
@@ -25,6 +34,7 @@ class ProviderConfig:
     name: str
     model: str
     api_key_env: str
+    base_url: str | None = None
 
 
 @dataclass(slots=True)
@@ -36,12 +46,6 @@ class PermissionConfig:
 class UIConfig:
     stream: bool
     theme: str
-
-
-@dataclass(slots=True)
-class ThinkingConfig:
-    mode: str
-    budget_tokens: int
 
 
 @dataclass(slots=True)
@@ -100,11 +104,23 @@ def _resolve_int(file_value: int, env_name: str) -> int:
     return int(raw_value)
 
 
+def _resolve_optional_string(file_value: str | None, env_name: str) -> str | None:
+    raw_value = os.getenv(env_name)
+    value = raw_value if raw_value is not None else file_value
+    if value in {None, ""}:
+        return None
+    return value
+
+
 def _validate_mode(name: str, value: str, allowed: set[str]) -> str:
     if value not in allowed:
         allowed_values = ", ".join(sorted(allowed))
         raise ValueError(f"{name} must be one of: {allowed_values}")
     return value
+
+
+def _default_api_key_env(provider_name: str) -> str:
+    return DEFAULT_API_KEY_ENV_BY_PROVIDER.get(provider_name.lower(), "ANTHROPIC_API_KEY")
 
 
 def resolve_config_path(config_path: Path | None) -> Path:
@@ -129,21 +145,34 @@ def load_config(
     permission_raw = raw_config.get("permission", {})
     ui_raw = raw_config.get("ui", {})
     thinking_raw = raw_config.get("thinking", {})
+    configured_provider_name = str(provider_raw.get("name", "anthropic"))
+    provider_name = _resolve_string(
+        configured_provider_name,
+        "BAREAGENT_PROVIDER",
+        provider_override,
+    )
+    default_api_key_env = _default_api_key_env(provider_name)
+    configured_api_key_env = provider_raw.get("api_key_env")
+    api_key_env_default = (
+        configured_api_key_env
+        if configured_api_key_env and provider_name == configured_provider_name
+        else default_api_key_env
+    )
 
     provider = ProviderConfig(
-        name=_resolve_string(
-            provider_raw.get("name", "anthropic"),
-            "BAREAGENT_PROVIDER",
-            provider_override,
-        ),
+        name=provider_name,
         model=_resolve_string(
             provider_raw.get("model", "claude-sonnet-4-20250514"),
             "BAREAGENT_MODEL",
             model_override,
         ),
         api_key_env=_resolve_string(
-            provider_raw.get("api_key_env", "ANTHROPIC_API_KEY"),
+            api_key_env_default,
             "BAREAGENT_API_KEY_ENV",
+        ),
+        base_url=_resolve_optional_string(
+            provider_raw.get("base_url"),
+            "BAREAGENT_BASE_URL",
         ),
     )
     permission = PermissionConfig(
@@ -184,11 +213,6 @@ def load_config(
     )
 
 
-def agent_loop(messages: list[dict[str, str]], config: Config) -> str:
-    _ = messages, config
-    return "Agent loop not implemented yet"
-
-
 def _initial_messages(workspace: Path) -> list[dict[str, str]]:
     return [{"role": "system", "content": assemble_system_prompt(workspace)}]
 
@@ -205,10 +229,16 @@ def _read_user_input(session: PromptSession | None) -> str:
         return session.prompt("bareagent> ")
 
 
-def run_repl(config: Config, workspace: Path | None = None) -> int:
+def run_repl(
+    config: Config,
+    provider: BaseLLMProvider,
+    workspace: Path | None = None,
+) -> int:
     workspace_path = (workspace or Path.cwd()).resolve()
     session = PromptSession() if _supports_prompt_toolkit() else None
     messages = _initial_messages(workspace_path)
+    tools: list[dict[str, Any]] = []
+    handlers: dict[str, Any] = {}
 
     console.print(
         f"BareAgent REPL ({config.provider.name}/{config.provider.model})",
@@ -238,12 +268,17 @@ def run_repl(config: Config, workspace: Path | None = None) -> int:
 
         messages.append({"role": "user", "content": text})
         try:
-            response = agent_loop(messages, config)
+            response = agent_loop(
+                provider=provider,
+                messages=messages,
+                tools=tools,
+                handlers=handlers,
+                permission=None,
+            )
         except KeyboardInterrupt:
             console.print("\nAgent loop interrupted.", style="yellow")
             continue
 
-        messages.append({"role": "assistant", "content": response})
         console.print(response)
 
 
@@ -264,7 +299,13 @@ def main(argv: list[str] | None = None) -> int:
         console.print(f"Failed to load config: {exc}", style="bold red")
         return 1
 
-    return run_repl(config)
+    try:
+        provider = create_provider(config)
+    except ValueError as exc:
+        console.print(f"Failed to initialize provider: {exc}", style="bold red")
+        return 1
+
+    return run_repl(config, provider)
 
 
 if __name__ == "__main__":
