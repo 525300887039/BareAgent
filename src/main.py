@@ -14,6 +14,9 @@ from rich.console import Console
 
 from src.core.context import assemble_system_prompt
 from src.core.loop import agent_loop
+from src.core.tools import get_handlers, get_tools
+from src.permission.guard import PermissionGuard, PermissionMode
+from src.permission.rules import parse_permission_rules
 from src.provider.base import BaseLLMProvider, ThinkingConfig
 from src.provider.factory import create_provider
 
@@ -40,6 +43,8 @@ class ProviderConfig:
 @dataclass(slots=True)
 class PermissionConfig:
     mode: str
+    allow: list[str]
+    deny: list[str]
 
 
 @dataclass(slots=True)
@@ -145,6 +150,7 @@ def load_config(
     permission_raw = raw_config.get("permission", {})
     ui_raw = raw_config.get("ui", {})
     thinking_raw = raw_config.get("thinking", {})
+    allow_rules, deny_rules = parse_permission_rules(raw_config)
     configured_provider_name = str(provider_raw.get("name", "anthropic"))
     provider_name = _resolve_string(
         configured_provider_name,
@@ -183,7 +189,9 @@ def load_config(
                 "BAREAGENT_PERMISSION_MODE",
             ),
             VALID_PERMISSION_MODES,
-        )
+        ),
+        allow=allow_rules,
+        deny=deny_rules,
     )
     ui = UIConfig(
         stream=_resolve_bool(ui_raw.get("stream", True), "BAREAGENT_UI_STREAM"),
@@ -237,8 +245,9 @@ def run_repl(
     workspace_path = (workspace or Path.cwd()).resolve()
     session = PromptSession() if _supports_prompt_toolkit() else None
     messages = _initial_messages(workspace_path)
-    tools: list[dict[str, Any]] = []
-    handlers: dict[str, Any] = {}
+    tools = get_tools()
+    handlers = get_handlers(workspace_path)
+    permission = _build_permission_guard(config)
 
     console.print(
         f"BareAgent REPL ({config.provider.name}/{config.provider.model})",
@@ -273,13 +282,20 @@ def run_repl(
                 messages=messages,
                 tools=tools,
                 handlers=handlers,
-                permission=None,
+                permission=permission,
             )
         except KeyboardInterrupt:
             console.print("\nAgent loop interrupted.", style="yellow")
             continue
 
         console.print(response)
+
+
+def _build_permission_guard(config: Config) -> PermissionGuard:
+    guard = PermissionGuard(PermissionMode(config.permission.mode))
+    guard.allow_rules = list(config.permission.allow)
+    guard.deny_rules = list(config.permission.deny)
+    return guard
 
 
 def main(argv: list[str] | None = None) -> int:
