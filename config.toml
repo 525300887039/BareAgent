@@ -1,0 +1,15 @@
+[provider]
+name = "anthropic"
+model = "claude-sonnet-4-20250514"
+api_key_env = "ANTHROPIC_API_KEY"
+
+[permission]
+mode = "default"
+
+[ui]
+stream = true
+theme = "dark"
+
+[thinking]
+mode = "adaptive"
+budget_tokens = 10000
