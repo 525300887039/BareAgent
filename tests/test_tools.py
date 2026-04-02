@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
 
+from src.core.handlers.bash import run_bash
 from src.core.handlers.file_edit import run_edit
 from src.core.handlers.file_read import run_read
 from src.core.handlers.file_write import run_write
 from src.core.handlers.glob_search import run_glob
 from src.core.handlers.grep_search import run_grep
 from src.core.sandbox import safe_path
-from src.core.tools import get_handlers
+from src.core.tools import get_handlers, tool_search
 from src.permission.guard import PermissionGuard, PermissionMode
 from src.permission.rules import parse_permission_rules
 from src.provider.base import ToolCall
@@ -127,6 +129,12 @@ def test_permission_rules_prefix_matching() -> None:
     assert guard.requires_confirm("bash", {"command": "npm publish"}) is True
 
 
+def test_permission_guard_requires_confirmation_for_unknown_non_safe_tools() -> None:
+    guard = PermissionGuard(PermissionMode.DEFAULT)
+
+    assert guard.requires_confirm("subagent", {"task": "inspect repo"}) is True
+
+
 def test_bash_handler_runs_in_bound_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     workspace = tmp_path / "workspace"
     other_dir = tmp_path / "other"
@@ -145,6 +153,18 @@ def test_bash_handler_runs_in_bound_workspace(tmp_path: Path, monkeypatch: pytes
     assert str(other_dir.resolve()) not in output
 
 
+def test_bash_handler_decodes_binary_output_without_crashing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(*args, **kwargs):
+        _ = args, kwargs
+        return SimpleNamespace(stdout=b"ok\xae", stderr=b"", returncode=0)
+
+    monkeypatch.setattr("src.core.handlers.bash.subprocess.run", fake_run)
+
+    assert run_bash("echo ok") == "ok\ufffd"
+
+
 def test_parse_permission_rules_reads_allow_and_deny_lists() -> None:
     allow, deny = parse_permission_rules(
         {
@@ -157,3 +177,7 @@ def test_parse_permission_rules_reads_allow_and_deny_lists() -> None:
 
     assert allow == ["Bash(prefix:npm*)"]
     assert deny == ["Bash(prefix:rm*)"]
+
+
+def test_tool_search_placeholder_returns_empty_list() -> None:
+    assert tool_search("todo", max_results=3) == []

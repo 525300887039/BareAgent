@@ -17,7 +17,6 @@ def run_bash(command: str, timeout: int = 30, *, cwd: Path | None = None) -> str
         result = subprocess.run(
             completed_command,
             capture_output=True,
-            text=True,
             timeout=timeout,
             check=False,
             cwd=None if cwd is None else str(cwd),

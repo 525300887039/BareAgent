@@ -52,7 +52,7 @@ class PermissionGuard:
         if tool_name in {"write_file", "edit_file"}:
             return False
         if tool_name != "bash":
-            return False
+            return True
 
         cmd = str(tool_input.get("command", "")).strip()
         if self._match_rules(self.deny_rules, tool_name, cmd):
