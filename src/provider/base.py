@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Generator
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -18,6 +19,15 @@ class ToolCall:
     id: str
     name: str
     input: dict[str, Any]
+
+
+@dataclass(slots=True)
+class StreamEvent:
+    type: str
+    text: str = ""
+    tool_call_id: str = ""
+    name: str = ""
+    input: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -77,5 +87,5 @@ class BaseLLMProvider(ABC):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         **kwargs: Any,
-    ):
-        """Yield a streaming response."""
+    ) -> Generator[StreamEvent, None, LLMResponse]:
+        """Yield streaming events and return the final normalized response."""

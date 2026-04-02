@@ -5,7 +5,13 @@ from typing import Any
 
 import anthropic
 
-from src.provider.base import BaseLLMProvider, LLMResponse, ThinkingConfig, ToolCall
+from src.provider.base import (
+    BaseLLMProvider,
+    LLMResponse,
+    StreamEvent,
+    ThinkingConfig,
+    ToolCall,
+)
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -25,6 +31,45 @@ class AnthropicProvider(BaseLLMProvider):
         tools: list[dict[str, Any]],
         **kwargs: Any,
     ) -> LLMResponse:
+        params = self._build_request_params(messages, tools, **kwargs)
+        response = self.client.messages.create(**params)
+        return self._parse_response(response)
+
+    def create_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        **kwargs: Any,
+    ):
+        params = self._build_request_params(messages, tools, **kwargs)
+        with self.client.messages.stream(**params) as stream:
+            for event in stream:
+                if event.type == "content_block_delta" and event.delta.type == "text_delta":
+                    yield StreamEvent(type="text", text=event.delta.text)
+                    continue
+
+                if event.type != "content_block_stop":
+                    continue
+
+                content_block = event.content_block
+                if content_block.type != "tool_use":
+                    continue
+
+                yield StreamEvent(
+                    type="tool_call",
+                    tool_call_id=content_block.id,
+                    name=content_block.name,
+                    input=dict(content_block.input or {}),
+                )
+
+            return self._parse_response(stream.get_final_message())
+
+    def _build_request_params(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         system_prompt, anthropic_messages = self._convert_messages(messages)
         max_tokens = int(kwargs.pop("max_tokens", 8000))
         if self.thinking_config.mode in {"enabled", "adaptive"}:
@@ -46,18 +91,7 @@ class AnthropicProvider(BaseLLMProvider):
                 "budget_tokens": self.thinking_config.budget_tokens,
             }
         params.update(kwargs)
-
-        response = self.client.messages.create(**params)
-        return self._parse_response(response)
-
-    def create_stream(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]],
-        **kwargs: Any,
-    ):
-        _ = messages, tools, kwargs
-        raise NotImplementedError("Anthropic streaming will be implemented in Task 04.")
+        return params
 
     def _convert_messages(
         self,

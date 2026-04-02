@@ -5,7 +5,7 @@ from typing import Any
 
 import openai
 
-from src.provider.base import BaseLLMProvider, LLMResponse, ToolCall
+from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
 
 
 class OpenAIProvider(BaseLLMProvider):
@@ -30,15 +30,7 @@ class OpenAIProvider(BaseLLMProvider):
         if self.wire_api == "responses":
             return self._create_via_responses(messages, tools, **kwargs)
 
-        params: dict[str, Any] = {
-            "model": self.model,
-            "messages": self._convert_messages(messages),
-        }
-        converted_tools = self._convert_tools(tools)
-        if converted_tools:
-            params["tools"] = converted_tools
-        params.update(kwargs)
-
+        params = self._build_chat_request_params(messages, tools, **kwargs)
         response = self.client.chat.completions.create(**params)
         return self._parse_response(response)
 
@@ -48,8 +40,10 @@ class OpenAIProvider(BaseLLMProvider):
         tools: list[dict[str, Any]],
         **kwargs: Any,
     ):
-        _ = messages, tools, kwargs
-        raise NotImplementedError("OpenAI streaming will be implemented in Task 04.")
+        if self.wire_api == "responses":
+            return (yield from self._create_stream_via_responses(messages, tools, **kwargs))
+
+        return (yield from self._create_stream_via_chat(messages, tools, **kwargs))
 
     def _create_via_responses(
         self,
@@ -57,6 +51,172 @@ class OpenAIProvider(BaseLLMProvider):
         tools: list[dict[str, Any]],
         **kwargs: Any,
     ) -> LLMResponse:
+        params = self._build_responses_request_params(messages, tools, **kwargs)
+        raw_response = self.client.responses.create(**params)
+        return self._parse_responses_api_response(raw_response)
+
+    def _create_stream_via_chat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        **kwargs: Any,
+    ):
+        params = self._build_chat_request_params(messages, tools, **kwargs)
+        params["stream"] = True
+        if "stream_options" not in params and not self.base_url:
+            params["stream_options"] = {"include_usage": True}
+
+        text_parts: list[str] = []
+        pending_tool_calls: dict[int, dict[str, str]] = {}
+        emitted_tool_call_ids: set[str] = set()
+        usage_prompt_tokens = 0
+        usage_completion_tokens = 0
+        stop_reason = ""
+
+        stream = self.client.chat.completions.create(**params)
+        for chunk in stream:
+            usage = getattr(chunk, "usage", None)
+            if usage is not None:
+                usage_prompt_tokens = getattr(usage, "prompt_tokens", 0) or usage_prompt_tokens
+                usage_completion_tokens = (
+                    getattr(usage, "completion_tokens", 0) or usage_completion_tokens
+                )
+
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue
+
+            choice = choices[0]
+            if choice.finish_reason:
+                stop_reason = choice.finish_reason
+
+            delta = choice.delta
+            if delta.content:
+                text_parts.append(delta.content)
+                yield StreamEvent(type="text", text=delta.content)
+
+            for tool_delta in delta.tool_calls or []:
+                call_state = pending_tool_calls.setdefault(
+                    tool_delta.index,
+                    {"id": "", "name": "", "arguments": ""},
+                )
+                if tool_delta.id:
+                    call_state["id"] = tool_delta.id
+                function = tool_delta.function
+                if function is None:
+                    continue
+                if function.name:
+                    call_state["name"] = function.name
+                if function.arguments:
+                    call_state["arguments"] += function.arguments
+
+            if choice.finish_reason == "tool_calls":
+                for tool_call in self._iter_new_tool_calls(
+                    self._finalize_tool_calls(pending_tool_calls),
+                    emitted_tool_call_ids,
+                ):
+                    yield StreamEvent(
+                        type="tool_call",
+                        tool_call_id=tool_call.id,
+                        name=tool_call.name,
+                        input=tool_call.input,
+                    )
+
+        tool_calls = self._finalize_tool_calls(pending_tool_calls)
+        for tool_call in self._iter_new_tool_calls(tool_calls, emitted_tool_call_ids):
+            yield StreamEvent(
+                type="tool_call",
+                tool_call_id=tool_call.id,
+                name=tool_call.name,
+                input=tool_call.input,
+            )
+        return LLMResponse(
+            text="".join(text_parts),
+            tool_calls=tool_calls,
+            stop_reason="tool_calls" if tool_calls else (stop_reason or "stop"),
+            input_tokens=usage_prompt_tokens,
+            output_tokens=usage_completion_tokens,
+        )
+
+    def _create_stream_via_responses(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        **kwargs: Any,
+    ):
+        params = self._build_responses_request_params(messages, tools, **kwargs)
+        params["stream"] = True
+
+        final_payload: Any = None
+        yielded_tool_calls: set[str] = set()
+
+        stream = self.client.responses.create(**params)
+        for event in stream:
+            event_type = getattr(event, "type", "")
+            if event_type == "response.output_text.delta":
+                delta = getattr(event, "delta", "")
+                if delta:
+                    yield StreamEvent(type="text", text=delta)
+                continue
+
+            if event_type == "response.output_item.done":
+                item = getattr(event, "item", None)
+                if getattr(item, "type", "") != "function_call":
+                    continue
+
+                tool_call_id = getattr(item, "call_id", "") or getattr(item, "id", "")
+                if tool_call_id in yielded_tool_calls:
+                    continue
+                yielded_tool_calls.add(tool_call_id)
+                yield StreamEvent(
+                    type="tool_call",
+                    tool_call_id=tool_call_id,
+                    name=getattr(item, "name", ""),
+                    input=self._parse_tool_input(getattr(item, "arguments", "{}")),
+                )
+                continue
+
+            if event_type == "response.completed":
+                final_payload = getattr(event, "response", None)
+                continue
+
+            if event_type == "response.incomplete":
+                final_payload = getattr(event, "response", None)
+                continue
+
+            if event_type == "response.failed":
+                response = getattr(event, "response", None)
+                raise RuntimeError(self._extract_responses_error(response) or "Response failed.")
+
+            if event_type == "error":
+                raise RuntimeError(getattr(event, "message", "Responses stream error."))
+
+        if final_payload is None:
+            raise RuntimeError("Responses stream ended without a completed response.")
+        return self._parse_responses_api_response(final_payload)
+
+    def _build_chat_request_params(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "model": self.model,
+            "messages": self._convert_messages(messages),
+        }
+        converted_tools = self._convert_tools(tools)
+        if converted_tools:
+            params["tools"] = converted_tools
+        params.update(kwargs)
+        return params
+
+    def _build_responses_request_params(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         instructions, input_items = self._convert_messages_for_responses(messages)
         params: dict[str, Any] = {
             "model": self.model,
@@ -72,9 +232,7 @@ class OpenAIProvider(BaseLLMProvider):
         if "max_tokens" in response_kwargs and "max_output_tokens" not in response_kwargs:
             response_kwargs["max_output_tokens"] = response_kwargs.pop("max_tokens")
         params.update(response_kwargs)
-
-        raw_response = self.client.responses.create(**params)
-        return self._parse_responses_api_response(raw_response)
+        return params
 
     def _convert_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         converted: list[dict[str, Any]] = []
@@ -269,18 +427,11 @@ class OpenAIProvider(BaseLLMProvider):
         message = choice.message
         tool_calls: list[ToolCall] = []
         for tool_call in message.tool_calls or []:
-            arguments = tool_call.function.arguments or "{}"
-            try:
-                parsed_input = json.loads(arguments)
-            except json.JSONDecodeError:
-                parsed_input = {"raw_arguments": arguments}
-            if not isinstance(parsed_input, dict):
-                parsed_input = {"value": parsed_input}
             tool_calls.append(
                 ToolCall(
                     id=tool_call.id,
                     name=tool_call.function.name,
-                    input=parsed_input,
+                    input=self._parse_tool_input(tool_call.function.arguments or "{}"),
                 )
             )
 
@@ -314,16 +465,9 @@ class OpenAIProvider(BaseLLMProvider):
             if item_type != "function_call":
                 continue
 
-            arguments = item.get("arguments", "{}")
-            try:
-                parsed_input = json.loads(arguments)
-            except json.JSONDecodeError:
-                parsed_input = {"raw_arguments": arguments}
-            if not isinstance(parsed_input, dict):
-                parsed_input = {"value": parsed_input}
-
             call_id = str(item.get("call_id", item.get("id", "")))
             name = str(item.get("name", ""))
+            parsed_input = self._parse_tool_input(item.get("arguments", "{}"))
             tool_calls.append(ToolCall(id=call_id, name=name, input=parsed_input))
             content_blocks.append(
                 {
@@ -375,6 +519,52 @@ class OpenAIProvider(BaseLLMProvider):
         if last_response is not None:
             return last_response
         raise ValueError("Could not parse Responses API payload.")
+
+    def _extract_responses_error(self, response: Any) -> str:
+        error = getattr(response, "error", None)
+        if error is None:
+            return ""
+        message = getattr(error, "message", None)
+        if message:
+            return str(message)
+        return self._stringify_content(error)
+
+    def _finalize_tool_calls(
+        self,
+        pending_tool_calls: dict[int, dict[str, str]],
+    ) -> list[ToolCall]:
+        tool_calls: list[ToolCall] = []
+        for index in sorted(pending_tool_calls):
+            tool_call = pending_tool_calls[index]
+            tool_calls.append(
+                ToolCall(
+                    id=tool_call["id"],
+                    name=tool_call["name"],
+                    input=self._parse_tool_input(tool_call["arguments"] or "{}"),
+                )
+            )
+        return tool_calls
+
+    def _iter_new_tool_calls(
+        self,
+        tool_calls: list[ToolCall],
+        emitted_tool_call_ids: set[str],
+    ):
+        for tool_call in tool_calls:
+            tool_call_id = tool_call.id or f"{tool_call.name}:{json.dumps(tool_call.input, sort_keys=True)}"
+            if tool_call_id in emitted_tool_call_ids:
+                continue
+            emitted_tool_call_ids.add(tool_call_id)
+            yield tool_call
+
+    def _parse_tool_input(self, arguments: str) -> dict[str, Any]:
+        try:
+            parsed_input = json.loads(arguments)
+        except json.JSONDecodeError:
+            parsed_input = {"raw_arguments": arguments}
+        if not isinstance(parsed_input, dict):
+            parsed_input = {"value": parsed_input}
+        return parsed_input
 
     def _stringify_content(self, content: Any) -> str:
         if isinstance(content, str):

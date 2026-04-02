@@ -3,7 +3,13 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
-from src.provider.base import BaseLLMProvider, ToolCall
+from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
+from src.ui.console import AgentConsole
+from src.ui.stream import StreamPrinter
+
+
+class _StreamingUnavailableError(RuntimeError):
+    """Raised when streaming is explicitly unsupported before any events arrive."""
 
 
 def agent_loop(
@@ -14,6 +20,8 @@ def agent_loop(
     permission: Any = None,
     compact_fn: Callable[[list[dict[str, Any]]], None] | None = None,
     bg_manager: Any = None,
+    stream: bool = False,
+    console: AgentConsole | None = None,
 ) -> str:
     compact = compact_fn or (lambda _messages: None)
 
@@ -22,43 +30,175 @@ def agent_loop(
         compact(messages)
 
         try:
-            response = provider.create(messages=messages, tools=tools)
+            response, streamed_output, displayed_tool_calls = _invoke_provider(
+                provider=provider,
+                messages=messages,
+                tools=tools,
+                stream=stream,
+                console=console,
+            )
         except Exception as exc:
+            if console is not None:
+                console.print_error(f"LLM call failed: {type(exc).__name__}: {exc}")
             return f"LLM call failed: {type(exc).__name__}: {exc}"
 
         messages.append(response.to_message())
+        if response.text and console is not None and not streamed_output:
+            console.print_assistant(response.text)
         if not response.has_tool_calls:
             return response.text
 
         results: list[dict[str, Any]] = []
         for call in response.tool_calls:
+            if console is not None and call.id not in displayed_tool_calls:
+                console.print_tool_call(call.name, call.input)
+
             if _requires_confirmation(permission, call):
                 if not _ask_permission(permission, call):
-                    results.append(_tool_result(call.id, "User denied.", is_error=True))
+                    denied = "User denied."
+                    if console is not None:
+                        console.print_tool_result(call.name, denied)
+                    results.append(_tool_result(call.id, denied, is_error=True))
                     continue
 
             handler = handlers.get(call.name)
             if handler is None:
+                output = f"Unknown tool: {call.name}"
+                if console is not None:
+                    console.print_tool_result(call.name, output)
                 results.append(
-                    _tool_result(call.id, f"Unknown tool: {call.name}", is_error=True)
+                    _tool_result(call.id, output, is_error=True)
                 )
                 continue
 
             try:
                 output = handler(**call.input)
             except Exception as exc:
+                output = f"Error: {type(exc).__name__}: {exc}"
+                if console is not None:
+                    console.print_tool_result(call.name, output)
                 results.append(
-                    _tool_result(
-                        call.id,
-                        f"Error: {type(exc).__name__}: {exc}",
-                        is_error=True,
-                    )
+                    _tool_result(call.id, output, is_error=True)
                 )
                 continue
 
+            if console is not None:
+                console.print_tool_result(call.name, output)
             results.append(_tool_result(call.id, output))
 
         messages.append({"role": "user", "content": results})
+
+
+def _invoke_provider(
+    provider: BaseLLMProvider,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    *,
+    stream: bool,
+    console: AgentConsole | None,
+) -> tuple[LLMResponse, bool, set[str]]:
+    if not stream:
+        return provider.create(messages=messages, tools=tools), False, set()
+
+    try:
+        stream_iter = provider.create_stream(messages=messages, tools=tools)
+    except Exception as exc:
+        if not _is_streaming_unsupported(exc):
+            raise
+        return _fallback_to_non_stream(
+            provider=provider,
+            messages=messages,
+            tools=tools,
+            console=console,
+            exc=exc,
+        )
+
+    try:
+        return _consume_stream(stream_iter, console=console)
+    except _StreamingUnavailableError as exc:
+        cause = exc.__cause__ or exc
+        return _fallback_to_non_stream(
+            provider=provider,
+            messages=messages,
+            tools=tools,
+            console=console,
+            exc=cause,
+        )
+
+
+def _fallback_to_non_stream(
+    provider: BaseLLMProvider,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    *,
+    console: AgentConsole | None,
+    exc: Exception,
+) -> tuple[LLMResponse, bool, set[str]]:
+    if console is not None:
+        console.print_status(
+            f"Streaming unavailable, falling back to non-stream mode ({type(exc).__name__})."
+        )
+    return provider.create(messages=messages, tools=tools), False, set()
+
+
+def _is_streaming_unsupported(exc: Exception) -> bool:
+    return isinstance(exc, NotImplementedError)
+
+
+def _consume_stream(
+    stream_iter: Any,
+    *,
+    console: AgentConsole | None,
+) -> tuple[LLMResponse, bool, set[str]]:
+    printer = StreamPrinter(console.console if console is not None else None)
+    displayed_tool_calls: set[str] = set()
+    saw_stream_event = False
+    printer.start()
+
+    try:
+        while True:
+            try:
+                event = next(stream_iter)
+            except StopIteration as stop:
+                streamed_text = printer.finish()
+                response = stop.value
+                if response is None:
+                    raise RuntimeError("Streaming provider did not return a response.")
+                return response, bool(streamed_text), displayed_tool_calls
+
+            saw_stream_event = True
+            _handle_stream_event(
+                event=event,
+                printer=printer,
+                console=console,
+                displayed_tool_calls=displayed_tool_calls,
+            )
+    except Exception as exc:
+        printer.finish()
+        if not saw_stream_event and _is_streaming_unsupported(exc):
+            raise _StreamingUnavailableError() from exc
+        raise
+
+
+def _handle_stream_event(
+    event: StreamEvent,
+    *,
+    printer: StreamPrinter,
+    console: AgentConsole | None,
+    displayed_tool_calls: set[str],
+) -> None:
+    if event.type == "text":
+        printer.feed(event.text)
+        return
+
+    if event.type != "tool_call":
+        return
+
+    printer.finish()
+    if event.tool_call_id:
+        displayed_tool_calls.add(event.tool_call_id)
+    if console is not None:
+        console.print_tool_call(event.name, event.input)
 
 
 def _tool_result(tool_use_id: str, output: Any, *, is_error: bool = False) -> dict[str, Any]:

@@ -6,11 +6,9 @@ import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
-from rich.console import Console
 
 from src.core.context import assemble_system_prompt
 from src.core.loop import agent_loop
@@ -19,12 +17,12 @@ from src.permission.guard import PermissionGuard, PermissionMode
 from src.permission.rules import parse_permission_rules
 from src.provider.base import BaseLLMProvider, ThinkingConfig
 from src.provider.factory import create_provider
+from src.ui.console import AgentConsole
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.toml"
 VALID_PERMISSION_MODES = {"default", "auto", "plan", "bypass"}
 VALID_THINKING_MODES = {"adaptive", "enabled", "disabled"}
-console = Console()
 DEFAULT_API_KEY_ENV_BY_PROVIDER = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
@@ -246,7 +244,9 @@ def run_repl(
     config: Config,
     provider: BaseLLMProvider,
     workspace: Path | None = None,
+    agent_console: AgentConsole | None = None,
 ) -> int:
+    ui_console = agent_console or AgentConsole()
     workspace_path = (workspace or Path.cwd()).resolve()
     session = PromptSession() if _supports_prompt_toolkit() else None
     messages = _initial_messages(workspace_path)
@@ -254,46 +254,46 @@ def run_repl(
     handlers = get_handlers(workspace_path)
     permission = _build_permission_guard(config)
 
-    console.print(
+    ui_console.console.print(
         f"BareAgent REPL ({config.provider.name}/{config.provider.model})",
         style="bold cyan",
     )
-    console.print("Use /exit to quit, /clear to clear the screen.", style="dim")
+    ui_console.print_status("Use /exit to quit, /clear to clear the screen.")
 
     while True:
         try:
             user_input = _read_user_input(session)
         except KeyboardInterrupt:
-            console.print("\nInterrupted. Use /exit to quit.", style="yellow")
+            ui_console.console.print("\nInterrupted. Use /exit to quit.", style="yellow")
             continue
         except EOFError:
-            console.print("\nExiting BareAgent.", style="dim")
+            ui_console.print_status("\nExiting BareAgent.")
             return 0
 
         text = user_input.strip()
         if not text:
             continue
         if text == "/exit":
-            console.print("Exiting BareAgent.", style="dim")
+            ui_console.print_status("Exiting BareAgent.")
             return 0
         if text == "/clear":
-            console.clear()
+            ui_console.console.clear()
             continue
 
         messages.append({"role": "user", "content": text})
         try:
-            response = agent_loop(
+            agent_loop(
                 provider=provider,
                 messages=messages,
                 tools=tools,
                 handlers=handlers,
                 permission=permission,
+                stream=config.ui.stream,
+                console=ui_console,
             )
         except KeyboardInterrupt:
-            console.print("\nAgent loop interrupted.", style="yellow")
+            ui_console.console.print("\nAgent loop interrupted.", style="yellow")
             continue
-
-        console.print(response)
 
 
 def _build_permission_guard(config: Config) -> PermissionGuard:
@@ -304,6 +304,7 @@ def _build_permission_guard(config: Config) -> PermissionGuard:
 
 
 def main(argv: list[str] | None = None) -> int:
+    app_console = AgentConsole()
     args = parse_args(argv)
     config_path = resolve_config_path(args.config)
 
@@ -314,19 +315,19 @@ def main(argv: list[str] | None = None) -> int:
             model_override=args.model,
         )
     except FileNotFoundError:
-        console.print(f"Config file not found: {config_path}", style="bold red")
+        app_console.print_error(f"Config file not found: {config_path}")
         return 1
     except (tomllib.TOMLDecodeError, ValueError) as exc:
-        console.print(f"Failed to load config: {exc}", style="bold red")
+        app_console.print_error(f"Failed to load config: {exc}")
         return 1
 
     try:
         provider = create_provider(config)
     except ValueError as exc:
-        console.print(f"Failed to initialize provider: {exc}", style="bold red")
+        app_console.print_error(f"Failed to initialize provider: {exc}")
         return 1
 
-    return run_repl(config, provider)
+    return run_repl(config, provider, agent_console=app_console)
 
 
 if __name__ == "__main__":
