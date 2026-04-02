@@ -154,6 +154,32 @@ def test_openai_parse_response_extracts_tool_calls(monkeypatch) -> None:
     assert parsed.output_tokens == 6
 
 
+def test_openai_parse_responses_api_payload_extracts_tool_calls() -> None:
+    provider = OpenAIProvider(api_key="test", model="gpt-test", wire_api="responses")
+    response = "\n".join(
+        [
+            "event: response.completed",
+            (
+                'data: {"type":"response.completed","response":{"status":"completed",'
+                '"usage":{"input_tokens":13,"output_tokens":6},"output":['
+                '{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Checking now."}]},'
+                '{"type":"function_call","call_id":"call_1","name":"grep","arguments":"{\\"pattern\\": \\"TODO\\"}"}'
+                "]}}"
+            ),
+            "",
+        ]
+    )
+
+    parsed = provider._parse_responses_api_response(response)
+
+    assert parsed.text == "Checking now."
+    assert parsed.tool_calls == [
+        ToolCall(id="call_1", name="grep", input={"pattern": "TODO"})
+    ]
+    assert parsed.input_tokens == 13
+    assert parsed.output_tokens == 6
+
+
 def test_factory_builds_anthropic_provider_with_thinking(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -210,4 +236,5 @@ def test_factory_builds_deepseek_via_openai_provider(monkeypatch) -> None:
         "api_key": "secret",
         "model": "deepseek-chat",
         "base_url": factory.DEEPSEEK_BASE_URL,
+        "wire_api": None,
     }

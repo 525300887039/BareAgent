@@ -51,3 +51,37 @@ def test_load_config_uses_matching_default_api_key_env_for_provider_override(
 
     assert config.provider.name == "openai"
     assert config.provider.api_key_env == "OPENAI_API_KEY"
+    assert config.provider.wire_api is None
+
+
+def test_load_config_reads_provider_wire_api(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                '[provider]',
+                'name = "openai"',
+                'model = "gpt-5-codex-mini"',
+                'api_key_env = "OPENAI_API_KEY"',
+                'base_url = "https://right.codes/codex/v1"',
+                'wire_api = "responses"',
+                "",
+                '[permission]',
+                'mode = "default"',
+                "",
+                '[ui]',
+                'stream = true',
+                'theme = "dark"',
+                "",
+                '[thinking]',
+                'mode = "adaptive"',
+                'budget_tokens = 10000',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.provider.base_url == "https://right.codes/codex/v1"
+    assert config.provider.wire_api == "responses"

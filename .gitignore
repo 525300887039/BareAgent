@@ -16,3 +16,4 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+config.local.toml

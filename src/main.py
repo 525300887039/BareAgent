@@ -38,6 +38,7 @@ class ProviderConfig:
     model: str
     api_key_env: str
     base_url: str | None = None
+    wire_api: str | None = None
 
 
 @dataclass(slots=True)
@@ -179,6 +180,10 @@ def load_config(
         base_url=_resolve_optional_string(
             provider_raw.get("base_url"),
             "BAREAGENT_BASE_URL",
+        ),
+        wire_api=_resolve_optional_string(
+            provider_raw.get("wire_api"),
+            "BAREAGENT_WIRE_API",
         ),
     )
     permission = PermissionConfig(

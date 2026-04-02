@@ -33,12 +33,14 @@ def create_provider(config: Any) -> BaseLLMProvider:
             api_key=api_key,
             model=model,
             base_url=getattr(provider_config, "base_url", None),
+            wire_api=getattr(provider_config, "wire_api", None),
         )
     if provider_name == "deepseek":
         return OpenAIProvider(
             api_key=api_key,
             model=model,
             base_url=getattr(provider_config, "base_url", None) or DEEPSEEK_BASE_URL,
+            wire_api=getattr(provider_config, "wire_api", None),
         )
 
     raise ValueError(f"Unknown provider: {provider_name}")
