@@ -91,14 +91,17 @@ class TeammateManager:
         with self._lock:
             teammate = self.get(name)
             provider_config = dict(teammate.provider_config)
-            provider = provider_factory(provider_config)
-            return AgentInstance(
-                name=teammate.name,
-                role=teammate.role,
-                system_prompt=teammate.system_prompt,
-                provider=provider,
-                provider_config=provider_config,
-            )
+            snapshot_name = teammate.name
+            snapshot_role = teammate.role
+            snapshot_prompt = teammate.system_prompt
+        provider = provider_factory(provider_config)
+        return AgentInstance(
+            name=snapshot_name,
+            role=snapshot_role,
+            system_prompt=snapshot_prompt,
+            provider=provider,
+            provider_config=provider_config,
+        )
 
     def _save(self) -> None:
         self.config_file.parent.mkdir(parents=True, exist_ok=True)
