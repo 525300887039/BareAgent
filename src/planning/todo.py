@@ -2,27 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.core.schema import tool_schema as _schema
+
 
 VALID_TODO_STATUSES = {"pending", "in_progress", "done"}
-
-
-def _schema(
-    name: str,
-    description: str,
-    properties: dict[str, Any],
-    required: list[str],
-) -> dict[str, Any]:
-    input_schema = {
-        "type": "object",
-        "properties": properties,
-        "required": required,
-    }
-    return {
-        "name": name,
-        "description": description,
-        "input_schema": input_schema,
-        "parameters": input_schema,
-    }
 
 
 TODO_TOOL_SCHEMAS: list[dict[str, Any]] = [

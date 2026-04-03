@@ -26,7 +26,7 @@ from src.permission.rules import parse_permission_rules
 from src.provider.base import BaseLLMProvider, ThinkingConfig
 from src.provider.factory import create_provider
 from src.team.autonomous import AutonomousAgent
-from src.team.mailbox import Message, MessageBus
+from src.team.mailbox import Message, MessageBus, _optional_string as _coerce_optional_string
 from src.team.manager import TeammateManager
 from src.team.protocols import Protocol, ProtocolFSM, decode_protocol_content
 from src.ui.console import AgentConsole
@@ -577,10 +577,8 @@ def _load_teammate_manager(
         return TeammateManager(team_file)
     except Exception as exc:
         agent_console.print_error(f"Failed to load team file {team_file}: {exc}")
-        manager = object.__new__(TeammateManager)
-        manager.config_file = team_file
-        manager.teammates = {}
-        return manager
+        team_file.write_text('{"teammates": {}}', encoding="utf-8")
+        return TeammateManager(team_file)
 
 
 def _extract_system_prompt(messages: list[dict[str, object]]) -> str:
@@ -721,13 +719,6 @@ def _make_teammate_provider_factory(config: Config):
     return _factory
 
 
-def _coerce_optional_string(value: object) -> str | None:
-    if value is None:
-        return None
-    normalized = str(value).strip()
-    return normalized or None
-
-
 def _handle_team_command(
     text: str,
     ui_console: AgentConsole,
@@ -769,12 +760,6 @@ def _handle_team_command(
         ui_console.print_error(str(exc))
         return
 
-    if subcommand == "list":
-        ui_console.print_status("No teammates registered.")
-        return
-    if teammate_manager.list():
-        ui_console.print_status("Usage: /team list | /team spawn <name> | /team send <name> <message>")
-        return
     ui_console.print_status("Usage: /team list | /team spawn <name> | /team send <name> <message>")
 
 

@@ -9,27 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.core.schema import tool_schema as _schema
+
 TASK_STATUSES = {"pending", "in_progress", "done", "failed"}
 _TASK_ID_ALPHABET = string.ascii_letters + string.digits
-
-
-def _schema(
-    name: str,
-    description: str,
-    properties: dict[str, Any],
-    required: list[str],
-) -> dict[str, Any]:
-    input_schema = {
-        "type": "object",
-        "properties": properties,
-        "required": required,
-    }
-    return {
-        "name": name,
-        "description": description,
-        "input_schema": input_schema,
-        "parameters": input_schema,
-    }
 
 
 @dataclass(slots=True)

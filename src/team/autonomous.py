@@ -34,7 +34,6 @@ class AutonomousAgent:
         self.permission = permission
         self.system_prompt = system_prompt.strip()
         self.poll_interval = poll_interval
-        self.messages: list[dict[str, Any]] = []
         self._shutdown = False
         self.bus.ensure_mailbox(name)
         self._last_seen_timestamp: str | None = self.bus.latest_timestamp(name)
@@ -106,13 +105,13 @@ class AutonomousAgent:
         self.task_manager.update(task.id, status=final_status)
 
     def _run_prompt(self, prompt: str) -> str:
-        self.messages = []
+        messages: list[dict[str, Any]] = []
         if self.system_prompt:
-            self.messages.append({"role": "system", "content": self.system_prompt})
-        self.messages.append({"role": "user", "content": prompt})
+            messages.append({"role": "system", "content": self.system_prompt})
+        messages.append({"role": "user", "content": prompt})
         return agent_loop(
             provider=self.provider,
-            messages=self.messages,
+            messages=messages,
             tools=self.tools,
             handlers=self.handlers,
             permission=self.permission,

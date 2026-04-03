@@ -14,6 +14,7 @@ from src.core.handlers.file_read import run_read
 from src.core.handlers.file_write import run_write
 from src.core.handlers.glob_search import run_glob
 from src.core.handlers.grep_search import run_grep
+from src.core.schema import tool_schema as _schema
 from src.planning.skills import (
     LOAD_SKILL_TOOL_SCHEMAS,
     SkillLoader,
@@ -40,25 +41,6 @@ DEFERRED_TOOLS = {
     "team_list",
 }
 _BACKGROUND_TASK_ID_ALPHABET = string.ascii_letters + string.digits
-
-
-def _schema(
-    name: str,
-    description: str,
-    properties: dict[str, Any],
-    required: list[str],
-) -> dict[str, Any]:
-    input_schema = {
-        "type": "object",
-        "properties": properties,
-        "required": required,
-    }
-    return {
-        "name": name,
-        "description": description,
-        "input_schema": input_schema,
-        "parameters": input_schema,
-    }
 
 
 BACKGROUND_TOOL_SCHEMAS: list[dict[str, Any]] = [
