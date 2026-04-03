@@ -16,7 +16,7 @@ from src.concurrency.background import BackgroundManager
 from src.core.context import assemble_system_prompt
 from src.core.loop import agent_loop
 from src.core.tools import get_handlers, get_tools
-from src.memory.compact import make_compact_fn
+from src.memory.compact import Compactor
 from src.memory.transcript import TranscriptManager
 from src.permission.guard import PermissionGuard, PermissionMode
 from src.planning.skills import SkillLoader, resolve_skills_dir
@@ -340,7 +340,7 @@ def run_repl(
     )
     tools = get_tools()
     permission = _build_permission_guard(config)
-    base_compact_fn = make_compact_fn(
+    base_compact_fn = Compactor(
         provider=provider,
         transcript_mgr=transcript_mgr,
         session_id=session_id,

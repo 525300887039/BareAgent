@@ -4,7 +4,7 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
-from src.memory.compact import _micro_compact, make_compact_fn
+from src.memory.compact import _micro_compact, Compactor
 from src.memory.token_counter import estimate_tokens
 from src.memory.transcript import TranscriptManager
 from src.provider.base import BaseLLMProvider, LLMResponse
@@ -113,7 +113,7 @@ def test_auto_compact_summarizes_when_threshold_is_exceeded(tmp_path: Path) -> N
         )
     )
     transcript_mgr = TranscriptManager(tmp_path / ".transcripts")
-    compact = make_compact_fn(
+    compact = Compactor(
         provider=provider,
         transcript_mgr=transcript_mgr,
         threshold=3,
@@ -148,7 +148,7 @@ def test_auto_compact_summarizes_when_threshold_is_exceeded(tmp_path: Path) -> N
 def test_auto_compact_keeps_messages_when_summary_fails(tmp_path: Path) -> None:
     provider = StubProvider(error=RuntimeError("summary failed"))
     transcript_mgr = TranscriptManager(tmp_path / ".transcripts")
-    compact = make_compact_fn(
+    compact = Compactor(
         provider=provider,
         transcript_mgr=transcript_mgr,
         threshold=1,
@@ -181,13 +181,13 @@ def test_compact_session_id_can_be_rebound_before_saving(tmp_path: Path) -> None
         )
     )
     transcript_mgr = TranscriptManager(tmp_path / ".transcripts")
-    compact = make_compact_fn(
+    compact = Compactor(
         provider=provider,
         transcript_mgr=transcript_mgr,
         threshold=1,
         session_id="session-fresh",
     )
-    compact.set_session_id("session-restored")  # type: ignore[attr-defined]
+    compact.set_session_id("session-restored")
     messages = [
         {"role": "system", "content": "系统提示"},
         {"role": "user", "content": "之前的需求"},
