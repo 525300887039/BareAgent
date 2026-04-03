@@ -19,6 +19,8 @@ def _run_git_command(workspace: Path, *args: str) -> str:
         capture_output=True,
         check=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=5,
     )
     return completed.stdout.strip()

@@ -11,6 +11,14 @@ from src.core.handlers.file_read import run_read
 from src.core.handlers.file_write import run_write
 from src.core.handlers.glob_search import run_glob
 from src.core.handlers.grep_search import run_grep
+from src.planning.skills import (
+    LOAD_SKILL_TOOL_SCHEMAS,
+    SkillLoader,
+    make_skill_handlers,
+    resolve_skills_dir,
+)
+from src.planning.subagent import SUBAGENT_TOOL_SCHEMAS, run_subagent
+from src.planning.todo import TODO_TOOL_SCHEMAS, TodoManager, make_todo_handlers
 
 BASE_TOOLS = {"bash", "read_file", "write_file", "edit_file", "glob", "grep"}
 DEFERRED_TOOLS = {
@@ -23,7 +31,11 @@ DEFERRED_TOOLS = {
     "task_get",
     "task_update",
 }
-DEFERRED_TOOL_SCHEMAS: list[dict[str, Any]] = []
+DEFERRED_TOOL_SCHEMAS: list[dict[str, Any]] = [
+    *TODO_TOOL_SCHEMAS,
+    *SUBAGENT_TOOL_SCHEMAS,
+    *LOAD_SKILL_TOOL_SCHEMAS,
+]
 
 
 def _schema(
@@ -136,7 +148,11 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
         ["pattern"],
     ),
+    *DEFERRED_TOOL_SCHEMAS,
 ]
+
+_DEFAULT_TODO_MANAGER = TodoManager()
+_DEFAULT_SKILL_LOADER = SkillLoader(resolve_skills_dir())
 
 TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     "bash": run_bash,
@@ -145,6 +161,9 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     "edit_file": run_edit,
     "glob": run_glob,
     "grep": run_grep,
+    **make_todo_handlers(_DEFAULT_TODO_MANAGER),
+    **make_skill_handlers(_DEFAULT_SKILL_LOADER),
+    "subagent": lambda task: "Subagent unavailable: provider is not configured.",
 }
 
 
@@ -152,8 +171,17 @@ def get_tools() -> list[dict[str, Any]]:
     return deepcopy(TOOL_SCHEMAS)
 
 
-def get_handlers(workspace: Path) -> dict[str, Callable[..., Any]]:
-    return {
+def get_handlers(
+    workspace: Path,
+    *,
+    todo_manager: TodoManager | None = None,
+    skill_loader: SkillLoader | None = None,
+    provider: Any = None,
+    tools: list[dict[str, Any]] | None = None,
+    permission: Any = None,
+    subagent_system_prompt: str = "",
+) -> dict[str, Callable[..., Any]]:
+    handlers: dict[str, Callable[..., Any]] = {
         "bash": partial(run_bash, cwd=workspace),
         "read_file": partial(run_read, workspace=workspace),
         "write_file": partial(run_write, workspace=workspace),
@@ -161,6 +189,28 @@ def get_handlers(workspace: Path) -> dict[str, Callable[..., Any]]:
         "glob": partial(run_glob, workspace=workspace),
         "grep": partial(run_grep, workspace=workspace),
     }
+
+    active_todo_manager = todo_manager or TodoManager()
+    active_skill_loader = skill_loader or SkillLoader(resolve_skills_dir())
+    handlers.update(make_todo_handlers(active_todo_manager))
+    handlers.update(make_skill_handlers(active_skill_loader))
+
+    available_tools = tools or get_tools()
+    if provider is None:
+        handlers["subagent"] = (
+            lambda task: "Subagent unavailable: provider is not configured."
+        )
+    else:
+        handlers["subagent"] = lambda task: run_subagent(
+            provider=provider,
+            task=task,
+            tools=available_tools,
+            handlers=handlers,
+            permission=permission,
+            system_prompt=subagent_system_prompt,
+        )
+
+    return handlers
 
 
 def tool_search(query: str, max_results: int = 5) -> list[dict[str, Any]]:

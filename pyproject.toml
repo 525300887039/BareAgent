@@ -34,3 +34,12 @@ packages = ["src"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "config.toml" = "config.toml"
+"skills" = "skills"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src",
+    "skills",
+    "config.toml",
+    "README.md",
+]

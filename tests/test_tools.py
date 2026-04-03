@@ -84,6 +84,7 @@ def test_permission_guard_default_mode_for_safe_and_dangerous_tools() -> None:
     guard = PermissionGuard(PermissionMode.DEFAULT)
 
     assert guard.requires_confirm("read_file", {"file_path": "config.toml"}) is False
+    assert guard.requires_confirm("load_skill", {"skill_name": "git"}) is False
     assert guard.requires_confirm("bash", {"command": "rm -rf build"}) is True
     assert guard.requires_confirm("bash", {"command": "git status"}) is False
 
@@ -109,6 +110,7 @@ def test_permission_guard_plan_mode_blocks_write_operations(capsys: pytest.Captu
     call = ToolCall(id="toolu_1", name="write_file", input={"file_path": "out.txt", "content": "x"})
 
     assert guard.requires_confirm("write_file", {"file_path": "out.txt", "content": "x"}) is True
+    assert guard.requires_confirm("load_skill", {"skill_name": "git"}) is False
     assert guard.ask_user(call) is False
     assert "Plan mode: write_file blocked (read-only)" in capsys.readouterr().out
 

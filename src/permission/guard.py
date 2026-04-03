@@ -20,6 +20,7 @@ class PermissionGuard:
         "grep",
         "todo_read",
         "todo_write",
+        "load_skill",
         "task_list",
         "task_get",
     }

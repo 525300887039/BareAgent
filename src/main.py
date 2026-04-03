@@ -14,6 +14,8 @@ from src.core.context import assemble_system_prompt
 from src.core.loop import agent_loop
 from src.core.tools import get_handlers, get_tools
 from src.permission.guard import PermissionGuard, PermissionMode
+from src.planning.skills import SkillLoader, resolve_skills_dir
+from src.planning.todo import TodoManager
 from src.permission.rules import parse_permission_rules
 from src.provider.base import BaseLLMProvider, ThinkingConfig
 from src.provider.factory import create_provider
@@ -224,8 +226,51 @@ def load_config(
     )
 
 
-def _initial_messages(workspace: Path) -> list[dict[str, str]]:
-    return [{"role": "system", "content": assemble_system_prompt(workspace)}]
+_NAG_REMINDER_PREFIX = "<nag-reminder>"
+
+
+def _initial_messages(workspace: Path, skill_summary: str = "") -> list[dict[str, str]]:
+    return [
+        {
+            "role": "system",
+            "content": assemble_system_prompt(workspace, skill_summary=skill_summary),
+        }
+    ]
+
+
+def _refresh_nag_reminder(
+    messages: list[dict[str, str | list[dict[str, str]]]],
+    nag_reminder: str | None,
+) -> None:
+    messages[:] = [
+        message
+        for message in messages
+        if not (
+            message.get("role") == "system"
+            and isinstance(message.get("content"), str)
+            and str(message["content"]).startswith(_NAG_REMINDER_PREFIX)
+        )
+    ]
+    if not nag_reminder:
+        return
+
+    nag_message = {
+        "role": "system",
+        "content": f"{_NAG_REMINDER_PREFIX}\n{nag_reminder.strip()}\n</nag-reminder>",
+    }
+    for index in range(len(messages) - 1, -1, -1):
+        if messages[index].get("role") == "user":
+            messages.insert(index, nag_message)
+            return
+
+    messages.append(nag_message)
+
+
+def _build_nag_injector(todo_manager: TodoManager):
+    def _inject(messages: list[dict[str, str | list[dict[str, str]]]]) -> None:
+        _refresh_nag_reminder(messages, todo_manager.get_nag_reminder())
+
+    return _inject
 
 
 def _supports_prompt_toolkit() -> bool:
@@ -249,10 +294,23 @@ def run_repl(
     ui_console = agent_console or AgentConsole()
     workspace_path = (workspace or Path.cwd()).resolve()
     session = PromptSession() if _supports_prompt_toolkit() else None
-    messages = _initial_messages(workspace_path)
+    todo_manager = TodoManager()
+    skill_loader = SkillLoader(resolve_skills_dir())
+    messages = _initial_messages(
+        workspace_path,
+        skill_summary=skill_loader.get_skill_list_prompt(),
+    )
     tools = get_tools()
-    handlers = get_handlers(workspace_path)
     permission = _build_permission_guard(config)
+    handlers = get_handlers(
+        workspace_path,
+        todo_manager=todo_manager,
+        skill_loader=skill_loader,
+        provider=provider,
+        tools=tools,
+        permission=permission,
+        subagent_system_prompt=str(messages[0]["content"]),
+    )
 
     ui_console.console.print(
         f"BareAgent REPL ({config.provider.name}/{config.provider.model})",
@@ -288,6 +346,7 @@ def run_repl(
                 tools=tools,
                 handlers=handlers,
                 permission=permission,
+                bg_manager=_build_nag_injector(todo_manager),
                 stream=config.ui.stream,
                 console=ui_console,
             )
