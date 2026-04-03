@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from src.memory.token_counter import estimate_tokens
 from src.memory.transcript import TranscriptManager
 from src.provider.base import BaseLLMProvider
+
+logger = logging.getLogger(__name__)
 
 _TRUNCATED_PREFIX = "[truncated:"
 _SUMMARY_SYSTEM_PROMPT = (
@@ -54,18 +57,29 @@ def _serialize(messages: list[dict[str, Any]]) -> str:
     return "\n".join(lines).strip()
 
 
-def make_compact_fn(
-    provider: BaseLLMProvider,
-    transcript_mgr: TranscriptManager,
-    threshold: int = 50000,
-    session_id: str = "default",
-):
-    state = {"session_id": session_id}
+class Compactor:
+    def __init__(
+        self,
+        provider: BaseLLMProvider,
+        transcript_mgr: TranscriptManager,
+        threshold: int = 50000,
+        session_id: str = "default",
+    ) -> None:
+        self._provider = provider
+        self._transcript_mgr = transcript_mgr
+        self._threshold = threshold
+        self._session_id = session_id
 
-    def compact(messages: list[dict[str, Any]], force: bool = False) -> None:
+    def get_session_id(self) -> str:
+        return self._session_id
+
+    def set_session_id(self, new_session_id: str) -> None:
+        self._session_id = new_session_id
+
+    def __call__(self, messages: list[dict[str, Any]], force: bool = False) -> None:
         _micro_compact(messages, keep_recent=3)
 
-        if not force and estimate_tokens(messages) <= threshold:
+        if not force and estimate_tokens(messages) <= self._threshold:
             return
 
         history_messages, pending_user_message = _split_pending_user_turn(messages)
@@ -75,9 +89,9 @@ def make_compact_fn(
         if not summary_source_messages:
             return
 
-        transcript_mgr.save(messages, state["session_id"])
+        self._transcript_mgr.save(messages, self._session_id)
         try:
-            summary = provider.create(
+            summary = self._provider.create(
                 messages=[
                     {"role": "system", "content": _SUMMARY_SYSTEM_PROMPT},
                     {
@@ -92,6 +106,7 @@ def make_compact_fn(
                 max_tokens=2000,
             )
         except Exception:
+            logger.warning("Context compression failed", exc_info=True)
             return
 
         system_messages = [
@@ -108,16 +123,8 @@ def make_compact_fn(
         if pending_user_message is not None:
             messages.append(pending_user_message)
 
-    def get_session_id() -> str:
-        return state["session_id"]
 
-    def set_session_id(new_session_id: str) -> None:
-        state["session_id"] = new_session_id
-
-    compact.get_session_id = get_session_id  # type: ignore[attr-defined]
-    compact.set_session_id = set_session_id  # type: ignore[attr-defined]
-
-    return compact
+make_compact_fn = Compactor
 
 
 def _collect_tool_names(messages: list[dict[str, Any]]) -> dict[str, str]:
