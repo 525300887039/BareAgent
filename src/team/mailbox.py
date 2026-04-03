@@ -52,7 +52,7 @@ class MessageBus:
         self._append(resolved.to_agent, resolved)
         return resolved.id
 
-    def receive(self, agent_name: str, since: str | None = None) -> list[Message]:
+    def receive(self, agent_name: str, since_id: str | None = None) -> list[Message]:
         normalized_name = agent_name.strip()
         if not normalized_name:
             raise ValueError("agent_name must not be empty")
@@ -62,8 +62,8 @@ class MessageBus:
         with self._lock_for(normalized_name):
             lines = mailbox_path.read_text(encoding="utf-8").splitlines()
 
-        threshold = _parse_timestamp(since) if since else None
         messages: list[Message] = []
+        found_cursor = since_id is None
         for index, line in enumerate(lines, start=1):
             if not line.strip():
                 continue
@@ -74,7 +74,9 @@ class MessageBus:
                     f"Invalid mailbox entry in {mailbox_path} at line {index}: {exc}"
                 ) from exc
             message = Message.from_dict(payload)
-            if threshold is not None and _parse_timestamp(message.timestamp) <= threshold:
+            if not found_cursor:
+                if message.id == since_id:
+                    found_cursor = True
                 continue
             messages.append(message)
         return messages
@@ -92,7 +94,7 @@ class MessageBus:
         self.mailbox_dir.mkdir(parents=True, exist_ok=True)
         return sorted(path.stem for path in self.mailbox_dir.glob("*.jsonl"))
 
-    def latest_timestamp(self, agent_name: str) -> str | None:
+    def latest_message_id(self, agent_name: str) -> str | None:
         normalized_name = agent_name.strip()
         if not normalized_name:
             raise ValueError("agent_name must not be empty")
@@ -111,7 +113,7 @@ class MessageBus:
                     f"Invalid mailbox entry in {mailbox_path} near tail line {index}: {exc}"
                 ) from exc
             message = Message.from_dict(payload)
-            return message.timestamp
+            return message.id
         return None
 
     def find_message(self, message_id: str) -> Message | None:

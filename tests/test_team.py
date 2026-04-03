@@ -320,9 +320,9 @@ def _wait_for_message(
     deadline = time.time() + timeout
     cursor: str | None = None
     while time.time() < deadline:
-        messages = bus.receive(agent_name, since=cursor)
+        messages = bus.receive(agent_name, since_id=cursor)
         if messages:
-            cursor = messages[-1].timestamp
+            cursor = messages[-1].id
         for message in messages:
             if predicate(message):
                 return message
@@ -337,3 +337,25 @@ def _wait_for(predicate, timeout: float = 2) -> None:
             return
         time.sleep(0.01)
     raise AssertionError("Timed out waiting for condition")
+
+
+def test_message_bus_receive_does_not_lose_same_timestamp_messages(tmp_path: Path) -> None:
+    """Bug #15: messages with identical timestamps should not be skipped."""
+    bus = MessageBus(tmp_path / ".mailbox")
+    bus.ensure_mailbox("agent")
+
+    fixed_ts = "2025-01-01T00:00:00+00:00"
+    msg1_id = bus.send(Message(
+        id="", from_agent="a", to_agent="agent",
+        content="first", msg_type="request", timestamp=fixed_ts,
+    ))
+    msg2_id = bus.send(Message(
+        id="", from_agent="b", to_agent="agent",
+        content="second", msg_type="request", timestamp=fixed_ts,
+    ))
+
+    # Read using msg1 as cursor — should still get msg2
+    messages = bus.receive("agent", since_id=msg1_id)
+    assert len(messages) == 1
+    assert messages[0].id == msg2_id
+    assert messages[0].content == "second"

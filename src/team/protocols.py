@@ -37,9 +37,9 @@ class ProtocolFSM:
         cursor: str | None = None
 
         while time.monotonic() < deadline:
-            messages = self.bus.receive(self.agent_name, since=cursor)
+            messages = self.bus.receive(self.agent_name, since_id=cursor)
             if messages:
-                cursor = messages[-1].timestamp
+                cursor = messages[-1].id
             for message in messages:
                 if message.msg_type != "response":
                     continue
