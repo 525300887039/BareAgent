@@ -21,7 +21,10 @@ def run_grep(
     """Search for a regex pattern in workspace files."""
     workspace_path = workspace.resolve(strict=False)
     search_root = safe_path(path, workspace_path)
-    regex = re.compile(pattern)
+    try:
+        regex = re.compile(pattern)
+    except re.error as exc:
+        return [f"Invalid regex pattern: {exc}"]
 
     matches: list[str] = []
     for file_path in iter_search_files(search_root):
