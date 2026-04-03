@@ -10,16 +10,6 @@ SUBAGENT_TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "name": "subagent",
         "description": "Delegate a self-contained task to a child agent with isolated messages.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "task": {
-                    "type": "string",
-                    "description": "The task for the child agent to complete.",
-                }
-            },
-            "required": ["task"],
-        },
         "parameters": {
             "type": "object",
             "properties": {

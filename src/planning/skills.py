@@ -10,16 +10,6 @@ LOAD_SKILL_TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "name": "load_skill",
         "description": "Load the full content of a named SKILL.md file on demand.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "skill_name": {
-                    "type": "string",
-                    "description": "The skill directory name to load.",
-                }
-            },
-            "required": ["skill_name"],
-        },
         "parameters": {
             "type": "object",
             "properties": {

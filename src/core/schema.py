@@ -17,6 +17,5 @@ def tool_schema(
     return {
         "name": name,
         "description": description,
-        "input_schema": input_schema,
         "parameters": input_schema,
     }
