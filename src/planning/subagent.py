@@ -48,6 +48,20 @@ def run_subagent(
 ) -> str:
     if current_depth >= max_depth:
         return f"Subagent refused: recursion depth {current_depth} exceeds limit {max_depth}."
+
+    next_depth = current_depth + 1
+    child_handlers = dict(handlers)
+    child_handlers["subagent"] = lambda task: run_subagent(
+        provider=provider,
+        task=task,
+        tools=tools,
+        handlers=child_handlers,
+        permission=permission,
+        system_prompt=system_prompt,
+        max_depth=max_depth,
+        current_depth=next_depth,
+    )
+
     messages: list[dict[str, Any]] = []
     if system_prompt.strip():
         messages.append({"role": "system", "content": system_prompt})
@@ -56,7 +70,7 @@ def run_subagent(
         provider=provider,
         messages=messages,
         tools=tools,
-        handlers=handlers,
+        handlers=child_handlers,
         permission=permission,
         compact_fn=_subagent_compact,
     )
