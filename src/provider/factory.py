@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
@@ -8,6 +9,7 @@ from src.provider.base import BaseLLMProvider, ThinkingConfig
 from src.provider.openai import OpenAIProvider
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+_VALID_THINKING_MODES = {"enabled", "adaptive", "disabled"}
 
 
 def create_provider(config: Any) -> BaseLLMProvider:
@@ -55,16 +57,28 @@ def _build_thinking_config(raw_config: Any) -> ThinkingConfig:
     if raw_config is None:
         return ThinkingConfig()
     if isinstance(raw_config, ThinkingConfig):
+        mode = raw_config.mode
+        if mode not in _VALID_THINKING_MODES:
+            logging.warning("Invalid thinking mode %r, falling back to 'adaptive'", mode)
+            mode = "adaptive"
         return ThinkingConfig(
-            mode=raw_config.mode,
+            mode=mode,
             budget_tokens=raw_config.budget_tokens,
         )
     if isinstance(raw_config, dict):
+        mode = str(raw_config.get("mode", "adaptive"))
+        if mode not in _VALID_THINKING_MODES:
+            logging.warning("Invalid thinking mode %r, falling back to 'adaptive'", mode)
+            mode = "adaptive"
         return ThinkingConfig(
-            mode=str(raw_config.get("mode", "adaptive")),
+            mode=mode,
             budget_tokens=int(raw_config.get("budget_tokens", 10000)),
         )
+    mode = str(getattr(raw_config, "mode", "adaptive"))
+    if mode not in _VALID_THINKING_MODES:
+        logging.warning("Invalid thinking mode %r, falling back to 'adaptive'", mode)
+        mode = "adaptive"
     return ThinkingConfig(
-        mode=str(getattr(raw_config, "mode", "adaptive")),
+        mode=mode,
         budget_tokens=int(getattr(raw_config, "budget_tokens", 10000)),
     )
