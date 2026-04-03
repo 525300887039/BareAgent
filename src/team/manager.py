@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -32,6 +33,7 @@ class TeammateManager:
     def __init__(self, config_file: str | Path = ".team.json") -> None:
         self.config_file = Path(config_file)
         self.teammates: dict[str, Teammate] = {}
+        self._lock = threading.RLock()
         self._load()
 
     def register(
@@ -41,50 +43,54 @@ class TeammateManager:
         system_prompt: str,
         provider_config: dict[str, Any] | None = None,
     ) -> Teammate:
-        normalized_name = name.strip()
-        normalized_role = role.strip()
-        normalized_prompt = system_prompt.strip()
-        if not normalized_name:
-            raise ValueError("name must not be empty")
-        if not normalized_role:
-            raise ValueError("role must not be empty")
-        if not normalized_prompt:
-            raise ValueError("system_prompt must not be empty")
+        with self._lock:
+            normalized_name = name.strip()
+            normalized_role = role.strip()
+            normalized_prompt = system_prompt.strip()
+            if not normalized_name:
+                raise ValueError("name must not be empty")
+            if not normalized_role:
+                raise ValueError("role must not be empty")
+            if not normalized_prompt:
+                raise ValueError("system_prompt must not be empty")
 
-        teammate = Teammate(
-            name=normalized_name,
-            role=normalized_role,
-            system_prompt=normalized_prompt,
-            provider_config=dict(provider_config or {}),
-        )
-        self.teammates[normalized_name] = teammate
-        self._save()
-        return teammate
+            teammate = Teammate(
+                name=normalized_name,
+                role=normalized_role,
+                system_prompt=normalized_prompt,
+                provider_config=dict(provider_config or {}),
+            )
+            self.teammates[normalized_name] = teammate
+            self._save()
+            return teammate
 
     def get(self, name: str) -> Teammate:
-        teammate = self.teammates.get(name.strip())
-        if teammate is None:
-            raise ValueError(f"Unknown teammate: {name}")
-        return teammate
+        with self._lock:
+            teammate = self.teammates.get(name.strip())
+            if teammate is None:
+                raise ValueError(f"Unknown teammate: {name}")
+            return teammate
 
     def list(self) -> list[Teammate]:
-        return sorted(self.teammates.values(), key=lambda teammate: teammate.name)
+        with self._lock:
+            return sorted(self.teammates.values(), key=lambda teammate: teammate.name)
 
     def spawn(
         self,
         name: str,
         provider_factory: Callable[[dict[str, Any]], Any],
     ) -> AgentInstance:
-        teammate = self.get(name)
-        provider_config = dict(teammate.provider_config)
-        provider = provider_factory(provider_config)
-        return AgentInstance(
-            name=teammate.name,
-            role=teammate.role,
-            system_prompt=teammate.system_prompt,
-            provider=provider,
-            provider_config=provider_config,
-        )
+        with self._lock:
+            teammate = self.get(name)
+            provider_config = dict(teammate.provider_config)
+            provider = provider_factory(provider_config)
+            return AgentInstance(
+                name=teammate.name,
+                role=teammate.role,
+                system_prompt=teammate.system_prompt,
+                provider=provider,
+                provider_config=provider_config,
+            )
 
     def _save(self) -> None:
         self.config_file.parent.mkdir(parents=True, exist_ok=True)
