@@ -57,10 +57,11 @@ class PermissionGuard:
         re.compile(r"find\b.*-delete\b"),
     ]
 
-    def __init__(self, mode: PermissionMode = PermissionMode.DEFAULT) -> None:
+    def __init__(self, mode: PermissionMode = PermissionMode.DEFAULT, *, fail_closed: bool = False) -> None:
         self.mode = mode
         self.allow_rules: list[str] = []
         self.deny_rules: list[str] = []
+        self.fail_closed = fail_closed
 
     def requires_confirm(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
         if self.mode == PermissionMode.BYPASS:
@@ -91,6 +92,8 @@ class PermissionGuard:
         return False
 
     def ask_user(self, call: Any) -> bool:
+        if self.fail_closed:
+            return False
         if self.mode == PermissionMode.PLAN:
             print(f"Plan mode: {call.name} blocked (read-only)")
             return False

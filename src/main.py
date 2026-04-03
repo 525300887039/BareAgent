@@ -651,6 +651,9 @@ def _make_team_handlers(
         teammate_name = name.strip()
         agent_instance = teammate_manager.spawn(teammate_name, provider_factory)
         message_bus.ensure_mailbox(teammate_name)
+        teammate_permission = PermissionGuard(permission.mode, fail_closed=True)
+        teammate_permission.allow_rules = list(permission.allow_rules)
+        teammate_permission.deny_rules = list(permission.deny_rules)
         agent_handlers = _build_handlers(
             workspace_path=workspace_path,
             todo_manager=todo_manager,
@@ -658,7 +661,7 @@ def _make_team_handlers(
             skill_loader=skill_loader,
             provider=agent_instance.provider,
             tools=tools,
-            permission=permission,
+            permission=teammate_permission,
             bg_manager=bg_manager,
             messages=[],
             config=config,
@@ -675,7 +678,7 @@ def _make_team_handlers(
             handlers=agent_handlers,
             bus=message_bus,
             task_manager=task_manager,
-            permission=permission,
+            permission=teammate_permission,
             system_prompt=agent_instance.system_prompt,
             poll_interval=1.0,
         )
