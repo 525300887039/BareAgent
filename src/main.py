@@ -280,7 +280,7 @@ def _refresh_nag_reminder(
     for index in range(len(messages) - 1, -1, -1):
         msg = messages[index]
         if msg.get("role") == "user" and not _is_tool_result_message(msg):
-            messages.insert(index, nag_message)
+            messages.insert(index + 1, nag_message)
             return
 
     messages.append(nag_message)
@@ -485,6 +485,8 @@ def run_repl(
                 since=main_mailbox_cursor,
             )
         except LLMCallError:
+            messages.pop()  # remove the unanswered user message
+            ui_console.console.print("LLM call failed, please try again.", style="yellow")
             continue
         except KeyboardInterrupt:
             ui_console.console.print("\nAgent loop interrupted.", style="yellow")
