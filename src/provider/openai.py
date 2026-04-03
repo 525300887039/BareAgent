@@ -9,6 +9,7 @@ from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCal
 
 _PROTECTED_CHAT_KEYS = frozenset({"model", "messages", "tools"})
 _PROTECTED_RESPONSES_KEYS = frozenset({"model", "input", "tools", "instructions"})
+_OPENAI_OFFICIAL_HOSTS = frozenset({"api.openai.com"})
 
 
 class OpenAIProvider(BaseLLMProvider):
@@ -58,6 +59,13 @@ class OpenAIProvider(BaseLLMProvider):
         raw_response = self.client.responses.create(**params)
         return self._parse_responses_api_response(raw_response)
 
+    def _is_openai_official_api(self) -> bool:
+        if not self.base_url:
+            return True
+        from urllib.parse import urlparse
+        host = urlparse(self.base_url).hostname or ""
+        return host in _OPENAI_OFFICIAL_HOSTS
+
     def _create_stream_via_chat(
         self,
         messages: list[dict[str, Any]],
@@ -66,7 +74,7 @@ class OpenAIProvider(BaseLLMProvider):
     ):
         params = self._build_chat_request_params(messages, tools, **kwargs)
         params["stream"] = True
-        if "stream_options" not in params and not self.base_url:
+        if "stream_options" not in params and self._is_openai_official_api():
             params["stream_options"] = {"include_usage": True}
 
         text_parts: list[str] = []
