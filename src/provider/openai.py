@@ -578,13 +578,11 @@ class OpenAIProvider(BaseLLMProvider):
         emitted_tool_call_ids: set[str],
     ):
         for tool_call in tool_calls:
-            if tool_call.id:
-                tool_call_id = tool_call.id
-            else:
-                tool_call_id = f"_fallback_{next(OpenAIProvider._fallback_counter)}"
-            if tool_call_id in emitted_tool_call_ids:
+            if not tool_call.id:
+                tool_call.id = f"_fallback_{next(OpenAIProvider._fallback_counter)}"
+            if tool_call.id in emitted_tool_call_ids:
                 continue
-            emitted_tool_call_ids.add(tool_call_id)
+            emitted_tool_call_ids.add(tool_call.id)
             yield tool_call
 
     def _parse_tool_input(self, arguments: str) -> dict[str, Any]:
