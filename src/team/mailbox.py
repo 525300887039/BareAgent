@@ -4,6 +4,7 @@ import json
 import secrets
 import string
 import threading
+from collections import OrderedDict
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,7 +47,9 @@ class MessageBus:
         self.mailbox_dir.mkdir(parents=True, exist_ok=True)
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
-        self._message_index: dict[str, tuple[str, Message]] = {}
+        self._message_index: OrderedDict[str, tuple[str, Message]] = OrderedDict()
+        self._index_lock = threading.Lock()
+        self._max_index_size = 10000
         self._conds: dict[str, threading.Condition] = {}
         self._conds_guard = threading.Lock()
         self._signal_counts: dict[str, int] = {}
@@ -125,13 +128,17 @@ class MessageBus:
         if not normalized_id:
             raise ValueError("message_id must not be empty")
 
-        cached = self._message_index.get(normalized_id)
+        with self._index_lock:
+            cached = self._message_index.get(normalized_id)
         if cached is not None:
             return cached[1]
 
         for agent_name in self.list_agents():
             for message in self.receive(agent_name):
-                self._message_index[message.id] = (agent_name, message)
+                with self._index_lock:
+                    self._message_index[message.id] = (agent_name, message)
+                    if len(self._message_index) > self._max_index_size:
+                        self._message_index.popitem(last=False)
                 if message.id == normalized_id:
                     return message
         return None
@@ -143,7 +150,10 @@ class MessageBus:
             with mailbox_path.open("a", encoding="utf-8") as file:
                 file.write(line)
                 file.write("\n")
-        self._message_index[msg.id] = (agent_name, msg)
+        with self._index_lock:
+            self._message_index[msg.id] = (agent_name, msg)
+            if len(self._message_index) > self._max_index_size:
+                self._message_index.popitem(last=False)
         cond = self._cond_for(agent_name)
         with cond:
             self._signal_counts[agent_name] = self._signal_counts.get(agent_name, 0) + 1
