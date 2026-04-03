@@ -40,10 +40,21 @@ def inject_notifications(
         ),
     }
     if messages and messages[-1].get("role") == "user":
-        messages.insert(len(messages) - 1, notification_message)
+        if _is_tool_result_message(messages[-1]):
+            messages.append(notification_message)
+        else:
+            messages.insert(len(messages) - 1, notification_message)
         return
 
     messages.append(notification_message)
+
+
+def _is_tool_result_message(msg: dict[str, Any]) -> bool:
+    content = msg.get("content")
+    return isinstance(content, list) and any(
+        isinstance(block, dict) and block.get("type") == "tool_result"
+        for block in content
+    )
 
 
 def _stringify(value: Any) -> str:
