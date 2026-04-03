@@ -45,7 +45,10 @@ class ProtocolFSM:
                     continue
                 if message.in_reply_to == msg_id:
                     return message
-            time.sleep(0.1)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            self.bus.wait_for_message(self.agent_name, timeout=min(remaining, 0.5))
 
         return None
 

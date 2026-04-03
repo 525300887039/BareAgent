@@ -46,6 +46,9 @@ class MessageBus:
         self.mailbox_dir.mkdir(parents=True, exist_ok=True)
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
+        self._message_index: dict[str, tuple[str, Message]] = {}
+        self._events: dict[str, threading.Event] = {}
+        self._events_guard = threading.Lock()
 
     def send(self, msg: Message) -> str:
         resolved = self._prepare_message(msg)
@@ -121,8 +124,13 @@ class MessageBus:
         if not normalized_id:
             raise ValueError("message_id must not be empty")
 
+        cached = self._message_index.get(normalized_id)
+        if cached is not None:
+            return cached[1]
+
         for agent_name in self.list_agents():
             for message in self.receive(agent_name):
+                self._message_index[message.id] = (agent_name, message)
                 if message.id == normalized_id:
                     return message
         return None
@@ -134,6 +142,22 @@ class MessageBus:
             with mailbox_path.open("a", encoding="utf-8") as file:
                 file.write(line)
                 file.write("\n")
+        self._message_index[msg.id] = (agent_name, msg)
+        self._event_for(agent_name).set()
+
+    def _event_for(self, agent_name: str) -> threading.Event:
+        with self._events_guard:
+            event = self._events.get(agent_name)
+            if event is None:
+                event = threading.Event()
+                self._events[agent_name] = event
+            return event
+
+    def wait_for_message(self, agent_name: str, timeout: float) -> None:
+        """Block until a message is appended to *agent_name*'s mailbox or *timeout* elapses."""
+        event = self._event_for(agent_name)
+        event.wait(timeout=timeout)
+        event.clear()
 
     def _mailbox_path(self, agent_name: str) -> Path:
         return self.mailbox_dir / f"{agent_name}.jsonl"
