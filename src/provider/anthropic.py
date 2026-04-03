@@ -13,7 +13,7 @@ from src.provider.base import (
     ToolCall,
 )
 
-_PROTECTED_KEYS = frozenset({"model", "messages", "tools", "system", "thinking"})
+_PROTECTED_KEYS = frozenset({"model", "messages", "tools", "system", "thinking", "max_tokens"})
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -73,7 +73,7 @@ class AnthropicProvider(BaseLLMProvider):
         **kwargs: Any,
     ) -> dict[str, Any]:
         system_prompt, anthropic_messages = self._convert_messages(messages)
-        max_tokens = int(kwargs.pop("max_tokens", 8000))
+        max_tokens = int(kwargs.get("max_tokens", 8000))
         if self.thinking_config.mode in {"enabled", "adaptive"}:
             max_tokens = max(max_tokens, self.thinking_config.budget_tokens + 1)
 
