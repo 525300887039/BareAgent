@@ -26,6 +26,9 @@ def run_bash(
             timeout=timeout,
             check=False,
             cwd=None if cwd is None else str(cwd),
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
     except subprocess.TimeoutExpired as exc:
         output = _join_output(exc.stdout, exc.stderr)
@@ -49,16 +52,12 @@ def run_bash(
     return output
 
 
-def _join_output(stdout: str | bytes | None, stderr: str | bytes | None) -> str:
+def _join_output(stdout: str | None, stderr: str | None) -> str:
     parts: list[str] = []
     for value in (stdout, stderr):
         if value is None:
             continue
-        if isinstance(value, bytes):
-            decoded = value.decode("utf-8", errors="replace")
-        else:
-            decoded = value
-        text = decoded.rstrip()
+        text = value.rstrip()
         if text:
             parts.append(text)
     return "\n".join(parts)

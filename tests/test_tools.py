@@ -164,7 +164,7 @@ def test_bash_handler_decodes_binary_output_without_crashing(
 ) -> None:
     def fake_run(*args, **kwargs):
         _ = args, kwargs
-        return SimpleNamespace(stdout=b"ok\xae", stderr=b"", returncode=0)
+        return SimpleNamespace(stdout="ok\ufffd", stderr="", returncode=0)
 
     monkeypatch.setattr("src.core.handlers.bash.subprocess.run", fake_run)
 
