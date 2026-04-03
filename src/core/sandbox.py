@@ -14,4 +14,16 @@ def safe_path(path: str, workspace: Path) -> Path:
     resolved = (workspace_path / candidate).resolve(strict=False)
     if not resolved.is_relative_to(workspace_path):
         raise PermissionError(f"Path {path!r} escapes workspace {workspace_path}")
+    _check_no_symlink_in_chain(workspace_path, candidate)
     return resolved
+
+
+def _check_no_symlink_in_chain(workspace: Path, candidate: Path) -> None:
+    """Walk each component of *candidate* under *workspace* and reject symlinks."""
+    current = workspace
+    for part in candidate.parts:
+        current = current / part
+        if current.is_symlink():
+            raise PermissionError(
+                f"Symlink detected in path chain: {current}"
+            )
