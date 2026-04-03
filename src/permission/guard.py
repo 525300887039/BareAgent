@@ -14,6 +14,9 @@ class PermissionMode(Enum):
     BYPASS = "bypass"
 
 
+_SHELLS = "bash|sh|zsh|dash|ksh|fish"
+
+
 class PermissionGuard:
     SAFE_TOOLS = {
         "read_file",
@@ -39,14 +42,14 @@ class PermissionGuard:
         re.compile(r"DROP\s+TABLE\b", re.IGNORECASE),
         re.compile(r"DELETE\s+FROM\b", re.IGNORECASE),
         # shell wrapper bypass
-        re.compile(r"(^|\s)(bash|sh|zsh|dash|ksh|fish)\s+-c\b"),
+        re.compile(rf"(^|\s)({_SHELLS})\s+-c\b"),
         # absolute-path rm bypass
         re.compile(r"(^|\s)/(?:usr/)?bin/rm\b"),
         # env prefix bypass
         re.compile(r"(^|\s)env\s+"),
         # pipe-to-shell execution
-        re.compile(r"curl\b.*\|\s*(bash|sh|zsh|dash|ksh|fish)\b"),
-        re.compile(r"wget\b.*\|\s*(bash|sh|zsh|dash|ksh|fish)\b"),
+        re.compile(rf"curl\b.*\|\s*({_SHELLS})\b"),
+        re.compile(rf"wget\b.*\|\s*({_SHELLS})\b"),
         # destructive system commands
         re.compile(r"(^|\s)chmod\s+777\b"),
         re.compile(r"(^|\s)mkfs\b"),
