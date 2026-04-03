@@ -67,8 +67,6 @@ class PermissionGuard:
         if tool_name in self.SAFE_TOOLS:
             return False
         if tool_name in {"edit_file", "task_create", "task_update"}:
-            if self.mode == PermissionMode.PLAN:
-                return True
             return False
         if tool_name == "write_file":
             return self.mode == PermissionMode.DEFAULT
@@ -84,11 +82,10 @@ class PermissionGuard:
             return False
         if any(pattern.search(cmd) for pattern in self.AUTO_SAFE_PATTERNS):
             return False
-        # DEFAULT mode: all bash commands not in safe/allow-rules require confirmation
         if self.mode == PermissionMode.DEFAULT:
             return True
-        # AUTO mode: only dangerous patterns require confirmation
-        return any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS)
+        # AUTO mode: not matching any dangerous pattern, allow
+        return False
 
     def ask_user(self, call: Any) -> bool:
         if self.mode == PermissionMode.PLAN:
