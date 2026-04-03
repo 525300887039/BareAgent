@@ -47,8 +47,9 @@ class MessageBus:
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
         self._message_index: dict[str, tuple[str, Message]] = {}
-        self._events: dict[str, threading.Event] = {}
-        self._events_guard = threading.Lock()
+        self._conds: dict[str, threading.Condition] = {}
+        self._conds_guard = threading.Lock()
+        self._signal_counts: dict[str, int] = {}
 
     def send(self, msg: Message) -> str:
         resolved = self._prepare_message(msg)
@@ -143,21 +144,25 @@ class MessageBus:
                 file.write(line)
                 file.write("\n")
         self._message_index[msg.id] = (agent_name, msg)
-        self._event_for(agent_name).set()
+        cond = self._cond_for(agent_name)
+        with cond:
+            self._signal_counts[agent_name] = self._signal_counts.get(agent_name, 0) + 1
+            cond.notify_all()
 
-    def _event_for(self, agent_name: str) -> threading.Event:
-        with self._events_guard:
-            event = self._events.get(agent_name)
-            if event is None:
-                event = threading.Event()
-                self._events[agent_name] = event
-            return event
+    def _cond_for(self, agent_name: str) -> threading.Condition:
+        with self._conds_guard:
+            cond = self._conds.get(agent_name)
+            if cond is None:
+                cond = threading.Condition()
+                self._conds[agent_name] = cond
+            return cond
 
     def wait_for_message(self, agent_name: str, timeout: float) -> None:
         """Block until a message is appended to *agent_name*'s mailbox or *timeout* elapses."""
-        event = self._event_for(agent_name)
-        event.wait(timeout=timeout)
-        event.clear()
+        cond = self._cond_for(agent_name)
+        with cond:
+            initial = self._signal_counts.get(agent_name, 0)
+            cond.wait_for(lambda: self._signal_counts.get(agent_name, 0) != initial, timeout=timeout)
 
     def _mailbox_path(self, agent_name: str) -> Path:
         return self.mailbox_dir / f"{agent_name}.jsonl"
