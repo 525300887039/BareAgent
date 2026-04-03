@@ -4,10 +4,8 @@ from pathlib import Path
 
 from src.core.sandbox import safe_path
 from src.core.handlers.search_utils import (
-    is_ignored_descendant,
     iter_search_files,
     matches_glob_pattern,
-    requires_recursive_walk,
 )
 
 
@@ -18,14 +16,8 @@ def run_glob(pattern: str, path: str = ".", *, workspace: Path) -> list[str]:
 
     if search_root.is_file():
         candidates = [search_root]
-    elif requires_recursive_walk(pattern):
-        candidates = list(iter_search_files(search_root))
     else:
-        candidates = sorted(
-            candidate
-            for candidate in search_root.iterdir()
-            if candidate.is_file() and not is_ignored_descendant(candidate, search_root)
-        )
+        candidates = list(iter_search_files(search_root))
 
     matches: list[str] = []
     for candidate in candidates:

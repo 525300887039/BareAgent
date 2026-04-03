@@ -189,6 +189,21 @@ def test_tool_search_placeholder_returns_empty_list() -> None:
     assert tool_search("todo", max_results=3) == []
 
 
+def test_glob_simple_pattern_recurses_into_subdirectories(tmp_path: Path) -> None:
+    """Bug #13: *.py should find files in nested subdirectories."""
+    (tmp_path / "top.py").write_text("top\n", encoding="utf-8")
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "deep.py").write_text("deep\n", encoding="utf-8")
+    (tmp_path / "sub" / "nested").mkdir()
+    (tmp_path / "sub" / "nested" / "leaf.py").write_text("leaf\n", encoding="utf-8")
+
+    result = run_glob("*.py", workspace=tmp_path)
+
+    assert "top.py" in result
+    assert "sub/deep.py" in result
+    assert "sub/nested/leaf.py" in result
+
+
 def test_importing_tools_does_not_parse_tasks_file_on_module_import(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
