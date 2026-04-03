@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -111,8 +113,17 @@ class TeammateManager:
                 for teammate in self.list()
             }
         }
-        with self.config_file.open("w", encoding="utf-8") as file:
-            json.dump(payload, file, ensure_ascii=False, indent=2)
+        fd, tmp_path = tempfile.mkstemp(dir=str(self.config_file.parent), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, str(self.config_file))
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def _load(self) -> None:
         if not self.config_file.exists():
