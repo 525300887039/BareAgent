@@ -36,6 +36,14 @@ class TeammateManager:
         self._lock = threading.RLock()
         self._load()
 
+    @classmethod
+    def create_empty(cls, config_file: str | Path) -> "TeammateManager":
+        instance = cls.__new__(cls)
+        instance.config_file = Path(config_file)
+        instance.teammates = {}
+        instance._lock = threading.RLock()
+        return instance
+
     def register(
         self,
         name: str,
