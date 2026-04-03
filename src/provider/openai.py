@@ -7,6 +7,9 @@ import openai
 
 from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
 
+_PROTECTED_CHAT_KEYS = frozenset({"model", "messages", "tools"})
+_PROTECTED_RESPONSES_KEYS = frozenset({"model", "input", "tools", "instructions"})
+
 
 class OpenAIProvider(BaseLLMProvider):
     def __init__(
@@ -208,7 +211,7 @@ class OpenAIProvider(BaseLLMProvider):
         converted_tools = self._convert_tools(tools)
         if converted_tools:
             params["tools"] = converted_tools
-        params.update(kwargs)
+        params.update({k: v for k, v in kwargs.items() if k not in _PROTECTED_CHAT_KEYS})
         return params
 
     def _build_responses_request_params(
@@ -231,7 +234,7 @@ class OpenAIProvider(BaseLLMProvider):
         response_kwargs = dict(kwargs)
         if "max_tokens" in response_kwargs and "max_output_tokens" not in response_kwargs:
             response_kwargs["max_output_tokens"] = response_kwargs.pop("max_tokens")
-        params.update(response_kwargs)
+        params.update({k: v for k, v in response_kwargs.items() if k not in _PROTECTED_RESPONSES_KEYS})
         return params
 
     def _convert_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -576,17 +579,3 @@ class OpenAIProvider(BaseLLMProvider):
             parsed_input = {"value": parsed_input}
         return parsed_input
 
-    def _stringify_content(self, content: Any) -> str:
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            text_parts: list[str] = []
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "text":
-                    text_parts.append(str(block.get("text", "")))
-                else:
-                    text_parts.append(json.dumps(block, ensure_ascii=False, default=str))
-            return "\n".join(part for part in text_parts if part)
-        if content is None:
-            return ""
-        return json.dumps(content, ensure_ascii=False, default=str)

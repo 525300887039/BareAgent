@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Generator
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -89,3 +90,18 @@ class BaseLLMProvider(ABC):
         **kwargs: Any,
     ) -> Generator[StreamEvent, None, LLMResponse]:
         """Yield streaming events and return the final normalized response."""
+
+    def _stringify_content(self, content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            text_parts: list[str] = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text_parts.append(str(block.get("text", "")))
+                else:
+                    text_parts.append(json.dumps(block, ensure_ascii=False, default=str))
+            return "\n".join(part for part in text_parts if part)
+        if content is None:
+            return ""
+        return json.dumps(content, ensure_ascii=False, default=str)

@@ -13,6 +13,8 @@ from src.provider.base import (
     ToolCall,
 )
 
+_PROTECTED_KEYS = frozenset({"model", "messages", "tools", "system", "thinking"})
+
 
 class AnthropicProvider(BaseLLMProvider):
     def __init__(
@@ -87,10 +89,10 @@ class AnthropicProvider(BaseLLMProvider):
             params["system"] = system_prompt
         if self.thinking_config.mode in {"enabled", "adaptive"}:
             params["thinking"] = {
-                "type": "enabled",
+                "type": self.thinking_config.mode,
                 "budget_tokens": self.thinking_config.budget_tokens,
             }
-        params.update(kwargs)
+        params.update({k: v for k, v in kwargs.items() if k not in _PROTECTED_KEYS})
         return params
 
     def _convert_messages(
@@ -183,21 +185,6 @@ class AnthropicProvider(BaseLLMProvider):
                     blocks.append({"type": "text", "text": self._stringify_content(item)})
             return blocks
         return self._stringify_content(content)
-
-    def _stringify_content(self, content: Any) -> str:
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            text_parts: list[str] = []
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "text":
-                    text_parts.append(str(block.get("text", "")))
-                else:
-                    text_parts.append(json.dumps(block, ensure_ascii=False, default=str))
-            return "\n".join(part for part in text_parts if part)
-        if content is None:
-            return ""
-        return json.dumps(content, ensure_ascii=False, default=str)
 
     def _convert_tools(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [
