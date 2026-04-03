@@ -5,8 +5,10 @@ from pathlib import Path
 
 def safe_path(path: str, workspace: Path) -> Path:
     """Resolve a path and ensure it stays within the workspace."""
+    if path.startswith("~"):
+        raise PermissionError(f"Home-relative paths are not allowed: {path!r}")
     workspace_path = workspace.resolve(strict=False)
-    candidate = Path(path).expanduser()
+    candidate = Path(path)
     if candidate.is_absolute():
         raise PermissionError(f"Absolute paths are not allowed: {path!r}")
     resolved = (workspace_path / candidate).resolve(strict=False)
