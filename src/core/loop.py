@@ -9,6 +9,9 @@ from src.ui.console import AgentConsole
 from src.ui.stream import StreamPrinter
 
 
+LLM_CALL_FAILED_PREFIX = "LLM call failed: "
+
+
 class _StreamingUnavailableError(RuntimeError):
     """Raised when streaming is explicitly unsupported before any events arrive."""
 
@@ -23,10 +26,11 @@ def agent_loop(
     bg_manager: Any = None,
     stream: bool = False,
     console: AgentConsole | None = None,
+    max_iterations: int = 200,
 ) -> str:
     compact = compact_fn or (lambda _messages: None)
 
-    while True:
+    for _iteration in range(max_iterations):
         _run_background(bg_manager, messages)
         compact(messages)
 
@@ -40,8 +44,8 @@ def agent_loop(
             )
         except Exception as exc:
             if console is not None:
-                console.print_error(f"LLM call failed: {type(exc).__name__}: {exc}")
-            return f"LLM call failed: {type(exc).__name__}: {exc}"
+                console.print_error(f"{LLM_CALL_FAILED_PREFIX}{type(exc).__name__}: {exc}")
+            return f"{LLM_CALL_FAILED_PREFIX}{type(exc).__name__}: {exc}"
 
         messages.append(response.to_message())
         if response.text and console is not None and not streamed_output:
@@ -88,6 +92,11 @@ def agent_loop(
             results.append(_tool_result(call.id, output))
 
         messages.append({"role": "user", "content": results})
+
+    msg = f"Agent loop exceeded {max_iterations} iterations"
+    if console is not None:
+        console.print_error(msg)
+    return f"{LLM_CALL_FAILED_PREFIX}{msg}"
 
 
 def _invoke_provider(

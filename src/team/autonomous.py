@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from src.core.loop import agent_loop
+from src.core.loop import agent_loop, LLM_CALL_FAILED_PREFIX
 from src.planning.tasks import Task, TaskManager
 from src.team.mailbox import Message, MessageBus
 from src.team.protocols import Protocol, ProtocolFSM, decode_protocol_content
@@ -36,14 +36,14 @@ class AutonomousAgent:
         self.poll_interval = poll_interval
         self._shutdown = False
         self.bus.ensure_mailbox(name)
-        self._last_seen_timestamp: str | None = self.bus.latest_timestamp(name)
+        self._last_seen_id: str | None = self.bus.latest_message_id(name)
         self._protocol = ProtocolFSM(bus, agent_name=name)
 
     def run(self) -> str:
         while not self._shutdown:
-            incoming = self.bus.receive(self.name, since=self._last_seen_timestamp)
+            incoming = self.bus.receive(self.name, since_id=self._last_seen_id)
             if incoming:
-                self._last_seen_timestamp = incoming[-1].timestamp
+                self._last_seen_id = incoming[-1].id
                 self._handle_messages(incoming)
                 continue
 
@@ -101,7 +101,7 @@ class AutonomousAgent:
             self.task_manager.update(task.id, status="failed")
             return
 
-        final_status = "failed" if result.startswith("LLM call failed:") else "done"
+        final_status = "failed" if result.startswith(LLM_CALL_FAILED_PREFIX) else "done"
         self.task_manager.update(task.id, status=final_status)
 
     def _run_prompt(self, prompt: str) -> str:

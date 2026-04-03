@@ -4,7 +4,7 @@ from collections.abc import Generator
 from copy import deepcopy
 from typing import Any
 
-from src.core.loop import agent_loop
+from src.core.loop import agent_loop, LLM_CALL_FAILED_PREFIX
 from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
 
 
@@ -319,10 +319,10 @@ def test_agent_loop_does_not_fall_back_for_stream_runtime_error(monkeypatch) -> 
         console=console,
     )
 
-    assert result == "LLM call failed: RuntimeError: connection reset"
+    assert result == f"{LLM_CALL_FAILED_PREFIX}RuntimeError: connection reset"
     assert len(provider.stream_calls) == 1
     assert len(provider.calls) == 0
-    assert console.errors == ["LLM call failed: RuntimeError: connection reset"]
+    assert console.errors == [f"{LLM_CALL_FAILED_PREFIX}RuntimeError: connection reset"]
 
 
 def test_agent_loop_does_not_retry_after_partial_stream_failure(monkeypatch) -> None:
@@ -351,8 +351,37 @@ def test_agent_loop_does_not_retry_after_partial_stream_failure(monkeypatch) -> 
         console=console,
     )
 
-    assert result == "LLM call failed: RuntimeError: stream reset"
+    assert result == f"{LLM_CALL_FAILED_PREFIX}RuntimeError: stream reset"
     assert len(provider.stream_calls) == 1
     assert len(provider.calls) == 0
-    assert console.errors == ["LLM call failed: RuntimeError: stream reset"]
+    assert console.errors == [f"{LLM_CALL_FAILED_PREFIX}RuntimeError: stream reset"]
     assert [instance.chunks for instance in FakeStreamPrinter.instances] == [["Partial reply"]]
+
+
+def test_agent_loop_terminates_after_max_iterations() -> None:
+    """Bug #12: agent_loop should stop after max_iterations even if LLM keeps returning tool calls."""
+    tool_response = LLMResponse(
+        text="Calling tool.",
+        tool_calls=[ToolCall(id="toolu_1", name="echo", input={"value": "hi"})],
+        stop_reason="tool_use",
+        input_tokens=10,
+        output_tokens=5,
+    )
+    provider = MockProvider([tool_response, tool_response, tool_response, tool_response])
+    console = FakeConsole()
+
+    result = agent_loop(
+        provider=provider,
+        messages=[
+            {"role": "system", "content": "You are BareAgent."},
+            {"role": "user", "content": "Loop forever."},
+        ],
+        tools=[],
+        handlers={"echo": lambda value: f"handled {value}"},
+        console=console,
+        max_iterations=3,
+    )
+
+    assert result == f"{LLM_CALL_FAILED_PREFIX}Agent loop exceeded 3 iterations"
+    assert len(provider.calls) == 3
+    assert any("exceeded 3 iterations" in e for e in console.errors)
