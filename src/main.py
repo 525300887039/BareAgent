@@ -14,7 +14,7 @@ from prompt_toolkit.patch_stdout import patch_stdout
 
 from src.concurrency.background import BackgroundManager
 from src.core.context import assemble_system_prompt
-from src.core.loop import agent_loop
+from src.core.loop import agent_loop, LLMCallError
 from src.core.tools import get_handlers, get_tools
 from src.memory.compact import Compactor
 from src.memory.transcript import TranscriptManager
@@ -484,6 +484,8 @@ def run_repl(
                 message_bus=message_bus,
                 since=main_mailbox_cursor,
             )
+        except LLMCallError:
+            continue
         except KeyboardInterrupt:
             ui_console.console.print("\nAgent loop interrupted.", style="yellow")
             continue
@@ -586,10 +588,7 @@ def _load_teammate_manager(
         return TeammateManager(team_file)
     except Exception as exc:
         agent_console.print_error(f"Failed to load team file {team_file}: {exc}")
-        manager = object.__new__(TeammateManager)
-        manager.config_file = team_file
-        manager.teammates = {}
-        return manager
+        return TeammateManager.create_empty(team_file)
 
 
 def _extract_system_prompt(messages: list[dict[str, object]]) -> str:

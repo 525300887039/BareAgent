@@ -9,7 +9,8 @@ from src.ui.console import AgentConsole
 from src.ui.stream import StreamPrinter
 
 
-LLM_CALL_FAILED_PREFIX = "LLM call failed: "
+class LLMCallError(Exception):
+    """Raised when an LLM call fails or the agent loop exceeds its iteration limit."""
 
 
 class _StreamingUnavailableError(RuntimeError):
@@ -43,9 +44,10 @@ def agent_loop(
                 console=console,
             )
         except Exception as exc:
+            msg = f"LLM call failed: {type(exc).__name__}: {exc}"
             if console is not None:
-                console.print_error(f"{LLM_CALL_FAILED_PREFIX}{type(exc).__name__}: {exc}")
-            return f"{LLM_CALL_FAILED_PREFIX}{type(exc).__name__}: {exc}"
+                console.print_error(msg)
+            raise LLMCallError(msg) from exc
 
         messages.append(response.to_message())
         if response.text and console is not None and not streamed_output:
@@ -96,7 +98,7 @@ def agent_loop(
     msg = f"Agent loop exceeded {max_iterations} iterations"
     if console is not None:
         console.print_error(msg)
-    return f"{LLM_CALL_FAILED_PREFIX}{msg}"
+    raise LLMCallError(msg)
 
 
 def _invoke_provider(

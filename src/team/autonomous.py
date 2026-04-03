@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from src.core.loop import agent_loop, LLM_CALL_FAILED_PREFIX
+from src.core.loop import agent_loop, LLMCallError
 from src.planning.tasks import Task, TaskManager
 from src.team.mailbox import Message, MessageBus
 from src.team.protocols import Protocol, ProtocolFSM, decode_protocol_content
@@ -96,13 +96,15 @@ class AutonomousAgent:
             return
 
         try:
-            result = self._run_prompt(self._build_task_prompt(task))
+            self._run_prompt(self._build_task_prompt(task))
+        except LLMCallError:
+            self.task_manager.update(task.id, status="failed")
+            return
         except Exception:
             self.task_manager.update(task.id, status="failed")
             return
 
-        final_status = "failed" if result.startswith(LLM_CALL_FAILED_PREFIX) else "done"
-        self.task_manager.update(task.id, status=final_status)
+        self.task_manager.update(task.id, status="done")
 
     def _run_prompt(self, prompt: str) -> str:
         messages: list[dict[str, Any]] = []
