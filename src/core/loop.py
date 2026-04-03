@@ -53,7 +53,7 @@ def agent_loop(
         if response.text and console is not None and not streamed_output:
             console.print_assistant(response.text)
         if not response.has_tool_calls:
-            return response.text
+            return response.text or ""
 
         results: list[dict[str, Any]] = []
         for call in response.tool_calls:
