@@ -37,6 +37,20 @@ class PermissionGuard:
         re.compile(r"git\s+reset\s+--hard\b"),
         re.compile(r"DROP\s+TABLE\b", re.IGNORECASE),
         re.compile(r"DELETE\s+FROM\b", re.IGNORECASE),
+        # shell wrapper bypass
+        re.compile(r"(^|\s)(bash|sh)\s+-c\b"),
+        # absolute-path rm bypass
+        re.compile(r"(^|\s)/(?:usr/)?bin/rm\b"),
+        # env prefix bypass
+        re.compile(r"(^|\s)env\s+"),
+        # pipe-to-shell execution
+        re.compile(r"curl\b.*\|\s*(bash|sh)\b"),
+        re.compile(r"wget\b.*\|\s*(bash|sh)\b"),
+        # destructive system commands
+        re.compile(r"(^|\s)chmod\s+777\b"),
+        re.compile(r"(^|\s)mkfs\b"),
+        re.compile(r"(^|\s)dd\s+if="),
+        re.compile(r"find\b.*-delete\b"),
     ]
 
     def __init__(self, mode: PermissionMode = PermissionMode.DEFAULT) -> None:
@@ -51,8 +65,10 @@ class PermissionGuard:
             return tool_name not in self.SAFE_TOOLS
         if tool_name in self.SAFE_TOOLS:
             return False
-        if tool_name in {"write_file", "edit_file", "task_create", "task_update"}:
+        if tool_name in {"edit_file", "task_create", "task_update"}:
             return False
+        if tool_name == "write_file":
+            return self.mode == PermissionMode.DEFAULT
         if tool_name != "bash":
             return True
 
@@ -61,9 +77,12 @@ class PermissionGuard:
             return True
         if self._match_rules(self.allow_rules, tool_name, cmd):
             return False
-        if self.mode == PermissionMode.AUTO:
-            if any(pattern.search(cmd) for pattern in self.AUTO_SAFE_PATTERNS):
-                return False
+        if any(pattern.search(cmd) for pattern in self.AUTO_SAFE_PATTERNS):
+            return False
+        # DEFAULT mode: all bash commands not in safe/allow-rules require confirmation
+        if self.mode == PermissionMode.DEFAULT:
+            return True
+        # AUTO mode: only dangerous patterns require confirmation
         return any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS)
 
     def ask_user(self, call: Any) -> bool:

@@ -233,13 +233,20 @@ def _make_lazy_task_handlers(task_file: Path) -> dict[str, Callable[..., Any]]:
 _DEFAULT_TODO_MANAGER = TodoManager()
 _DEFAULT_SKILL_LOADER = SkillLoader(resolve_skills_dir())
 
+def _unbound_stub(tool_name: str) -> Callable[..., Any]:
+    """Raise when a file/bash handler is called without workspace binding."""
+    def _stub(**_: Any) -> str:
+        raise RuntimeError(f"{tool_name}: use get_handlers() with a workspace binding")
+    return _stub
+
+
 TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
-    "bash": run_bash,
-    "read_file": run_read,
-    "write_file": run_write,
-    "edit_file": run_edit,
-    "glob": run_glob,
-    "grep": run_grep,
+    "bash": _unbound_stub("bash"),
+    "read_file": _unbound_stub("read_file"),
+    "write_file": _unbound_stub("write_file"),
+    "edit_file": _unbound_stub("edit_file"),
+    "glob": _unbound_stub("glob"),
+    "grep": _unbound_stub("grep"),
     **make_todo_handlers(_DEFAULT_TODO_MANAGER),
     **_make_lazy_task_handlers(Path(".tasks.json")),
     **make_skill_handlers(_DEFAULT_SKILL_LOADER),
