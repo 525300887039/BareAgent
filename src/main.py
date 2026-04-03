@@ -86,9 +86,28 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge *override* into *base* (returns a new dict)."""
+    merged = base.copy()
+    for key, value in override.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def _read_config_file(config_path: Path) -> dict:
     with config_path.open("rb") as file:
-        return tomllib.load(file)
+        base = tomllib.load(file)
+    local_path = config_path.with_suffix("").with_name(
+        config_path.stem + ".local" + config_path.suffix,
+    )
+    if local_path.is_file():
+        with local_path.open("rb") as file:
+            local = tomllib.load(file)
+        return _deep_merge(base, local)
+    return base
 
 
 def _resolve_string(
