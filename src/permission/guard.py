@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from enum import Enum
 from typing import Any
 
@@ -38,14 +39,14 @@ class PermissionGuard:
         re.compile(r"DROP\s+TABLE\b", re.IGNORECASE),
         re.compile(r"DELETE\s+FROM\b", re.IGNORECASE),
         # shell wrapper bypass
-        re.compile(r"(^|\s)(bash|sh)\s+-c\b"),
+        re.compile(r"(^|\s)(bash|sh|zsh|dash|ksh|fish)\s+-c\b"),
         # absolute-path rm bypass
         re.compile(r"(^|\s)/(?:usr/)?bin/rm\b"),
         # env prefix bypass
         re.compile(r"(^|\s)env\s+"),
         # pipe-to-shell execution
-        re.compile(r"curl\b.*\|\s*(bash|sh)\b"),
-        re.compile(r"wget\b.*\|\s*(bash|sh)\b"),
+        re.compile(r"curl\b.*\|\s*(bash|sh|zsh|dash|ksh|fish)\b"),
+        re.compile(r"wget\b.*\|\s*(bash|sh|zsh|dash|ksh|fish)\b"),
         # destructive system commands
         re.compile(r"(^|\s)chmod\s+777\b"),
         re.compile(r"(^|\s)mkfs\b"),
@@ -77,6 +78,8 @@ class PermissionGuard:
         cmd = str(tool_input.get("command", "")).strip()
         if self._match_rules(self.deny_rules, tool_name, cmd):
             return True
+        if any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS):
+            return True
         if self._match_rules(self.allow_rules, tool_name, cmd):
             return False
         if any(pattern.search(cmd) for pattern in self.AUTO_SAFE_PATTERNS):
@@ -91,8 +94,14 @@ class PermissionGuard:
         if self.mode == PermissionMode.PLAN:
             print(f"Plan mode: {call.name} blocked (read-only)")
             return False
+        if not sys.stdin.isatty():
+            print(f"Non-interactive environment: {call.name} denied")
+            return False
         print(f"{call.name}: {json.dumps(call.input, ensure_ascii=False)[:200]}")
-        return input("Allow? [y/N] ").strip().lower() == "y"
+        try:
+            return input("Allow? [y/N] ").strip().lower() == "y"
+        except EOFError:
+            return False
 
     def _match_rules(self, rules: list[str], tool_name: str, cmd: str) -> bool:
         normalized_tool = tool_name.strip().lower()
