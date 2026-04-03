@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 import secrets
 import string
-import tempfile
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.core.fileutil import atomic_write_json
 from src.core.schema import tool_schema as _schema
 
 TASK_STATUSES = {"pending", "in_progress", "done", "failed"}
@@ -224,26 +223,13 @@ class TaskManager:
         return copied
 
     def _save(self) -> None:
-        self.task_file.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "tasks": {
                 task_id: task.to_dict()
                 for task_id, task in self.tasks.items()
             }
         }
-        fd, tmp_path = tempfile.mkstemp(
-            dir=str(self.task_file.parent), suffix=".tmp"
-        )
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(payload, f, ensure_ascii=False, indent=2)
-            os.replace(tmp_path, str(self.task_file))
-        except BaseException:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
+        atomic_write_json(self.task_file, payload)
 
     def _load(self) -> None:
         if not self.task_file.exists():

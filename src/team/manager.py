@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+
+from src.core.fileutil import atomic_write_json
 
 
 @dataclass(slots=True)
@@ -106,24 +106,13 @@ class TeammateManager:
         )
 
     def _save(self) -> None:
-        self.config_file.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "teammates": {
                 teammate.name: teammate.to_dict()
                 for teammate in self.list()
             }
         }
-        fd, tmp_path = tempfile.mkstemp(dir=str(self.config_file.parent), suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(payload, f, ensure_ascii=False, indent=2)
-            os.replace(tmp_path, str(self.config_file))
-        except BaseException:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
+        atomic_write_json(self.config_file, payload)
 
     def _load(self) -> None:
         if not self.config_file.exists():
