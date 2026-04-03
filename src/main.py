@@ -466,6 +466,7 @@ def run_repl(
             continue
 
         messages.append({"role": "user", "content": text})
+        snapshot_len = len(messages) - 1
         try:
             agent_loop(
                 provider=provider,
@@ -485,10 +486,11 @@ def run_repl(
                 since=main_mailbox_cursor,
             )
         except LLMCallError:
-            messages.pop()  # remove the unanswered user message
+            del messages[snapshot_len:]
             ui_console.console.print("LLM call failed, please try again.", style="yellow")
             continue
         except KeyboardInterrupt:
+            del messages[snapshot_len:]
             ui_console.console.print("\nAgent loop interrupted.", style="yellow")
             continue
 
