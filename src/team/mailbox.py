@@ -34,7 +34,7 @@ class Message:
             content=str(payload.get("content", "")),
             msg_type=str(payload.get("msg_type", "")),
             timestamp=str(payload.get("timestamp", "")),
-            in_reply_to=_optional_string(payload.get("in_reply_to")),
+            in_reply_to=optional_string(payload.get("in_reply_to")),
         )
 
 
@@ -161,7 +161,7 @@ class MessageBus:
             content=msg.content,
             msg_type=msg.msg_type.strip(),
             timestamp=timestamp,
-            in_reply_to=_optional_string(msg.in_reply_to),
+            in_reply_to=optional_string(msg.in_reply_to),
         )
 
 
@@ -177,7 +177,7 @@ def _parse_timestamp(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
-def _optional_string(value: Any) -> str | None:
+def optional_string(value: Any) -> str | None:
     if value is None:
         return None
     normalized = str(value).strip()

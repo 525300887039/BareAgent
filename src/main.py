@@ -26,7 +26,7 @@ from src.permission.rules import parse_permission_rules
 from src.provider.base import BaseLLMProvider, ThinkingConfig
 from src.provider.factory import create_provider
 from src.team.autonomous import AutonomousAgent
-from src.team.mailbox import Message, MessageBus, _optional_string as _coerce_optional_string
+from src.team.mailbox import Message, MessageBus, optional_string as _coerce_optional_string
 from src.team.manager import TeammateManager
 from src.team.protocols import Protocol, ProtocolFSM, decode_protocol_content
 from src.ui.console import AgentConsole
@@ -577,8 +577,10 @@ def _load_teammate_manager(
         return TeammateManager(team_file)
     except Exception as exc:
         agent_console.print_error(f"Failed to load team file {team_file}: {exc}")
-        team_file.write_text('{"teammates": {}}', encoding="utf-8")
-        return TeammateManager(team_file)
+        manager = object.__new__(TeammateManager)
+        manager.config_file = team_file
+        manager.teammates = {}
+        return manager
 
 
 def _extract_system_prompt(messages: list[dict[str, object]]) -> str:
