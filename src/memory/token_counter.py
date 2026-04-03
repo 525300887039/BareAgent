@@ -58,9 +58,15 @@ def _estimate_text(text: str) -> float:
 def _is_cjk(char: str) -> bool:
     codepoint = ord(char)
     return (
-        0x3400 <= codepoint <= 0x4DBF
-        or 0x4E00 <= codepoint <= 0x9FFF
-        or 0xF900 <= codepoint <= 0xFAFF
+        0x3000 <= codepoint <= 0x303F      # CJK 符号和标点
+        or 0x3040 <= codepoint <= 0x309F    # 平假名
+        or 0x30A0 <= codepoint <= 0x30FF    # 片假名
+        or 0x3400 <= codepoint <= 0x4DBF    # CJK 统一汉字扩展 A
+        or 0x4E00 <= codepoint <= 0x9FFF    # CJK 统一汉字
+        or 0xAC00 <= codepoint <= 0xD7AF    # 韩文音节
+        or 0xF900 <= codepoint <= 0xFAFF    # CJK 兼容表意文字
+        or 0x20000 <= codepoint <= 0x2A6DF  # CJK 统一汉字扩展 B
+        or 0x2F800 <= codepoint <= 0x2FA1F  # CJK 兼容表意文字补充
     )
 
 
