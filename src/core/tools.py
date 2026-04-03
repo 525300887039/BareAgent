@@ -230,8 +230,22 @@ def _make_lazy_task_handlers(task_file: Path) -> dict[str, Callable[..., Any]]:
     }
 
 
-_DEFAULT_TODO_MANAGER = TodoManager()
-_DEFAULT_SKILL_LOADER = SkillLoader(resolve_skills_dir())
+_DEFAULT_TODO_MANAGER: TodoManager | None = None
+_DEFAULT_SKILL_LOADER: SkillLoader | None = None
+
+
+def _get_default_todo_manager() -> TodoManager:
+    global _DEFAULT_TODO_MANAGER
+    if _DEFAULT_TODO_MANAGER is None:
+        _DEFAULT_TODO_MANAGER = TodoManager()
+    return _DEFAULT_TODO_MANAGER
+
+
+def _get_default_skill_loader() -> SkillLoader:
+    global _DEFAULT_SKILL_LOADER
+    if _DEFAULT_SKILL_LOADER is None:
+        _DEFAULT_SKILL_LOADER = SkillLoader(resolve_skills_dir())
+    return _DEFAULT_SKILL_LOADER
 
 def _unbound_stub(tool_name: str) -> Callable[..., Any]:
     """Raise when a file/bash handler is called without workspace binding."""
@@ -247,9 +261,10 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     "edit_file": _unbound_stub("edit_file"),
     "glob": _unbound_stub("glob"),
     "grep": _unbound_stub("grep"),
-    **make_todo_handlers(_DEFAULT_TODO_MANAGER),
+    "todo_read": lambda: make_todo_handlers(_get_default_todo_manager())["todo_read"](),
+    "todo_write": lambda **kw: make_todo_handlers(_get_default_todo_manager())["todo_write"](**kw),
     **_make_lazy_task_handlers(Path(".tasks.json")),
-    **make_skill_handlers(_DEFAULT_SKILL_LOADER),
+    "load_skill": lambda skill_name: make_skill_handlers(_get_default_skill_loader())["load_skill"](skill_name),
     "background_run": lambda **_: "Background manager unavailable.",
     "subagent": lambda task: "Subagent unavailable: provider is not configured.",
     "team_spawn": lambda name: f"Team spawning unavailable for {name}.",
