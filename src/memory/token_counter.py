@@ -63,7 +63,7 @@ def _estimate_text(text: str) -> float:
     ascii_alnum = len(_ASCII_ALNUM_PATTERN.findall(text))
     whitespace = len(_WHITESPACE_PATTERN.findall(text))
     other = len(text) - cjk - ascii_alnum - whitespace
-    return cjk * 1.5 + ascii_alnum * 0.25 + other * 0.5
+    return cjk * 1.5 + ascii_alnum * 0.25 + whitespace * 0.25 + other * 0.5
 
 
 def _stringify(value: Any) -> str:
