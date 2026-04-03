@@ -295,6 +295,7 @@ def get_handlers(
     bg_manager: BackgroundManager | None = None,
     subagent_system_prompt: str = "",
     team_handlers: dict[str, Callable[..., Any]] | None = None,
+    subagent_depth: int = 0,
 ) -> dict[str, Callable[..., Any]]:
     handlers: dict[str, Callable[..., Any]] = {
         "bash": partial(run_bash, cwd=workspace),
@@ -340,6 +341,7 @@ def get_handlers(
             handlers=handlers,
             permission=permission,
             system_prompt=subagent_system_prompt,
+            current_depth=subagent_depth + 1,
         )
 
     return handlers

@@ -24,6 +24,17 @@ SUBAGENT_TOOL_SCHEMAS: list[dict[str, Any]] = [
 ]
 
 
+def _subagent_compact(messages: list[dict[str, Any]], keep_recent: int = 40) -> None:
+    """Trim early messages when the conversation grows too long, keeping system + recent."""
+    if len(messages) <= keep_recent:
+        return
+    system_msgs = [m for m in messages if m.get("role") == "system"]
+    recent = messages[-keep_recent:]
+    messages.clear()
+    messages.extend(system_msgs)
+    messages.extend(m for m in recent if m not in system_msgs)
+
+
 def run_subagent(
     provider: BaseLLMProvider,
     task: str,
@@ -31,7 +42,11 @@ def run_subagent(
     handlers: dict[str, Any],
     permission: Any,
     system_prompt: str = "",
+    max_depth: int = 3,
+    current_depth: int = 0,
 ) -> str:
+    if current_depth >= max_depth:
+        return f"Subagent refused: recursion depth {current_depth} exceeds limit {max_depth}."
     messages: list[dict[str, Any]] = []
     if system_prompt.strip():
         messages.append({"role": "system", "content": system_prompt})
@@ -42,5 +57,5 @@ def run_subagent(
         tools=tools,
         handlers=handlers,
         permission=permission,
-        compact_fn=lambda _messages: None,
+        compact_fn=_subagent_compact,
     )
