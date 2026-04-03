@@ -8,6 +8,8 @@ from src.main import (
     PermissionConfig,
     ProviderConfig,
     UIConfig,
+    _is_tool_result_message,
+    _refresh_nag_reminder,
     load_config,
     resolve_config_path,
     run_repl,
@@ -340,3 +342,38 @@ def _make_config() -> Config:
         thinking=ThinkingConfig(),
         path=Path("config.toml"),
     )
+
+
+def test_nag_reminder_skips_tool_result_messages() -> None:
+    """Bug #14: nag reminder should not insert between assistant and tool_result."""
+    messages = [
+        {"role": "system", "content": "system prompt"},
+        {"role": "user", "content": "do something"},
+        {"role": "assistant", "content": [
+            {"type": "text", "text": "calling tool"},
+            {"type": "tool_use", "id": "toolu_1", "name": "bash", "input": {"command": "ls"}},
+        ]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "toolu_1", "content": "file.txt"},
+        ]},
+    ]
+    _refresh_nag_reminder(messages, "Remember to be concise.")
+
+    # The nag should be inserted before the real user message, not the tool_result
+    nag_indices = [
+        i for i, m in enumerate(messages)
+        if m.get("role") == "system" and isinstance(m.get("content"), str)
+        and "<nag-reminder>" in str(m["content"])
+    ]
+    assert len(nag_indices) == 1
+    nag_idx = nag_indices[0]
+    # The message after the nag should be the real user message (index 1 originally)
+    assert messages[nag_idx + 1].get("content") == "do something"
+    # The tool_result should still directly follow the assistant message
+    assistant_idx = next(
+        i for i, m in enumerate(messages)
+        if m.get("role") == "assistant"
+    )
+    tool_result_msg = messages[assistant_idx + 1]
+    assert tool_result_msg.get("role") == "user"
+    assert _is_tool_result_message(tool_result_msg)

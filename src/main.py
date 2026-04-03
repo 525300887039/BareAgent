@@ -240,6 +240,14 @@ def load_config(
 _NAG_REMINDER_PREFIX = "<nag-reminder>"
 
 
+def _is_tool_result_message(msg: dict) -> bool:
+    content = msg.get("content")
+    return isinstance(content, list) and any(
+        isinstance(block, dict) and block.get("type") == "tool_result"
+        for block in content
+    )
+
+
 def _initial_messages(workspace: Path, skill_summary: str = "") -> list[dict[str, str]]:
     return [
         {
@@ -270,7 +278,8 @@ def _refresh_nag_reminder(
         "content": f"{_NAG_REMINDER_PREFIX}\n{nag_reminder.strip()}\n</nag-reminder>",
     }
     for index in range(len(messages) - 1, -1, -1):
-        if messages[index].get("role") == "user":
+        msg = messages[index]
+        if msg.get("role") == "user" and not _is_tool_result_message(msg):
             messages.insert(index, nag_message)
             return
 
@@ -322,7 +331,7 @@ def run_repl(
     message_bus = MessageBus(workspace_path / ".mailbox")
     message_bus.ensure_mailbox(MAIN_AGENT_NAME)
     spawned_agents: dict[str, AutonomousAgent] = {}
-    main_mailbox_cursor: str | None = message_bus.latest_timestamp(MAIN_AGENT_NAME)
+    main_mailbox_cursor: str | None = message_bus.latest_message_id(MAIN_AGENT_NAME)
     skill_loader = SkillLoader(resolve_skills_dir())
     transcript_mgr = TranscriptManager(workspace_path / ".transcripts")
     messages = _initial_messages(
@@ -771,7 +780,7 @@ def _drain_team_mailbox(
     message_bus: MessageBus,
     since: str | None,
 ) -> str | None:
-    messages = message_bus.receive(MAIN_AGENT_NAME, since=since)
+    messages = message_bus.receive(MAIN_AGENT_NAME, since_id=since)
     if not messages:
         return since
 
@@ -782,7 +791,7 @@ def _drain_team_mailbox(
             label = f"{label} [{protocol.value}]"
         ui_console.print_status(f"{label}: {content}")
 
-    return messages[-1].timestamp
+    return messages[-1].id
 
 
 def _broadcast_team_shutdown(message_bus: MessageBus) -> None:
