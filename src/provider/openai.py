@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import json
 from typing import Any
 
@@ -569,7 +570,7 @@ class OpenAIProvider(BaseLLMProvider):
             )
         return tool_calls
 
-    _fallback_tool_call_counter: int = 0
+    _fallback_counter = itertools.count(1)
 
     def _iter_new_tool_calls(
         self,
@@ -580,8 +581,7 @@ class OpenAIProvider(BaseLLMProvider):
             if tool_call.id:
                 tool_call_id = tool_call.id
             else:
-                OpenAIProvider._fallback_tool_call_counter += 1
-                tool_call_id = f"_fallback_{OpenAIProvider._fallback_tool_call_counter}"
+                tool_call_id = f"_fallback_{next(OpenAIProvider._fallback_counter)}"
             if tool_call_id in emitted_tool_call_ids:
                 continue
             emitted_tool_call_ids.add(tool_call_id)
