@@ -88,10 +88,12 @@ class OpenAIProvider(BaseLLMProvider):
         for chunk in stream:
             usage = getattr(chunk, "usage", None)
             if usage is not None:
-                usage_prompt_tokens = getattr(usage, "prompt_tokens", 0) or usage_prompt_tokens
-                usage_completion_tokens = (
-                    getattr(usage, "completion_tokens", 0) or usage_completion_tokens
-                )
+                val = getattr(usage, "prompt_tokens", None)
+                if val is not None:
+                    usage_prompt_tokens = val
+                val = getattr(usage, "completion_tokens", None)
+                if val is not None:
+                    usage_completion_tokens = val
 
             choices = getattr(chunk, "choices", None) or []
             if not choices:
@@ -342,9 +344,18 @@ class OpenAIProvider(BaseLLMProvider):
             return [{"role": "user", "content": self._stringify_content(content)}]
 
         converted: list[dict[str, Any]] = []
-        trailing_text: list[str] = []
+        pending_text: list[str] = []
+
+        def _flush_text() -> None:
+            if pending_text:
+                text = "\n".join(p for p in pending_text if p)
+                if text:
+                    converted.append({"role": "user", "content": text})
+                pending_text.clear()
+
         for block in content:
             if block.get("type") == "tool_result":
+                _flush_text()
                 converted.append(
                     {
                         "role": "tool",
@@ -354,13 +365,11 @@ class OpenAIProvider(BaseLLMProvider):
                 )
                 continue
             if block.get("type") == "text":
-                trailing_text.append(str(block.get("text", "")))
+                pending_text.append(str(block.get("text", "")))
                 continue
-            trailing_text.append(self._stringify_content(block))
+            pending_text.append(self._stringify_content(block))
 
-        text = "\n".join(part for part in trailing_text if part)
-        if text:
-            converted.append({"role": "user", "content": text})
+        _flush_text()
         return converted
 
     def _convert_assistant_message(self, content: Any) -> dict[str, Any]:
