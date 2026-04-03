@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import secrets
 import string
@@ -137,7 +138,7 @@ class TaskManager:
                 del self.tasks[task.id]
                 raise
             self._save()
-            return task
+            return self._copy_task(task)
 
     def update(
         self,
@@ -147,7 +148,7 @@ class TaskManager:
         expected_status: str | None = None,
     ) -> Task:
         with self._lock:
-            task = self.get(task_id)
+            task = self._get_unsafe(task_id)
             if expected_status is not None:
                 normalized_expected_status = expected_status.strip()
                 self._validate_status(normalized_expected_status)
@@ -177,24 +178,28 @@ class TaskManager:
                 task.updated_at = self._timestamp()
                 self._save()
 
-            return task
+            return self._copy_task(task)
 
     def get(self, task_id: str) -> Task:
         with self._lock:
-            normalized_id = task_id.strip()
-            task = self.tasks.get(normalized_id)
-            if task is None:
-                raise ValueError(f"Unknown task id: {task_id}")
-            return task
+            return self._copy_task(self._get_unsafe(task_id))
+
+    def _get_unsafe(self, task_id: str) -> Task:
+        """Return the internal task reference. Caller must hold self._lock."""
+        normalized_id = task_id.strip()
+        task = self.tasks.get(normalized_id)
+        if task is None:
+            raise ValueError(f"Unknown task id: {task_id}")
+        return task
 
     def list(self, status: str | None = None) -> list[Task]:
         with self._lock:
             if status is None:
-                return list(self.tasks.values())
+                return [self._copy_task(t) for t in self.tasks.values()]
 
             normalized_status = status.strip()
             self._validate_status(normalized_status)
-            return [task for task in self.tasks.values() if task.status == normalized_status]
+            return [self._copy_task(t) for t in self.tasks.values() if t.status == normalized_status]
 
     def get_ready_tasks(self) -> list[Task]:
         with self._lock:
@@ -203,8 +208,15 @@ class TaskManager:
                 if task.status != "pending":
                     continue
                 if all(self.tasks[dependency_id].status == "done" for dependency_id in task.depends_on):
-                    ready_tasks.append(task)
+                    ready_tasks.append(self._copy_task(task))
             return ready_tasks
+
+    @staticmethod
+    def _copy_task(task: Task) -> Task:
+        """Return a shallow copy with an independent depends_on list."""
+        copied = copy.copy(task)
+        copied.depends_on = list(task.depends_on)
+        return copied
 
     def _save(self) -> None:
         self.task_file.parent.mkdir(parents=True, exist_ok=True)
