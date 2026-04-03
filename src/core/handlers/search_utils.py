@@ -15,7 +15,7 @@ IGNORED_PATH_NAMES = {
 
 def is_ignored_descendant(path: Path, search_root: Path) -> bool:
     """Skip ignored trees unless the caller explicitly searched inside them."""
-    relative = path.resolve(strict=False).relative_to(search_root.resolve(strict=False))
+    relative = path.relative_to(search_root)
     return any(part in IGNORED_PATH_NAMES for part in relative.parts)
 
 
