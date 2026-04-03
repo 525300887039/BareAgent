@@ -2,7 +2,24 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from typing import Any
+
+_CJK_PATTERN = re.compile(
+    "["
+    "\u3000-\u303F"
+    "\u3040-\u309F"
+    "\u30A0-\u30FF"
+    "\u3400-\u4DBF"
+    "\u4E00-\u9FFF"
+    "\uAC00-\uD7AF"
+    "\uF900-\uFAFF"
+    "\U00020000-\U0002A6DF"
+    "\U0002F800-\U0002FA1F"
+    "]"
+)
+_ASCII_ALNUM_PATTERN = re.compile(r"[A-Za-z0-9]")
+_WHITESPACE_PATTERN = re.compile(r"\s")
 
 
 def estimate_tokens(messages: list[dict[str, Any]]) -> int:
@@ -42,32 +59,11 @@ def _estimate_value(value: Any) -> float:
 
 
 def _estimate_text(text: str) -> float:
-    total = 0.0
-    for char in text:
-        if _is_cjk(char):
-            total += 1.5
-        elif char.isascii() and char.isalnum():
-            total += 0.25
-        elif char.isspace():
-            continue
-        else:
-            total += 0.5
-    return total
-
-
-def _is_cjk(char: str) -> bool:
-    codepoint = ord(char)
-    return (
-        0x3000 <= codepoint <= 0x303F      # CJK 符号和标点
-        or 0x3040 <= codepoint <= 0x309F    # 平假名
-        or 0x30A0 <= codepoint <= 0x30FF    # 片假名
-        or 0x3400 <= codepoint <= 0x4DBF    # CJK 统一汉字扩展 A
-        or 0x4E00 <= codepoint <= 0x9FFF    # CJK 统一汉字
-        or 0xAC00 <= codepoint <= 0xD7AF    # 韩文音节
-        or 0xF900 <= codepoint <= 0xFAFF    # CJK 兼容表意文字
-        or 0x20000 <= codepoint <= 0x2A6DF  # CJK 统一汉字扩展 B
-        or 0x2F800 <= codepoint <= 0x2FA1F  # CJK 兼容表意文字补充
-    )
+    cjk = len(_CJK_PATTERN.findall(text))
+    ascii_alnum = len(_ASCII_ALNUM_PATTERN.findall(text))
+    whitespace = len(_WHITESPACE_PATTERN.findall(text))
+    other = len(text) - cjk - ascii_alnum - whitespace
+    return cjk * 1.5 + ascii_alnum * 0.25 + other * 0.5
 
 
 def _stringify(value: Any) -> str:
