@@ -4,14 +4,14 @@ import json
 from collections.abc import Generator
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 
 @dataclass(slots=True)
 class ThinkingConfig:
     """Extended thinking settings shared across providers."""
 
-    mode: str = "adaptive"
+    mode: Literal["enabled", "adaptive", "disabled"] = "adaptive"
     budget_tokens: int = 10000
 
 
@@ -34,10 +34,10 @@ class StreamEvent:
 @dataclass(slots=True)
 class LLMResponse:
     text: str
-    tool_calls: list[ToolCall]
     stop_reason: str
     input_tokens: int
     output_tokens: int
+    tool_calls: list[ToolCall] = field(default_factory=list)
     thinking: str = ""
     content_blocks: list[dict[str, Any]] = field(default_factory=list)
 
