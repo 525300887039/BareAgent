@@ -53,32 +53,27 @@ def create_provider(config: Any) -> BaseLLMProvider:
     raise ValueError(f"Unknown provider: {provider_name}")
 
 
+def _validated_thinking_mode(mode: str) -> str:
+    if mode not in _VALID_THINKING_MODES:
+        logging.warning("Invalid thinking mode %r, falling back to 'adaptive'", mode)
+        return "adaptive"
+    return mode
+
+
 def _build_thinking_config(raw_config: Any) -> ThinkingConfig:
     if raw_config is None:
         return ThinkingConfig()
     if isinstance(raw_config, ThinkingConfig):
-        mode = raw_config.mode
-        if mode not in _VALID_THINKING_MODES:
-            logging.warning("Invalid thinking mode %r, falling back to 'adaptive'", mode)
-            mode = "adaptive"
         return ThinkingConfig(
-            mode=mode,
+            mode=_validated_thinking_mode(raw_config.mode),
             budget_tokens=raw_config.budget_tokens,
         )
     if isinstance(raw_config, dict):
-        mode = str(raw_config.get("mode", "adaptive"))
-        if mode not in _VALID_THINKING_MODES:
-            logging.warning("Invalid thinking mode %r, falling back to 'adaptive'", mode)
-            mode = "adaptive"
         return ThinkingConfig(
-            mode=mode,
+            mode=_validated_thinking_mode(str(raw_config.get("mode", "adaptive"))),
             budget_tokens=int(raw_config.get("budget_tokens", 10000)),
         )
-    mode = str(getattr(raw_config, "mode", "adaptive"))
-    if mode not in _VALID_THINKING_MODES:
-        logging.warning("Invalid thinking mode %r, falling back to 'adaptive'", mode)
-        mode = "adaptive"
     return ThinkingConfig(
-        mode=mode,
+        mode=_validated_thinking_mode(str(getattr(raw_config, "mode", "adaptive"))),
         budget_tokens=int(getattr(raw_config, "budget_tokens", 10000)),
     )
