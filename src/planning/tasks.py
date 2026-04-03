@@ -209,7 +209,10 @@ class TaskManager:
             for task in self.tasks.values():
                 if task.status != "pending":
                     continue
-                if all(self.tasks[dependency_id].status == "done" for dependency_id in task.depends_on):
+                if all(
+                    self.tasks.get(dep_id) is not None and self.tasks[dep_id].status == "done"
+                    for dep_id in task.depends_on
+                ):
                     ready_tasks.append(self._copy_task(task))
             return ready_tasks
 
