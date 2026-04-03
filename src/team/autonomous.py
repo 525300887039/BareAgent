@@ -99,7 +99,7 @@ class AutonomousAgent:
             result = self._run_prompt(self._build_task_prompt(task))
         except Exception:
             self.task_manager.update(task.id, status="failed")
-            raise
+            return
 
         final_status = "failed" if result.startswith("LLM call failed:") else "done"
         self.task_manager.update(task.id, status=final_status)

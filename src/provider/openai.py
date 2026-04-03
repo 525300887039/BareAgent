@@ -423,6 +423,10 @@ class OpenAIProvider(BaseLLMProvider):
         ]
 
     def _parse_response(self, response: Any) -> LLMResponse:
+        if not response.choices:
+            raise RuntimeError(
+                "OpenAI returned empty choices (content may have been filtered)."
+            )
         choice = response.choices[0]
         message = choice.message
         tool_calls: list[ToolCall] = []
@@ -545,13 +549,19 @@ class OpenAIProvider(BaseLLMProvider):
             )
         return tool_calls
 
+    _fallback_tool_call_counter: int = 0
+
     def _iter_new_tool_calls(
         self,
         tool_calls: list[ToolCall],
         emitted_tool_call_ids: set[str],
     ):
         for tool_call in tool_calls:
-            tool_call_id = tool_call.id or f"{tool_call.name}:{json.dumps(tool_call.input, sort_keys=True)}"
+            if tool_call.id:
+                tool_call_id = tool_call.id
+            else:
+                OpenAIProvider._fallback_tool_call_counter += 1
+                tool_call_id = f"_fallback_{OpenAIProvider._fallback_tool_call_counter}"
             if tool_call_id in emitted_tool_call_ids:
                 continue
             emitted_tool_call_ids.add(tool_call_id)

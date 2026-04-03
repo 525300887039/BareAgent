@@ -44,4 +44,7 @@ class StreamPrinter:
             self.writer.write("\n")
             self.writer.flush()
         self._active = False
-        return "".join(self._chunks)
+        result = "".join(self._chunks)
+        self._chunks = []
+        self._printed_anything = False
+        return result

@@ -18,6 +18,11 @@ def create_provider(config: Any) -> BaseLLMProvider:
     provider_name = str(getattr(provider_config, "name", "")).strip().lower()
     model = getattr(provider_config, "model", "")
     api_key_env = getattr(provider_config, "api_key_env", "")
+    if not api_key_env:
+        raise ValueError(
+            "Provider config is missing 'api_key_env'. "
+            "Please specify the environment variable name that holds the API key."
+        )
     api_key = os.getenv(api_key_env)
     if not api_key:
         raise ValueError(f"Missing API key in environment variable: {api_key_env}")
