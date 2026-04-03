@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import string
 import threading
@@ -9,6 +10,17 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_VALID_AGENT_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _validate_agent_name(name: str) -> str:
+    normalized = name.strip()
+    if not normalized:
+        raise ValueError("agent_name must not be empty")
+    if not _VALID_AGENT_NAME.fullmatch(normalized):
+        raise ValueError(f"Invalid agent name (only alphanumeric, _, - allowed): {normalized!r}")
+    return normalized
 
 _MESSAGE_ID_ALPHABET = string.ascii_letters + string.digits
 
@@ -60,9 +72,7 @@ class MessageBus:
         return resolved.id
 
     def receive(self, agent_name: str, since_id: str | None = None) -> list[Message]:
-        normalized_name = agent_name.strip()
-        if not normalized_name:
-            raise ValueError("agent_name must not be empty")
+        normalized_name = _validate_agent_name(agent_name)
 
         mailbox_path = self._mailbox_path(normalized_name)
         self.ensure_mailbox(normalized_name)
@@ -89,9 +99,7 @@ class MessageBus:
         return messages
 
     def ensure_mailbox(self, agent_name: str) -> Path:
-        normalized_name = agent_name.strip()
-        if not normalized_name:
-            raise ValueError("agent_name must not be empty")
+        normalized_name = _validate_agent_name(agent_name)
         mailbox_path = self._mailbox_path(normalized_name)
         mailbox_path.parent.mkdir(parents=True, exist_ok=True)
         mailbox_path.touch(exist_ok=True)
@@ -102,9 +110,7 @@ class MessageBus:
         return sorted(path.stem for path in self.mailbox_dir.glob("*.jsonl"))
 
     def latest_message_id(self, agent_name: str) -> str | None:
-        normalized_name = agent_name.strip()
-        if not normalized_name:
-            raise ValueError("agent_name must not be empty")
+        normalized_name = _validate_agent_name(agent_name)
 
         mailbox_path = self.ensure_mailbox(normalized_name)
         with self._lock_for(normalized_name):
@@ -186,10 +192,8 @@ class MessageBus:
             return lock
 
     def _prepare_message(self, msg: Message) -> Message:
-        if not msg.from_agent.strip():
-            raise ValueError("from_agent must not be empty")
-        if not msg.to_agent.strip():
-            raise ValueError("to_agent must not be empty")
+        from_agent = _validate_agent_name(msg.from_agent)
+        to_agent = _validate_agent_name(msg.to_agent)
         if not msg.msg_type.strip():
             raise ValueError("msg_type must not be empty")
 
@@ -197,8 +201,8 @@ class MessageBus:
         timestamp = msg.timestamp.strip() or _timestamp()
         return Message(
             id=message_id,
-            from_agent=msg.from_agent.strip(),
-            to_agent=msg.to_agent.strip(),
+            from_agent=from_agent,
+            to_agent=to_agent,
             content=msg.content,
             msg_type=msg.msg_type.strip(),
             timestamp=timestamp,
