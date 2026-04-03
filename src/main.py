@@ -5,6 +5,7 @@ import os
 import sys
 import tomllib
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
@@ -13,6 +14,8 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from src.core.context import assemble_system_prompt
 from src.core.loop import agent_loop
 from src.core.tools import get_handlers, get_tools
+from src.memory.compact import make_compact_fn
+from src.memory.transcript import TranscriptManager
 from src.permission.guard import PermissionGuard, PermissionMode
 from src.planning.skills import SkillLoader, resolve_skills_dir
 from src.planning.todo import TodoManager
@@ -293,30 +296,39 @@ def run_repl(
 ) -> int:
     ui_console = agent_console or AgentConsole()
     workspace_path = (workspace or Path.cwd()).resolve()
+    session_id = datetime.now().strftime("%Y%m%d-%H%M%S")
     session = PromptSession() if _supports_prompt_toolkit() else None
     todo_manager = TodoManager()
     skill_loader = SkillLoader(resolve_skills_dir())
+    transcript_mgr = TranscriptManager(workspace_path / ".transcripts")
     messages = _initial_messages(
         workspace_path,
         skill_summary=skill_loader.get_skill_list_prompt(),
     )
     tools = get_tools()
     permission = _build_permission_guard(config)
-    handlers = get_handlers(
-        workspace_path,
+    compact_fn = make_compact_fn(
+        provider=provider,
+        transcript_mgr=transcript_mgr,
+        session_id=session_id,
+    )
+    handlers = _build_handlers(
+        workspace_path=workspace_path,
         todo_manager=todo_manager,
         skill_loader=skill_loader,
         provider=provider,
         tools=tools,
         permission=permission,
-        subagent_system_prompt=str(messages[0]["content"]),
+        messages=messages,
     )
 
     ui_console.console.print(
         f"BareAgent REPL ({config.provider.name}/{config.provider.model})",
         style="bold cyan",
     )
-    ui_console.print_status("Use /exit to quit, /clear to clear the screen.")
+    ui_console.print_status(
+        "Use /exit to quit, /clear to clear the screen, /compact to compress context."
+    )
 
     while True:
         try:
@@ -337,6 +349,51 @@ def run_repl(
         if text == "/clear":
             ui_console.console.clear()
             continue
+        if text == "/compact":
+            compact_fn(messages, force=True)
+            _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
+            ui_console.print_status("Context compaction finished.")
+            handlers = _build_handlers(
+                workspace_path=workspace_path,
+                todo_manager=todo_manager,
+                skill_loader=skill_loader,
+                provider=provider,
+                tools=tools,
+                permission=permission,
+                messages=messages,
+            )
+            continue
+        if text == "/sessions":
+            sessions = transcript_mgr.list_sessions()
+            if not sessions:
+                ui_console.print_status("No saved sessions.")
+            else:
+                for saved_session in sessions:
+                    ui_console.console.print(saved_session)
+            continue
+        if text == "/resume" or text.startswith("/resume "):
+            _, _, raw_session_id = text.partition(" ")
+            requested_session = raw_session_id.strip() or None
+            try:
+                restored_messages = transcript_mgr.resume(requested_session)
+            except FileNotFoundError as exc:
+                ui_console.print_error(str(exc))
+                continue
+            messages[:] = restored_messages
+            resumed_session = requested_session or transcript_mgr.get_latest_session()
+            if resumed_session is not None:
+                _set_compact_session_id(compact_fn, resumed_session)
+            handlers = _build_handlers(
+                workspace_path=workspace_path,
+                todo_manager=todo_manager,
+                skill_loader=skill_loader,
+                provider=provider,
+                tools=tools,
+                permission=permission,
+                messages=messages,
+            )
+            ui_console.print_status(f"Resumed session: {resumed_session}")
+            continue
 
         messages.append({"role": "user", "content": text})
         try:
@@ -346,10 +403,12 @@ def run_repl(
                 tools=tools,
                 handlers=handlers,
                 permission=permission,
+                compact_fn=compact_fn,
                 bg_manager=_build_nag_injector(todo_manager),
                 stream=config.ui.stream,
                 console=ui_console,
             )
+            _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
         except KeyboardInterrupt:
             ui_console.console.print("\nAgent loop interrupted.", style="yellow")
             continue
@@ -360,6 +419,55 @@ def _build_permission_guard(config: Config) -> PermissionGuard:
     guard.allow_rules = list(config.permission.allow)
     guard.deny_rules = list(config.permission.deny)
     return guard
+
+
+def _get_compact_session_id(compact_fn: object) -> str:
+    getter = getattr(compact_fn, "get_session_id", None)
+    if callable(getter):
+        return str(getter())
+    return "default"
+
+
+def _set_compact_session_id(compact_fn: object, session_id: str) -> None:
+    setter = getattr(compact_fn, "set_session_id", None)
+    if callable(setter):
+        setter(session_id)
+
+
+def _save_transcript_snapshot(
+    transcript_mgr: TranscriptManager,
+    messages: list[dict[str, object]],
+    compact_fn: object,
+) -> None:
+    transcript_mgr.save(messages, _get_compact_session_id(compact_fn))
+
+
+def _build_handlers(
+    *,
+    workspace_path: Path,
+    todo_manager: TodoManager,
+    skill_loader: SkillLoader,
+    provider: BaseLLMProvider,
+    tools: list[dict[str, object]],
+    permission: PermissionGuard,
+    messages: list[dict[str, object]],
+) -> dict[str, object]:
+    system_prompt = ""
+    for message in messages:
+        if message.get("role") == "system":
+            content = message.get("content")
+            if isinstance(content, str):
+                system_prompt = content
+                break
+    return get_handlers(
+        workspace_path,
+        todo_manager=todo_manager,
+        skill_loader=skill_loader,
+        provider=provider,
+        tools=tools,
+        permission=permission,
+        subagent_system_prompt=system_prompt,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
