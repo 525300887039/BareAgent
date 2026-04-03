@@ -66,6 +66,8 @@ class PermissionGuard:
         if tool_name in self.SAFE_TOOLS:
             return False
         if tool_name in {"edit_file", "task_create", "task_update"}:
+            if self.mode == PermissionMode.PLAN:
+                return True
             return False
         if tool_name == "write_file":
             return self.mode == PermissionMode.DEFAULT
