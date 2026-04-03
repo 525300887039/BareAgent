@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from src.core.loop import agent_loop, LLMCallError
+from src.permission.guard import PermissionGuard, PermissionMode
 from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
 
 
@@ -163,6 +164,7 @@ def test_agent_loop_executes_tool_calls_then_returns_text() -> None:
         messages=messages,
         tools=tools,
         handlers={"echo": lambda value: f"handled {value}"},
+        permission=PermissionGuard(PermissionMode.BYPASS),
     )
 
     assert result == "Tool finished."
@@ -238,6 +240,7 @@ def test_agent_loop_streams_and_formats_tool_activity(monkeypatch) -> None:
         ],
         tools=[],
         handlers={"echo": lambda value: f"handled {value}"},
+        permission=PermissionGuard(PermissionMode.BYPASS),
         stream=True,
         console=console,
     )
@@ -381,6 +384,7 @@ def test_agent_loop_terminates_after_max_iterations() -> None:
             ],
             tools=[],
             handlers={"echo": lambda value: f"handled {value}"},
+            permission=PermissionGuard(PermissionMode.BYPASS),
             console=console,
             max_iterations=3,
         )

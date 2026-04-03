@@ -240,12 +240,12 @@ def _run_background(bg_manager: Any, messages: list[dict[str, Any]]) -> None:
 
 def _requires_confirmation(permission: Any, call: ToolCall) -> bool:
     if permission is None:
-        return False
+        return True
 
     requires_confirm = getattr(permission, "requires_confirm", None)
     if callable(requires_confirm):
         return bool(requires_confirm(call.name, call.input))
-    return False
+    return True
 
 
 def _ask_permission(permission: Any, call: ToolCall) -> bool:
