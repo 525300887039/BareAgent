@@ -5,6 +5,7 @@ specs/
 config/
 code-agent-design.md
 简历.md
+code-review-report.md
 
 *.py[cod]
 
