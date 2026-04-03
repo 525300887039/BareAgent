@@ -68,7 +68,7 @@ class AutonomousAgent:
             protocol, content = decode_protocol_content(message.content)
             if protocol == Protocol.SHUTDOWN:
                 self._shutdown = True
-                continue
+                break
 
             if message.msg_type != "request":
                 continue
