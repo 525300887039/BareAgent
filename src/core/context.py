@@ -45,7 +45,6 @@ def _get_system_context_cached(workspace: Path) -> str:
             f"Git branch: {branch}",
             "Recent commits:",
             recent_commits,
-            f"Date: {date.today().isoformat()}",
         ]
     )
 
@@ -53,7 +52,8 @@ def _get_system_context_cached(workspace: Path) -> str:
 def get_system_context(workspace: Path | None = None) -> str:
     """Return git metadata for the requested workspace without repeating git calls."""
     resolved_workspace = _normalize_workspace(workspace or Path.cwd())
-    return _get_system_context_cached(resolved_workspace)
+    cached = _get_system_context_cached(resolved_workspace)
+    return f"{cached}\nDate: {date.today().isoformat()}"
 
 
 def _read_context_file(path: Path) -> str:
