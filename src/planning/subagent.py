@@ -32,7 +32,8 @@ def _subagent_compact(messages: list[dict[str, Any]], keep_recent: int = 40) -> 
     recent = messages[-keep_recent:]
     messages.clear()
     messages.extend(system_msgs)
-    messages.extend(m for m in recent if m not in system_msgs)
+    system_ids = {id(m) for m in system_msgs}
+    messages.extend(m for m in recent if id(m) not in system_ids)
 
 
 def run_subagent(
