@@ -359,7 +359,7 @@ def test_nag_reminder_skips_tool_result_messages() -> None:
     ]
     _refresh_nag_reminder(messages, "Remember to be concise.")
 
-    # The nag should be inserted before the real user message, not the tool_result
+    # The nag should be inserted after the real user message, not the tool_result
     nag_indices = [
         i for i, m in enumerate(messages)
         if m.get("role") == "system" and isinstance(m.get("content"), str)
@@ -367,8 +367,8 @@ def test_nag_reminder_skips_tool_result_messages() -> None:
     ]
     assert len(nag_indices) == 1
     nag_idx = nag_indices[0]
-    # The message after the nag should be the real user message (index 1 originally)
-    assert messages[nag_idx + 1].get("content") == "do something"
+    # The message before the nag should be the real user message
+    assert messages[nag_idx - 1].get("content") == "do something"
     # The tool_result should still directly follow the assistant message
     assistant_idx = next(
         i for i, m in enumerate(messages)

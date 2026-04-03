@@ -95,7 +95,10 @@ def test_permission_guard_default_mode_honors_allow_and_deny_rules() -> None:
     guard.allow_rules = ["Bash(prefix:rm*)"]
     guard.deny_rules = ["Bash(prefix:npm publish*)"]
 
-    assert guard.requires_confirm("bash", {"command": "rm -rf build"}) is False
+    # dangerous patterns override allow rules (fail-closed)
+    assert guard.requires_confirm("bash", {"command": "rm -rf build"}) is True
+    # non-dangerous allowed command passes
+    assert guard.requires_confirm("bash", {"command": "rm temp.log"}) is False
     assert guard.requires_confirm("bash", {"command": "npm publish"}) is True
 
 
