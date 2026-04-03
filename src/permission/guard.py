@@ -23,6 +23,7 @@ class PermissionGuard:
         "load_skill",
         "task_list",
         "task_get",
+        "team_list",
     }
     AUTO_SAFE_PATTERNS = [
         re.compile(r"^(ls|cat|head|tail|wc|echo|pwd|date|which|type)\b"),
@@ -50,7 +51,7 @@ class PermissionGuard:
             return tool_name not in self.SAFE_TOOLS
         if tool_name in self.SAFE_TOOLS:
             return False
-        if tool_name in {"write_file", "edit_file"}:
+        if tool_name in {"write_file", "edit_file", "task_create", "task_update"}:
             return False
         if tool_name != "bash":
             return True

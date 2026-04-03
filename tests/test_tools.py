@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import os
 from types import SimpleNamespace
 from pathlib import Path
@@ -110,6 +111,9 @@ def test_permission_guard_plan_mode_blocks_write_operations(capsys: pytest.Captu
     call = ToolCall(id="toolu_1", name="write_file", input={"file_path": "out.txt", "content": "x"})
 
     assert guard.requires_confirm("write_file", {"file_path": "out.txt", "content": "x"}) is True
+    assert guard.requires_confirm("task_create", {"title": "plan only"}) is True
+    assert guard.requires_confirm("task_update", {"task_id": "abc12345", "status": "done"}) is True
+    assert guard.requires_confirm("team_send", {"to_agent": "reviewer", "content": "write code"}) is True
     assert guard.requires_confirm("load_skill", {"skill_name": "git"}) is False
     assert guard.ask_user(call) is False
     assert "Plan mode: write_file blocked (read-only)" in capsys.readouterr().out
@@ -183,3 +187,17 @@ def test_parse_permission_rules_reads_allow_and_deny_lists() -> None:
 
 def test_tool_search_placeholder_returns_empty_list() -> None:
     assert tool_search("todo", max_results=3) == []
+
+
+def test_importing_tools_does_not_parse_tasks_file_on_module_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.core.tools as tools_module
+
+    (tmp_path / ".tasks.json").write_text("{not-valid-json", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    reloaded = importlib.reload(tools_module)
+
+    assert "task_list" in reloaded.TOOL_HANDLERS

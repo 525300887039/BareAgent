@@ -7,10 +7,12 @@ import tomllib
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 
+from src.concurrency.background import BackgroundManager
 from src.core.context import assemble_system_prompt
 from src.core.loop import agent_loop
 from src.core.tools import get_handlers, get_tools
@@ -18,16 +20,22 @@ from src.memory.compact import make_compact_fn
 from src.memory.transcript import TranscriptManager
 from src.permission.guard import PermissionGuard, PermissionMode
 from src.planning.skills import SkillLoader, resolve_skills_dir
+from src.planning.tasks import TaskManager
 from src.planning.todo import TodoManager
 from src.permission.rules import parse_permission_rules
 from src.provider.base import BaseLLMProvider, ThinkingConfig
 from src.provider.factory import create_provider
+from src.team.autonomous import AutonomousAgent
+from src.team.mailbox import Message, MessageBus
+from src.team.manager import TeammateManager
+from src.team.protocols import Protocol, ProtocolFSM, decode_protocol_content
 from src.ui.console import AgentConsole
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.toml"
 VALID_PERMISSION_MODES = {"default", "auto", "plan", "bypass"}
 VALID_THINKING_MODES = {"adaptive", "enabled", "disabled"}
+MAIN_AGENT_NAME = "main"
 DEFAULT_API_KEY_ENV_BY_PROVIDER = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
@@ -269,11 +277,20 @@ def _refresh_nag_reminder(
     messages.append(nag_message)
 
 
-def _build_nag_injector(todo_manager: TodoManager):
-    def _inject(messages: list[dict[str, str | list[dict[str, str]]]]) -> None:
+def _build_loop_compact(compact_fn: object, todo_manager: TodoManager):
+    def _compact(messages: list[dict[str, str | list[dict[str, str]]]], force: bool = False) -> None:
         _refresh_nag_reminder(messages, todo_manager.get_nag_reminder())
+        compact_fn(messages, force=force)  # type: ignore[misc]
 
-    return _inject
+    get_session_id = getattr(compact_fn, "get_session_id", None)
+    if callable(get_session_id):
+        _compact.get_session_id = get_session_id  # type: ignore[attr-defined]
+
+    set_session_id = getattr(compact_fn, "set_session_id", None)
+    if callable(set_session_id):
+        _compact.set_session_id = set_session_id  # type: ignore[attr-defined]
+
+    return _compact
 
 
 def _supports_prompt_toolkit() -> bool:
@@ -299,6 +316,13 @@ def run_repl(
     session_id = datetime.now().strftime("%Y%m%d-%H%M%S")
     session = PromptSession() if _supports_prompt_toolkit() else None
     todo_manager = TodoManager()
+    task_manager = _load_task_manager(workspace_path, ui_console)
+    bg_manager = BackgroundManager()
+    teammate_manager = _load_teammate_manager(workspace_path, ui_console)
+    message_bus = MessageBus(workspace_path / ".mailbox")
+    message_bus.ensure_mailbox(MAIN_AGENT_NAME)
+    spawned_agents: dict[str, AutonomousAgent] = {}
+    main_mailbox_cursor: str | None = message_bus.latest_timestamp(MAIN_AGENT_NAME)
     skill_loader = SkillLoader(resolve_skills_dir())
     transcript_mgr = TranscriptManager(workspace_path / ".transcripts")
     messages = _initial_messages(
@@ -307,19 +331,27 @@ def run_repl(
     )
     tools = get_tools()
     permission = _build_permission_guard(config)
-    compact_fn = make_compact_fn(
+    base_compact_fn = make_compact_fn(
         provider=provider,
         transcript_mgr=transcript_mgr,
         session_id=session_id,
     )
+    compact_fn = _build_loop_compact(base_compact_fn, todo_manager)
     handlers = _build_handlers(
         workspace_path=workspace_path,
         todo_manager=todo_manager,
+        task_manager=task_manager,
         skill_loader=skill_loader,
         provider=provider,
         tools=tools,
         permission=permission,
+        bg_manager=bg_manager,
         messages=messages,
+        config=config,
+        teammate_manager=teammate_manager,
+        message_bus=message_bus,
+        spawned_agents=spawned_agents,
+        agent_name=MAIN_AGENT_NAME,
     )
 
     ui_console.console.print(
@@ -331,12 +363,18 @@ def run_repl(
     )
 
     while True:
+        main_mailbox_cursor = _drain_team_mailbox(
+            ui_console,
+            message_bus=message_bus,
+            since=main_mailbox_cursor,
+        )
         try:
             user_input = _read_user_input(session)
         except KeyboardInterrupt:
             ui_console.console.print("\nInterrupted. Use /exit to quit.", style="yellow")
             continue
         except EOFError:
+            _broadcast_team_shutdown(message_bus)
             ui_console.print_status("\nExiting BareAgent.")
             return 0
 
@@ -344,6 +382,7 @@ def run_repl(
         if not text:
             continue
         if text == "/exit":
+            _broadcast_team_shutdown(message_bus)
             ui_console.print_status("Exiting BareAgent.")
             return 0
         if text == "/clear":
@@ -356,11 +395,18 @@ def run_repl(
             handlers = _build_handlers(
                 workspace_path=workspace_path,
                 todo_manager=todo_manager,
+                task_manager=task_manager,
                 skill_loader=skill_loader,
                 provider=provider,
                 tools=tools,
                 permission=permission,
+                bg_manager=bg_manager,
                 messages=messages,
+                config=config,
+                teammate_manager=teammate_manager,
+                message_bus=message_bus,
+                spawned_agents=spawned_agents,
+                agent_name=MAIN_AGENT_NAME,
             )
             continue
         if text == "/sessions":
@@ -386,13 +432,28 @@ def run_repl(
             handlers = _build_handlers(
                 workspace_path=workspace_path,
                 todo_manager=todo_manager,
+                task_manager=task_manager,
                 skill_loader=skill_loader,
                 provider=provider,
                 tools=tools,
                 permission=permission,
+                bg_manager=bg_manager,
                 messages=messages,
+                config=config,
+                teammate_manager=teammate_manager,
+                message_bus=message_bus,
+                spawned_agents=spawned_agents,
+                agent_name=MAIN_AGENT_NAME,
             )
             ui_console.print_status(f"Resumed session: {resumed_session}")
+            continue
+        if text == "/team" or text.startswith("/team "):
+            _handle_team_command(
+                text,
+                ui_console,
+                teammate_manager=teammate_manager,
+                team_handlers=handlers,
+            )
             continue
 
         messages.append({"role": "user", "content": text})
@@ -404,11 +465,16 @@ def run_repl(
                 handlers=handlers,
                 permission=permission,
                 compact_fn=compact_fn,
-                bg_manager=_build_nag_injector(todo_manager),
+                bg_manager=bg_manager,
                 stream=config.ui.stream,
                 console=ui_console,
             )
             _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
+            main_mailbox_cursor = _drain_team_mailbox(
+                ui_console,
+                message_bus=message_bus,
+                since=main_mailbox_cursor,
+            )
         except KeyboardInterrupt:
             ui_console.console.print("\nAgent loop interrupted.", style="yellow")
             continue
@@ -446,27 +512,296 @@ def _build_handlers(
     *,
     workspace_path: Path,
     todo_manager: TodoManager,
+    task_manager: TaskManager | None,
     skill_loader: SkillLoader,
     provider: BaseLLMProvider,
     tools: list[dict[str, object]],
     permission: PermissionGuard,
+    bg_manager: BackgroundManager,
     messages: list[dict[str, object]],
+    config: Config,
+    teammate_manager: TeammateManager,
+    message_bus: MessageBus,
+    spawned_agents: dict[str, AutonomousAgent],
+    agent_name: str,
+    system_prompt_override: str | None = None,
 ) -> dict[str, object]:
-    system_prompt = ""
-    for message in messages:
-        if message.get("role") == "system":
-            content = message.get("content")
-            if isinstance(content, str):
-                system_prompt = content
-                break
+    system_prompt = system_prompt_override or _extract_system_prompt(messages)
+    team_handlers = _make_team_handlers(
+        config=config,
+        workspace_path=workspace_path,
+        todo_manager=todo_manager,
+        task_manager=task_manager,
+        skill_loader=skill_loader,
+        permission=permission,
+        bg_manager=bg_manager,
+        tools=tools,
+        teammate_manager=teammate_manager,
+        message_bus=message_bus,
+        spawned_agents=spawned_agents,
+        agent_name=agent_name,
+    )
     return get_handlers(
         workspace_path,
         todo_manager=todo_manager,
+        task_manager=task_manager,
         skill_loader=skill_loader,
         provider=provider,
         tools=tools,
         permission=permission,
+        bg_manager=bg_manager,
         subagent_system_prompt=system_prompt,
+        team_handlers=team_handlers,
+    )
+
+
+def _load_task_manager(
+    workspace_path: Path,
+    agent_console: AgentConsole,
+) -> TaskManager | None:
+    try:
+        return TaskManager(workspace_path / ".tasks.json")
+    except Exception as exc:
+        agent_console.print_error(
+            f"Failed to load task file {workspace_path / '.tasks.json'}: {exc}"
+        )
+        return None
+
+
+def _load_teammate_manager(
+    workspace_path: Path,
+    agent_console: AgentConsole,
+) -> TeammateManager:
+    team_file = workspace_path / ".team.json"
+    try:
+        return TeammateManager(team_file)
+    except Exception as exc:
+        agent_console.print_error(f"Failed to load team file {team_file}: {exc}")
+        manager = object.__new__(TeammateManager)
+        manager.config_file = team_file
+        manager.teammates = {}
+        return manager
+
+
+def _extract_system_prompt(messages: list[dict[str, object]]) -> str:
+    for message in messages:
+        if message.get("role") != "system":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+    return ""
+
+
+def _make_team_handlers(
+    *,
+    config: Config,
+    workspace_path: Path,
+    todo_manager: TodoManager,
+    task_manager: TaskManager | None,
+    skill_loader: SkillLoader,
+    permission: PermissionGuard,
+    bg_manager: BackgroundManager,
+    tools: list[dict[str, object]],
+    teammate_manager: TeammateManager,
+    message_bus: MessageBus,
+    spawned_agents: dict[str, AutonomousAgent],
+    agent_name: str,
+) -> dict[str, object]:
+    provider_factory = _make_teammate_provider_factory(config)
+
+    def _team_list() -> list[dict[str, object]]:
+        return [
+            {
+                **teammate.to_dict(),
+                "running": teammate.name in spawned_agents,
+            }
+            for teammate in teammate_manager.list()
+        ]
+
+    def _team_send(to_agent: str, content: str) -> str:
+        normalized_target = to_agent.strip()
+        if normalized_target != MAIN_AGENT_NAME:
+            teammate_manager.get(normalized_target)
+        message_id = message_bus.send(
+            Message(
+                id="",
+                from_agent=agent_name,
+                to_agent=normalized_target,
+                content=content,
+                msg_type="request",
+                timestamp="",
+            )
+        )
+        return f"Sent message {message_id} to {normalized_target}"
+
+    def _team_spawn(name: str) -> str:
+        teammate_name = name.strip()
+        agent_instance = teammate_manager.spawn(teammate_name, provider_factory)
+        message_bus.ensure_mailbox(teammate_name)
+        agent_handlers = _build_handlers(
+            workspace_path=workspace_path,
+            todo_manager=todo_manager,
+            task_manager=task_manager,
+            skill_loader=skill_loader,
+            provider=agent_instance.provider,
+            tools=tools,
+            permission=permission,
+            bg_manager=bg_manager,
+            messages=[],
+            config=config,
+            teammate_manager=teammate_manager,
+            message_bus=message_bus,
+            spawned_agents=spawned_agents,
+            agent_name=teammate_name,
+            system_prompt_override=agent_instance.system_prompt,
+        )
+        autonomous_agent = AutonomousAgent(
+            name=agent_instance.name,
+            provider=agent_instance.provider,
+            tools=tools,
+            handlers=agent_handlers,
+            bus=message_bus,
+            task_manager=task_manager,
+            permission=permission,
+            system_prompt=agent_instance.system_prompt,
+            poll_interval=1.0,
+        )
+        try:
+            bg_manager.submit(f"team:{teammate_name}", autonomous_agent.run)
+        except ValueError:
+            return f"Teammate {teammate_name} is already running."
+        spawned_agents[teammate_name] = autonomous_agent
+        return f"Spawned teammate {teammate_name} ({agent_instance.role})"
+
+    return {
+        "team_list": _team_list,
+        "team_send": _team_send,
+        "team_spawn": _team_spawn,
+    }
+
+
+def _make_teammate_provider_factory(config: Config):
+    def _factory(provider_overrides: dict[str, object]) -> BaseLLMProvider:
+        provider_name = str(provider_overrides.get("name", config.provider.name)).strip()
+        resolved_provider_name = provider_name or config.provider.name
+        inherited_api_key_env = (
+            config.provider.api_key_env
+            if resolved_provider_name == config.provider.name
+            else _default_api_key_env(resolved_provider_name)
+        )
+        api_key_env = str(
+            provider_overrides.get(
+                "api_key_env",
+                inherited_api_key_env,
+            )
+        ).strip() or inherited_api_key_env
+        provider_config = ProviderConfig(
+            name=resolved_provider_name,
+            model=str(provider_overrides.get("model", config.provider.model)).strip()
+            or config.provider.model,
+            api_key_env=api_key_env,
+            base_url=_coerce_optional_string(
+                provider_overrides.get("base_url", config.provider.base_url)
+            ),
+            wire_api=_coerce_optional_string(
+                provider_overrides.get("wire_api", config.provider.wire_api)
+            ),
+        )
+        return create_provider(
+            SimpleNamespace(
+                provider=provider_config,
+                thinking=ThinkingConfig(
+                    mode=config.thinking.mode,
+                    budget_tokens=config.thinking.budget_tokens,
+                ),
+            )
+        )
+
+    return _factory
+
+
+def _coerce_optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _handle_team_command(
+    text: str,
+    ui_console: AgentConsole,
+    *,
+    teammate_manager: TeammateManager,
+    team_handlers: dict[str, object],
+) -> None:
+    _, _, raw_args = text.partition(" ")
+    parts = raw_args.split(" ", 2) if raw_args else []
+    subcommand = parts[0] if parts else "list"
+
+    try:
+        if subcommand == "list":
+            teammates = team_handlers["team_list"]()  # type: ignore[index, operator]
+            if not teammates:
+                ui_console.print_status("No teammates registered.")
+                return
+            for teammate in teammates:
+                name = str(teammate.get("name", "unknown"))
+                role = str(teammate.get("role", ""))
+                running = "running" if teammate.get("running") else "idle"
+                ui_console.console.print(f"{name} [{running}] - {role}")
+            return
+
+        if subcommand == "spawn" and len(parts) >= 2:
+            result = team_handlers["team_spawn"](parts[1])  # type: ignore[index, operator]
+            ui_console.print_status(str(result))
+            return
+
+        if subcommand == "send" and len(parts) >= 3:
+            target = parts[1].strip()
+            content = parts[2].strip()
+            if not target or not content:
+                raise ValueError("Usage: /team send <name> <message>")
+            result = team_handlers["team_send"](target, content)  # type: ignore[index, operator]
+            ui_console.print_status(str(result))
+            return
+    except Exception as exc:
+        ui_console.print_error(str(exc))
+        return
+
+    if subcommand == "list":
+        ui_console.print_status("No teammates registered.")
+        return
+    if teammate_manager.list():
+        ui_console.print_status("Usage: /team list | /team spawn <name> | /team send <name> <message>")
+        return
+    ui_console.print_status("Usage: /team list | /team spawn <name> | /team send <name> <message>")
+
+
+def _drain_team_mailbox(
+    ui_console: AgentConsole,
+    *,
+    message_bus: MessageBus,
+    since: str | None,
+) -> str | None:
+    messages = message_bus.receive(MAIN_AGENT_NAME, since=since)
+    if not messages:
+        return since
+
+    for message in messages:
+        protocol, content = decode_protocol_content(message.content)
+        label = f"Team {message.msg_type} from {message.from_agent}"
+        if protocol is not None:
+            label = f"{label} [{protocol.value}]"
+        ui_console.print_status(f"{label}: {content}")
+
+    return messages[-1].timestamp
+
+
+def _broadcast_team_shutdown(message_bus: MessageBus) -> None:
+    ProtocolFSM(message_bus, MAIN_AGENT_NAME).broadcast(
+        Protocol.SHUTDOWN,
+        "BareAgent main session is shutting down.",
     )
 
 

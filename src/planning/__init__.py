@@ -2,6 +2,7 @@
 
 from src.planning.skills import SkillLoader, SkillMeta
 from src.planning.subagent import run_subagent
+from src.planning.tasks import Task, TaskManager
 from src.planning.todo import TodoManager
 
-__all__ = ["SkillLoader", "SkillMeta", "TodoManager", "run_subagent"]
+__all__ = ["SkillLoader", "SkillMeta", "Task", "TaskManager", "TodoManager", "run_subagent"]

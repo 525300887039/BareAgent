@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import secrets
+import string
 from copy import deepcopy
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
+from src.concurrency.background import BackgroundManager
 from src.core.handlers.bash import run_bash
 from src.core.handlers.file_edit import run_edit
 from src.core.handlers.file_read import run_read
@@ -18,6 +21,7 @@ from src.planning.skills import (
     resolve_skills_dir,
 )
 from src.planning.subagent import SUBAGENT_TOOL_SCHEMAS, run_subagent
+from src.planning.tasks import TASK_TOOL_SCHEMAS, TaskManager, make_task_handlers
 from src.planning.todo import TODO_TOOL_SCHEMAS, TodoManager, make_todo_handlers
 
 BASE_TOOLS = {"bash", "read_file", "write_file", "edit_file", "glob", "grep"}
@@ -30,12 +34,12 @@ DEFERRED_TOOLS = {
     "task_list",
     "task_get",
     "task_update",
+    "background_run",
+    "team_spawn",
+    "team_send",
+    "team_list",
 }
-DEFERRED_TOOL_SCHEMAS: list[dict[str, Any]] = [
-    *TODO_TOOL_SCHEMAS,
-    *SUBAGENT_TOOL_SCHEMAS,
-    *LOAD_SKILL_TOOL_SCHEMAS,
-]
+_BACKGROUND_TASK_ID_ALPHABET = string.ascii_letters + string.digits
 
 
 def _schema(
@@ -56,6 +60,72 @@ def _schema(
         "parameters": input_schema,
     }
 
+
+BACKGROUND_TOOL_SCHEMAS: list[dict[str, Any]] = [
+    _schema(
+        "background_run",
+        "Run a shell command in a daemon thread and report the result later.",
+        {
+            "command": {
+                "type": "string",
+                "description": "Shell command to execute in the background.",
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "Timeout in seconds.",
+                "default": 30,
+                "minimum": 1,
+            },
+            "task_id": {
+                "type": "string",
+                "description": "Optional background task id. Auto-generated when omitted.",
+            },
+        },
+        ["command"],
+    ),
+]
+TEAM_TOOL_SCHEMAS: list[dict[str, Any]] = [
+    _schema(
+        "team_spawn",
+        "Spawn a registered teammate as an autonomous background agent.",
+        {
+            "name": {
+                "type": "string",
+                "description": "Registered teammate name.",
+            }
+        },
+        ["name"],
+    ),
+    _schema(
+        "team_send",
+        "Send a message to a teammate mailbox.",
+        {
+            "to_agent": {
+                "type": "string",
+                "description": "Target teammate name.",
+            },
+            "content": {
+                "type": "string",
+                "description": "Message content.",
+            },
+        },
+        ["to_agent", "content"],
+    ),
+    _schema(
+        "team_list",
+        "List registered teammates.",
+        {},
+        [],
+    ),
+]
+DEFERRED_TOOL_SCHEMAS: list[dict[str, Any]] = [
+    *TODO_TOOL_SCHEMAS,
+    *SUBAGENT_TOOL_SCHEMAS,
+    *LOAD_SKILL_TOOL_SCHEMAS,
+    *TASK_TOOL_SCHEMAS,
+    *BACKGROUND_TOOL_SCHEMAS,
+    *TEAM_TOOL_SCHEMAS,
+]
 
 TOOL_SCHEMAS: list[dict[str, Any]] = [
     _schema(
@@ -151,6 +221,33 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     *DEFERRED_TOOL_SCHEMAS,
 ]
 
+
+def _make_lazy_task_handlers(task_file: Path) -> dict[str, Callable[..., Any]]:
+    state: dict[str, dict[str, Callable[..., Any]] | None] = {"handlers": None}
+
+    def _get_handlers() -> dict[str, Callable[..., Any]]:
+        handlers = state["handlers"]
+        if handlers is None:
+            handlers = make_task_handlers(TaskManager(task_file))
+            state["handlers"] = handlers
+        return handlers
+
+    return {
+        "task_create": lambda title, description="", depends_on=None: _get_handlers()["task_create"](
+            title=title,
+            description=description,
+            depends_on=depends_on,
+        ),
+        "task_update": lambda task_id, status=None, title=None: _get_handlers()["task_update"](
+            task_id=task_id,
+            status=status,
+            title=title,
+        ),
+        "task_get": lambda task_id: _get_handlers()["task_get"](task_id=task_id),
+        "task_list": lambda status=None: _get_handlers()["task_list"](status=status),
+    }
+
+
 _DEFAULT_TODO_MANAGER = TodoManager()
 _DEFAULT_SKILL_LOADER = SkillLoader(resolve_skills_dir())
 
@@ -162,8 +259,13 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     "glob": run_glob,
     "grep": run_grep,
     **make_todo_handlers(_DEFAULT_TODO_MANAGER),
+    **_make_lazy_task_handlers(Path(".tasks.json")),
     **make_skill_handlers(_DEFAULT_SKILL_LOADER),
+    "background_run": lambda **_: "Background manager unavailable.",
     "subagent": lambda task: "Subagent unavailable: provider is not configured.",
+    "team_spawn": lambda name: f"Team spawning unavailable for {name}.",
+    "team_send": lambda to_agent, content: f"Team messaging unavailable for {to_agent}.",
+    "team_list": lambda: [],
 }
 
 
@@ -175,11 +277,14 @@ def get_handlers(
     workspace: Path,
     *,
     todo_manager: TodoManager | None = None,
+    task_manager: TaskManager | None = None,
     skill_loader: SkillLoader | None = None,
     provider: Any = None,
     tools: list[dict[str, Any]] | None = None,
     permission: Any = None,
+    bg_manager: BackgroundManager | None = None,
     subagent_system_prompt: str = "",
+    team_handlers: dict[str, Callable[..., Any]] | None = None,
 ) -> dict[str, Callable[..., Any]]:
     handlers: dict[str, Callable[..., Any]] = {
         "bash": partial(run_bash, cwd=workspace),
@@ -193,7 +298,15 @@ def get_handlers(
     active_todo_manager = todo_manager or TodoManager()
     active_skill_loader = skill_loader or SkillLoader(resolve_skills_dir())
     handlers.update(make_todo_handlers(active_todo_manager))
+    if task_manager is None:
+        handlers.update(_make_lazy_task_handlers(workspace / ".tasks.json"))
+    else:
+        handlers.update(make_task_handlers(task_manager))
     handlers.update(make_skill_handlers(active_skill_loader))
+    handlers["background_run"] = _make_background_run_handler(
+        bg_manager=bg_manager,
+        workspace=workspace,
+    )
 
     available_tools = tools or get_tools()
     if provider is None:
@@ -210,9 +323,45 @@ def get_handlers(
             system_prompt=subagent_system_prompt,
         )
 
+    handlers.update(
+        team_handlers
+        or {
+            "team_spawn": lambda name: f"Team spawning unavailable for {name}.",
+            "team_send": lambda to_agent, content: f"Team messaging unavailable for {to_agent}.",
+            "team_list": lambda: [],
+        }
+    )
+
     return handlers
 
 
 def tool_search(query: str, max_results: int = 5) -> list[dict[str, Any]]:
     _ = query, max_results
     return []
+
+
+def _make_background_run_handler(
+    *,
+    bg_manager: BackgroundManager | None,
+    workspace: Path,
+) -> Callable[..., str]:
+    bash_runner = partial(run_bash, cwd=workspace, raise_on_error=True)
+
+    def _background_run(
+        command: str,
+        timeout: int = 30,
+        task_id: str | None = None,
+    ) -> str:
+        if bg_manager is None:
+            return "Background manager unavailable."
+
+        candidate_id = task_id.strip() if isinstance(task_id, str) else ""
+        resolved_task_id = candidate_id or _generate_background_task_id()
+        bg_manager.submit(resolved_task_id, bash_runner, command, timeout)
+        return f"Submitted background task {resolved_task_id}"
+
+    return _background_run
+
+
+def _generate_background_task_id() -> str:
+    return "".join(secrets.choice(_BACKGROUND_TASK_ID_ALPHABET) for _ in range(8))

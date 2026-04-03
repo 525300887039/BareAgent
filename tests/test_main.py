@@ -1,5 +1,7 @@
 from pathlib import Path
+import time
 
+import src.main as main_module
 from src.main import (
     DEFAULT_CONFIG_PATH,
     Config,
@@ -11,7 +13,9 @@ from src.main import (
     run_repl,
 )
 from src.memory.transcript import TranscriptManager
+from src.planning.tasks import TaskManager
 from src.provider.base import BaseLLMProvider, LLMResponse, ThinkingConfig
+from src.team.manager import TeammateManager
 
 
 def test_resolve_config_path_uses_bundled_config_outside_project_cwd(
@@ -224,6 +228,104 @@ def test_run_repl_rebinds_session_id_after_resume_for_compact(
         {"role": "user", "content": "[Context Compressed]\n压缩后的上下文"},
         {"role": "assistant", "content": "收到，我已理解之前的上下文，继续工作。"},
     ]
+
+
+def test_run_repl_does_not_abort_when_task_file_is_invalid(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".tasks.json").write_text("{broken-json", encoding="utf-8")
+    inputs = iter(["/exit"])
+    monkeypatch.setattr("src.main._supports_prompt_toolkit", lambda: False)
+    monkeypatch.setattr("src.main._read_user_input", lambda _session: next(inputs))
+
+    console = DummyConsole()
+
+    exit_code = run_repl(
+        _make_config(),
+        ReplayProvider([]),
+        workspace=tmp_path,
+        agent_console=console,
+    )
+
+    assert exit_code == 0
+    assert any("Failed to load task file" in error for error in console.errors)
+
+
+def test_run_repl_handles_team_spawn_and_send_commands(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    TeammateManager(tmp_path / ".team.json").register(
+        "code-reviewer",
+        "code reviewer",
+        "You review code changes.",
+    )
+    TaskManager(tmp_path / ".tasks.json").create(
+        "Review module",
+        description="Inspect the updated manager implementation",
+    )
+    inputs = iter(
+        [
+            (0.05, "/team spawn code-reviewer"),
+            (0.05, "/team send code-reviewer Review src/main.py"),
+            (0.3, "/team list"),
+            (0.05, "/exit"),
+        ]
+    )
+    monkeypatch.setattr("src.main._supports_prompt_toolkit", lambda: False)
+
+    def _next_input(_session) -> str:
+        delay, value = next(inputs)
+        time.sleep(delay)
+        return value
+
+    monkeypatch.setattr("src.main._read_user_input", _next_input)
+    monkeypatch.setattr(
+        "src.main._make_teammate_provider_factory",
+        lambda _config: (lambda _overrides: ReplayProvider(["Message handled.", "Task done."])),
+    )
+
+    console = DummyConsole()
+
+    exit_code = run_repl(
+        _make_config(),
+        ReplayProvider([]),
+        workspace=tmp_path,
+        agent_console=console,
+    )
+
+    assert exit_code == 0
+    assert any("Spawned teammate code-reviewer" in status for status in console.statuses)
+    assert any("Sent message" in status for status in console.statuses)
+    assert any("code-reviewer [running] - code reviewer" in line for line in console.printed)
+
+
+def test_make_teammate_provider_factory_inherits_custom_api_key_env(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_create_provider(config):
+        captured["config"] = config
+        return "provider"
+
+    monkeypatch.setattr("src.main.create_provider", _fake_create_provider)
+    config = Config(
+        provider=ProviderConfig(
+            name="openai",
+            model="gpt-5-codex-mini",
+            api_key_env="MY_OPENAI_KEY",
+        ),
+        permission=PermissionConfig(mode="default", allow=[], deny=[]),
+        ui=UIConfig(stream=False, theme="dark"),
+        thinking=ThinkingConfig(),
+        path=Path("config.toml"),
+    )
+
+    factory = main_module._make_teammate_provider_factory(config)
+    provider = factory({})
+
+    assert provider == "provider"
+    assert captured["config"].provider.api_key_env == "MY_OPENAI_KEY"  # type: ignore[index, union-attr]
 
 
 def _make_config() -> Config:

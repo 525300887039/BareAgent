@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
+from src.concurrency.notification import inject_notifications
 from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
 from src.ui.console import AgentConsole
 from src.ui.stream import StreamPrinter
@@ -223,13 +224,7 @@ def _stringify_output(output: Any) -> str:
 def _run_background(bg_manager: Any, messages: list[dict[str, Any]]) -> None:
     if bg_manager is None:
         return
-    if callable(bg_manager):
-        bg_manager(messages)
-        return
-
-    inject_notifications = getattr(bg_manager, "inject_notifications", None)
-    if callable(inject_notifications):
-        inject_notifications(messages)
+    inject_notifications(messages, bg_manager)
 
 
 def _requires_confirmation(permission: Any, call: ToolCall) -> bool:

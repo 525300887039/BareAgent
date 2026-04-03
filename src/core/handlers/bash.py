@@ -5,7 +5,13 @@ import subprocess
 from pathlib import Path
 
 
-def run_bash(command: str, timeout: int = 30, *, cwd: Path | None = None) -> str:
+def run_bash(
+    command: str,
+    timeout: int = 30,
+    *,
+    cwd: Path | None = None,
+    raise_on_error: bool = False,
+) -> str:
     """Run a shell command and return combined stdout/stderr."""
     completed_command = (
         ["powershell", "-NoProfile", "-Command", command]
@@ -24,14 +30,22 @@ def run_bash(command: str, timeout: int = 30, *, cwd: Path | None = None) -> str
     except subprocess.TimeoutExpired as exc:
         output = _join_output(exc.stdout, exc.stderr)
         if output:
-            return f"Error: command timed out after {timeout} seconds\n{output}"
-        return f"Error: command timed out after {timeout} seconds"
+            message = f"Error: command timed out after {timeout} seconds\n{output}"
+        else:
+            message = f"Error: command timed out after {timeout} seconds"
+        if raise_on_error:
+            raise RuntimeError(message) from exc
+        return message
 
     output = _join_output(result.stdout, result.stderr)
     if result.returncode != 0:
         if output:
-            return f"Command failed with exit code {result.returncode}\n{output}"
-        return f"Command failed with exit code {result.returncode}"
+            message = f"Command failed with exit code {result.returncode}\n{output}"
+        else:
+            message = f"Command failed with exit code {result.returncode}"
+        if raise_on_error:
+            raise RuntimeError(message)
+        return message
     return output
 
 
