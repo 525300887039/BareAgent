@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import secrets
 import string
+import threading
 from copy import deepcopy
 from functools import partial
 from pathlib import Path
@@ -232,19 +233,24 @@ def _make_lazy_task_handlers(task_file: Path) -> dict[str, Callable[..., Any]]:
 
 _DEFAULT_TODO_MANAGER: TodoManager | None = None
 _DEFAULT_SKILL_LOADER: SkillLoader | None = None
+_SINGLETON_LOCK = threading.Lock()
 
 
 def _get_default_todo_manager() -> TodoManager:
     global _DEFAULT_TODO_MANAGER
     if _DEFAULT_TODO_MANAGER is None:
-        _DEFAULT_TODO_MANAGER = TodoManager()
+        with _SINGLETON_LOCK:
+            if _DEFAULT_TODO_MANAGER is None:
+                _DEFAULT_TODO_MANAGER = TodoManager()
     return _DEFAULT_TODO_MANAGER
 
 
 def _get_default_skill_loader() -> SkillLoader:
     global _DEFAULT_SKILL_LOADER
     if _DEFAULT_SKILL_LOADER is None:
-        _DEFAULT_SKILL_LOADER = SkillLoader(resolve_skills_dir())
+        with _SINGLETON_LOCK:
+            if _DEFAULT_SKILL_LOADER is None:
+                _DEFAULT_SKILL_LOADER = SkillLoader(resolve_skills_dir())
     return _DEFAULT_SKILL_LOADER
 
 def _unbound_stub(tool_name: str) -> Callable[..., Any]:
@@ -312,6 +318,15 @@ def get_handlers(
         workspace=workspace,
     )
 
+    handlers.update(
+        team_handlers
+        or {
+            "team_spawn": lambda name: f"Team spawning unavailable for {name}.",
+            "team_send": lambda to_agent, content: f"Team messaging unavailable for {to_agent}.",
+            "team_list": lambda: [],
+        }
+    )
+
     available_tools = tools or get_tools()
     if provider is None:
         handlers["subagent"] = (
@@ -326,15 +341,6 @@ def get_handlers(
             permission=permission,
             system_prompt=subagent_system_prompt,
         )
-
-    handlers.update(
-        team_handlers
-        or {
-            "team_spawn": lambda name: f"Team spawning unavailable for {name}.",
-            "team_send": lambda to_agent, content: f"Team messaging unavailable for {to_agent}.",
-            "team_list": lambda: [],
-        }
-    )
 
     return handlers
 
