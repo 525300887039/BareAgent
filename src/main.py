@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.patch_stdout import patch_stdout
 
 from src.concurrency.background import BackgroundManager
@@ -321,6 +322,21 @@ def _build_loop_compact(compact_fn: object, todo_manager: TodoManager):
     return _compact
 
 
+_SLASH_COMMANDS = ["/help", "/exit", "/clear", "/compact", "/sessions", "/resume", "/team"]
+
+
+class _SlashCompleter(Completer):
+    """当输入以 / 开头时自动补全斜杠命令。"""
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        if not text.startswith("/"):
+            return
+        for cmd in _SLASH_COMMANDS:
+            if cmd.startswith(text):
+                yield Completion(cmd, start_position=-len(text))
+
+
 def _supports_prompt_toolkit() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty()
 
@@ -342,7 +358,11 @@ def run_repl(
     ui_console = agent_console or AgentConsole()
     workspace_path = (workspace or Path.cwd()).resolve()
     session_id = datetime.now().strftime("%Y%m%d-%H%M%S")
-    session = PromptSession() if _supports_prompt_toolkit() else None
+    session = (
+        PromptSession(completer=_SlashCompleter(), complete_while_typing=True)
+        if _supports_prompt_toolkit()
+        else None
+    )
     todo_manager = TodoManager()
     task_manager = _load_task_manager(workspace_path, ui_console)
     bg_manager = BackgroundManager()
@@ -387,7 +407,7 @@ def run_repl(
         style="bold cyan",
     )
     ui_console.print_status(
-        "Use /exit to quit, /clear to clear the screen, /compact to compress context."
+        "Type /help to see available commands."
     )
 
     while True:
@@ -413,6 +433,18 @@ def run_repl(
             _broadcast_team_shutdown(message_bus)
             ui_console.print_status("Exiting BareAgent.")
             return 0
+        if text == "/help":
+            ui_console.print_status(
+                "Available commands:\n"
+                "  /help      Show this help message\n"
+                "  /exit      Exit BareAgent\n"
+                "  /clear     Clear the screen\n"
+                "  /compact   Compress conversation context\n"
+                "  /sessions  List saved sessions\n"
+                "  /resume    Resume a previous session\n"
+                "  /team      Manage team agents (list | spawn | send)"
+            )
+            continue
         if text == "/clear":
             ui_console.console.clear()
             continue
