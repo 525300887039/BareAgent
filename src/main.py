@@ -349,7 +349,70 @@ def _build_loop_compact(compact_fn: object, todo_manager: TodoManager):
     return _compact
 
 
-_SLASH_COMMANDS = ["/help", "/exit", "/clear", "/compact", "/sessions", "/resume", "/team"]
+_PERMISSION_SLASH = {
+    "/default": PermissionMode.DEFAULT,
+    "/auto": PermissionMode.AUTO,
+    "/plan": PermissionMode.PLAN,
+    "/bypass": PermissionMode.BYPASS,
+}
+_MODE_CYCLE = [PermissionMode.DEFAULT, PermissionMode.AUTO, PermissionMode.PLAN, PermissionMode.BYPASS]
+_MODE_DESCRIPTIONS = {
+    PermissionMode.DEFAULT: "Write operations require confirmation",
+    PermissionMode.AUTO: "Safe commands auto-approved",
+    PermissionMode.PLAN: "Read-only mode",
+    PermissionMode.BYPASS: "No confirmation required",
+}
+_SLASH_COMMANDS = [
+    "/help", "/exit", "/clear", "/compact",
+    *_PERMISSION_SLASH, "/mode",
+    "/sessions", "/resume", "/team",
+]
+
+
+def _print_mode_change(old: PermissionMode, new: PermissionMode, ui_console: AgentConsole) -> None:
+    ui_console.print_status(f"Permission mode: {old.value} → {new.value}")
+
+
+def _next_permission_mode(current: PermissionMode) -> PermissionMode:
+    current_idx = _MODE_CYCLE.index(current)
+    return _MODE_CYCLE[(current_idx + 1) % len(_MODE_CYCLE)]
+
+
+def _handle_shift_tab_mode_cycle(
+    _event: object,
+    permission: PermissionGuard,
+    ui_console: AgentConsole,
+) -> None:
+    """Cycle permission mode without mutating the current prompt buffer."""
+    old = permission.mode
+    permission.mode = _next_permission_mode(permission.mode)
+    _print_mode_change(old, permission.mode, ui_console)
+
+
+def _handle_mode_interactive(
+    permission: PermissionGuard,
+    ui_console: AgentConsole,
+    session: PromptSession | None = None,
+) -> None:
+    """Display an interactive menu for selecting permission mode."""
+    lines = ["Permission modes:"]
+    for idx, mode in enumerate(_MODE_CYCLE, 1):
+        marker = "*" if mode == permission.mode else " "
+        lines.append(f"  {marker} {idx}) {mode.value:<10} {_MODE_DESCRIPTIONS[mode]}")
+    ui_console.print_status("\n".join(lines))
+    ui_console.print_status(f"Select [1-{len(_MODE_CYCLE)}] on the next prompt.")
+    valid_choices = {str(i) for i in range(1, len(_MODE_CYCLE) + 1)}
+    try:
+        choice = _read_user_input(session).strip()
+    except (EOFError, KeyboardInterrupt):
+        ui_console.print_status("Mode selection cancelled.")
+        return
+    if choice in valid_choices:
+        old = permission.mode
+        permission.mode = _MODE_CYCLE[int(choice) - 1]
+        _print_mode_change(old, permission.mode, ui_console)
+    else:
+        ui_console.print_status("Invalid choice, mode unchanged.")
 
 
 class _SlashCompleter(Completer):
@@ -391,6 +454,11 @@ def run_repl(
     def _handle_ctrl_z(event):
         """Ctrl+Z immediately raises EOFError to exit the REPL."""
         event.app.exit(exception=EOFError())
+
+    @_kb.add(Keys.BackTab)
+    def _handle_shift_tab(event):
+        """Shift+Tab cycles through permission modes."""
+        _handle_shift_tab_mode_cycle(event, permission, ui_console)
 
     session = (
         PromptSession(
@@ -445,7 +513,7 @@ def run_repl(
         style="bold cyan",
     )
     ui_console.print_status(
-        "Type /help to see available commands."
+        f"Permission mode: {permission.mode.value}. Type /help to see available commands."
     )
 
     ctrl_c_count = 0
@@ -487,9 +555,15 @@ def run_repl(
                 "  /exit      Exit BareAgent\n"
                 "  /clear     Clear the screen\n"
                 "  /compact   Compress conversation context\n"
+                "  /default   Switch to DEFAULT permission mode\n"
+                "  /auto      Switch to AUTO permission mode\n"
+                "  /plan      Switch to PLAN permission mode\n"
+                "  /bypass    Switch to BYPASS permission mode\n"
+                "  /mode      Interactive permission mode selection\n"
                 "  /sessions  List saved sessions\n"
                 "  /resume    Resume a previous session\n"
-                "  /team      Manage team agents (list | spawn | send)"
+                "  /team      Manage team agents (list | spawn | send)\n"
+                "  Shift+Tab  Cycle through permission modes"
             )
             continue
         if text == "/clear":
@@ -553,6 +627,14 @@ def run_repl(
                 agent_name=MAIN_AGENT_NAME,
             )
             ui_console.print_status(f"Resumed session: {resumed_session}")
+            continue
+        if text in _PERMISSION_SLASH:
+            old = permission.mode
+            permission.mode = _PERMISSION_SLASH[text]
+            _print_mode_change(old, permission.mode, ui_console)
+            continue
+        if text == "/mode":
+            _handle_mode_interactive(permission, ui_console, session)
             continue
         if text == "/team" or text.startswith("/team "):
             _handle_team_command(
