@@ -11,6 +11,8 @@ from types import SimpleNamespace
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.keys import Keys
 from prompt_toolkit.patch_stdout import patch_stdout
 
 from src.concurrency.background import BackgroundManager
@@ -358,8 +360,19 @@ def run_repl(
     ui_console = agent_console or AgentConsole()
     workspace_path = (workspace or Path.cwd()).resolve()
     session_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+    _kb = KeyBindings()
+
+    @_kb.add(Keys.ControlZ)
+    def _handle_ctrl_z(event):
+        """Ctrl+Z immediately raises EOFError to exit the REPL."""
+        event.app.exit(exception=EOFError())
+
     session = (
-        PromptSession(completer=_SlashCompleter(), complete_while_typing=True)
+        PromptSession(
+            completer=_SlashCompleter(),
+            complete_while_typing=True,
+            key_bindings=_kb,
+        )
         if _supports_prompt_toolkit()
         else None
     )
@@ -410,6 +423,7 @@ def run_repl(
         "Type /help to see available commands."
     )
 
+    ctrl_c_count = 0
     while True:
         main_mailbox_cursor = _drain_team_mailbox(
             ui_console,
@@ -419,13 +433,21 @@ def run_repl(
         try:
             user_input = _read_user_input(session)
         except KeyboardInterrupt:
-            ui_console.console.print("\nInterrupted. Use /exit to quit.", style="yellow")
+            ctrl_c_count += 1
+            if ctrl_c_count >= 2:
+                _broadcast_team_shutdown(message_bus)
+                ui_console.print_status("\nExiting BareAgent.")
+                return 0
+            ui_console.console.print(
+                "\nPress Ctrl+C again to exit, or continue typing.", style="yellow"
+            )
             continue
         except EOFError:
             _broadcast_team_shutdown(message_bus)
             ui_console.print_status("\nExiting BareAgent.")
             return 0
 
+        ctrl_c_count = 0
         text = user_input.strip()
         if not text:
             continue
@@ -541,6 +563,7 @@ def run_repl(
             ui_console.console.print("LLM call failed, please try again.", style="yellow")
             continue
         except KeyboardInterrupt:
+            ctrl_c_count = 0
             del messages[snapshot_len:]
             ui_console.console.print("\nAgent loop interrupted.", style="yellow")
             continue
