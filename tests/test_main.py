@@ -7,6 +7,7 @@ from src.main import (
     Config,
     PermissionConfig,
     ProviderConfig,
+    SubagentConfig,
     UIConfig,
     _is_tool_result_message,
     _refresh_nag_reminder,
@@ -102,6 +103,77 @@ def test_load_config_reads_provider_wire_api(tmp_path: Path) -> None:
 
     assert config.provider.base_url == "https://right.codes/codex/v1"
     assert config.provider.wire_api == "responses"
+
+
+def test_load_config_reads_subagent_settings(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                '[provider]',
+                'name = "openai"',
+                'model = "gpt-5-codex-mini"',
+                'api_key_env = "OPENAI_API_KEY"',
+                "",
+                '[permission]',
+                'mode = "default"',
+                "",
+                '[ui]',
+                'stream = true',
+                'theme = "dark"',
+                "",
+                '[subagent]',
+                'max_depth = 5',
+                'default_type = "plan"',
+                "",
+                '[thinking]',
+                'mode = "adaptive"',
+                'budget_tokens = 10000',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.subagent.max_depth == 5
+    assert config.subagent.default_type == "plan"
+
+
+def test_load_config_rejects_unknown_subagent_default_type(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                '[provider]',
+                'name = "openai"',
+                'model = "gpt-5-codex-mini"',
+                'api_key_env = "OPENAI_API_KEY"',
+                "",
+                '[permission]',
+                'mode = "default"',
+                "",
+                '[ui]',
+                'stream = true',
+                'theme = "dark"',
+                "",
+                '[subagent]',
+                'default_type = "plan-typo"',
+                "",
+                '[thinking]',
+                'mode = "adaptive"',
+                'budget_tokens = 10000',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        load_config(config_path)
+    except ValueError as exc:
+        assert "subagent.default_type" in str(exc)
+    else:
+        raise AssertionError("Expected load_config() to reject an unknown subagent.default_type")
 
 
 class ReplayProvider(BaseLLMProvider):
@@ -319,6 +391,7 @@ def test_make_teammate_provider_factory_inherits_custom_api_key_env(monkeypatch)
         ),
         permission=PermissionConfig(mode="default", allow=[], deny=[]),
         ui=UIConfig(stream=False, theme="dark"),
+        subagent=SubagentConfig(max_depth=3, default_type="general-purpose"),
         thinking=ThinkingConfig(),
         path=Path("config.toml"),
     )
@@ -339,6 +412,7 @@ def _make_config() -> Config:
         ),
         permission=PermissionConfig(mode="default", allow=[], deny=[]),
         ui=UIConfig(stream=False, theme="dark"),
+        subagent=SubagentConfig(max_depth=3, default_type="general-purpose"),
         thinking=ThinkingConfig(),
         path=Path("config.toml"),
     )

@@ -14,7 +14,7 @@ from src.core.handlers.file_write import run_write
 from src.core.handlers.glob_search import run_glob
 from src.core.handlers.grep_search import run_grep
 from src.core.sandbox import safe_path
-from src.core.tools import get_handlers, tool_search
+from src.core.tools import get_handlers, get_tools, tool_search
 from src.permission.guard import PermissionGuard, PermissionMode
 from src.permission.rules import parse_permission_rules
 from src.provider.base import ToolCall
@@ -142,6 +142,55 @@ def test_permission_guard_requires_confirmation_for_unknown_non_safe_tools() -> 
     guard = PermissionGuard(PermissionMode.DEFAULT)
 
     assert guard.requires_confirm("subagent", {"task": "inspect repo"}) is True
+
+
+def test_subagent_schema_exposes_agent_type_and_background_flag() -> None:
+    schema = next(tool for tool in get_tools() if tool["name"] == "subagent")
+    properties = schema["parameters"]["properties"]
+
+    assert "agent_type" in properties
+    assert "run_in_background" in properties
+
+
+def test_get_handlers_subagent_forwards_extended_arguments(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_run_subagent(**kwargs):
+        captured.update(kwargs)
+        return "delegated"
+
+    monkeypatch.setattr("src.core.tools.run_subagent", _fake_run_subagent)
+    permission = PermissionGuard(PermissionMode.DEFAULT)
+    bg_manager = object()
+    tools = [{"name": "subagent", "parameters": {"type": "object", "properties": {}}}]
+    handlers = get_handlers(
+        tmp_path,
+        provider=object(),
+        tools=tools,
+        permission=permission,
+        bg_manager=bg_manager,
+        subagent_system_prompt="system prompt",
+        subagent_max_depth=5,
+        subagent_default_type="plan",
+    )
+
+    result = handlers["subagent"](
+        task="Inspect the repo",
+        agent_type="explore",
+        run_in_background=True,
+    )
+
+    assert result == "delegated"
+    assert captured["task"] == "Inspect the repo"
+    assert captured["agent_type"] == "explore"
+    assert captured["run_in_background"] is True
+    assert captured["system_prompt"] == "system prompt"
+    assert captured["max_depth"] == 5
+    assert captured["default_agent_type"] == "plan"
+    assert captured["bg_manager"] is bg_manager
 
 
 def test_bash_handler_runs_in_bound_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
