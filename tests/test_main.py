@@ -1,5 +1,9 @@
+import json
+from datetime import datetime
 from pathlib import Path
 import time
+
+import pytest
 
 import src.main as main_module
 from src.main import (
@@ -18,6 +22,7 @@ from src.main import (
 from src.memory.transcript import TranscriptManager
 from src.planning.tasks import TaskManager
 from src.provider.base import BaseLLMProvider, LLMResponse, ThinkingConfig
+from src.team.autonomous import AutonomousAgent
 from src.team.manager import TeammateManager
 
 
@@ -177,13 +182,25 @@ def test_load_config_rejects_unknown_subagent_default_type(tmp_path: Path) -> No
 
 
 class ReplayProvider(BaseLLMProvider):
-    def __init__(self, responses: list[LLMResponse]) -> None:
+    def __init__(self, responses: list[LLMResponse | str], *, delay: float = 0.0) -> None:
         self.responses = list(responses)
+        self.delay = delay
         self.calls: list[dict] = []
 
     def create(self, messages, tools, **kwargs) -> LLMResponse:
         self.calls.append({"messages": messages, "tools": tools, "kwargs": kwargs})
-        return self.responses.pop(0)
+        if self.delay:
+            time.sleep(self.delay)
+        response = self.responses.pop(0)
+        if isinstance(response, str):
+            return LLMResponse(
+                text=response,
+                tool_calls=[],
+                stop_reason="end_turn",
+                input_tokens=10,
+                output_tokens=2,
+            )
+        return response
 
     def create_stream(self, messages, tools, **kwargs):
         _ = messages, tools, kwargs
@@ -436,6 +453,40 @@ def test_make_teammate_provider_factory_inherits_custom_api_key_env(monkeypatch)
     assert captured["config"].provider.api_key_env == "MY_OPENAI_KEY"  # type: ignore[index, union-attr]
 
 
+def test_generate_session_id_avoids_saved_and_reserved_collisions(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    transcript_dir = tmp_path / ".transcripts"
+    transcript_dir.mkdir()
+    existing_session_id = "20260404-120000-123456-abc123"
+    transcript_path = transcript_dir / f"{existing_session_id}_2026-04-04T12-00-00.jsonl"
+    transcript_path.write_text(
+        json.dumps({"role": "user", "content": "saved"}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    class FrozenDatetime:
+        @classmethod
+        def now(cls) -> datetime:
+            return datetime(2026, 4, 4, 12, 0, 0, 123456)
+
+    suffixes = iter(["abc123", "def456"])
+    monkeypatch.setattr(main_module, "datetime", FrozenDatetime)
+    monkeypatch.setattr(
+        main_module,
+        "generate_random_id",
+        lambda _length=6: next(suffixes),
+    )
+
+    session_id = main_module._generate_session_id(
+        TranscriptManager(transcript_dir),
+        reserved_ids={existing_session_id},
+    )
+
+    assert session_id == "20260404-120000-123456-def456"
+
+
 def _make_config() -> Config:
     return Config(
         provider=ProviderConfig(
@@ -449,6 +500,91 @@ def _make_config() -> Config:
         thinking=ThinkingConfig(),
         path=Path("config.toml"),
     )
+
+
+@pytest.mark.parametrize("command", ["/new", "/clear"])
+def test_run_repl_reset_command_resets_conversation(command: str, monkeypatch, tmp_path: Path) -> None:
+    """Both /new and /clear should reset messages, clear TODO, generate new session_id, and clear screen."""
+    inputs = iter(["hello", command, "/exit"])
+    monkeypatch.setattr("src.main._supports_prompt_toolkit", lambda: False)
+    monkeypatch.setattr("src.main._read_user_input", lambda _session: next(inputs))
+
+    provider = ReplayProvider(
+        [
+            LLMResponse(
+                text="Hi there.",
+                tool_calls=[],
+                stop_reason="end_turn",
+                input_tokens=10,
+                output_tokens=2,
+            )
+        ]
+    )
+    console = DummyConsole()
+
+    exit_code = run_repl(
+        _make_config(),
+        provider,
+        workspace=tmp_path,
+        agent_console=console,
+    )
+
+    assert exit_code == 0
+    assert "<clear>" in console.printed
+    assert any("New conversation started." in s for s in console.statuses)
+
+
+def test_run_repl_new_command_isolates_old_team_mailbox(monkeypatch, tmp_path: Path) -> None:
+    TeammateManager(tmp_path / ".team.json").register(
+        "code-reviewer",
+        "code reviewer",
+        "You review code changes.",
+    )
+    inputs = iter(
+        [
+            (0.01, "/team spawn code-reviewer"),
+            (0.02, "/team send code-reviewer Review src/main.py"),
+            (0.02, "/new"),
+            (0.30, "/exit"),
+        ]
+    )
+    monkeypatch.setattr("src.main._supports_prompt_toolkit", lambda: False)
+
+    def _next_input(_session) -> str:
+        delay, value = next(inputs)
+        time.sleep(delay)
+        return value
+
+    class FastAutonomousAgent(AutonomousAgent):
+        def __init__(self, *args, **kwargs) -> None:
+            kwargs["poll_interval"] = 0.01
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr("src.main._read_user_input", _next_input)
+    monkeypatch.setattr("src.main.AutonomousAgent", FastAutonomousAgent)
+    monkeypatch.setattr(
+        "src.main._make_teammate_provider_factory",
+        lambda _config: (lambda _overrides: ReplayProvider(["Old review."], delay=0.15)),
+    )
+
+    console = DummyConsole()
+
+    exit_code = run_repl(
+        _make_config(),
+        ReplayProvider([]),
+        workspace=tmp_path,
+        agent_console=console,
+    )
+
+    assert exit_code == 0
+    assert any("New conversation started." in status for status in console.statuses)
+    assert not any("Old review." in status for status in console.statuses)
+
+
+def test_slash_new_appears_in_slash_commands() -> None:
+    """/new should be in the autocomplete list."""
+    from src.main import _SLASH_COMMANDS
+    assert "/new" in _SLASH_COMMANDS
 
 
 def test_nag_reminder_skips_tool_result_messages() -> None:
