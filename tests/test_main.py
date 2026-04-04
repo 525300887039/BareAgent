@@ -375,6 +375,39 @@ def test_run_repl_handles_team_spawn_and_send_commands(
     assert any("code-reviewer [running] - code reviewer" in line for line in console.printed)
 
 
+def test_run_repl_mode_command_uses_shared_input_reader(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    inputs = iter(["/mode", "2", "/exit"])
+    read_calls: list[str] = []
+
+    def _next_input(_session) -> str:
+        read_calls.append("read")
+        return next(inputs)
+
+    monkeypatch.setattr("src.main._supports_prompt_toolkit", lambda: False)
+    monkeypatch.setattr("src.main._read_user_input", _next_input)
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda _prompt="": (_ for _ in ()).throw(AssertionError("builtins.input should not be used")),
+    )
+
+    console = DummyConsole()
+
+    exit_code = run_repl(
+        _make_config(),
+        ReplayProvider([]),
+        workspace=tmp_path,
+        agent_console=console,
+    )
+
+    assert exit_code == 0
+    assert read_calls == ["read", "read", "read"]
+    assert any("Select [1-4] on the next prompt." == status for status in console.statuses)
+    assert any("Permission mode: default → auto" == status for status in console.statuses)
+
+
 def test_make_teammate_provider_factory_inherits_custom_api_key_env(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
