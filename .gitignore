@@ -3,6 +3,8 @@ __pycache__/
 specs/
 .claude/
 config/
+.mailbox/
+.transcripts/
 code-agent-design.md
 简历.md
 code-review-report.md
