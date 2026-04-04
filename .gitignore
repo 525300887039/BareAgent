@@ -21,3 +21,5 @@ dist/
 *.egg-info/
 config.local.toml
 docs/subagent-refactor-plan.md
+docs/book/
+docs/outline.md
