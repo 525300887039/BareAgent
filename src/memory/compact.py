@@ -61,7 +61,7 @@ class Compactor:
     def __init__(
         self,
         provider: BaseLLMProvider,
-        transcript_mgr: TranscriptManager,
+        transcript_mgr: TranscriptManager | None,
         threshold: int = 50000,
         session_id: str = "default",
     ) -> None:
@@ -89,7 +89,8 @@ class Compactor:
         if not summary_source_messages:
             return
 
-        self._transcript_mgr.save(messages, self._session_id)
+        if self._transcript_mgr is not None:
+            self._transcript_mgr.save(messages, self._session_id)
         try:
             summary = self._provider.create(
                 messages=[

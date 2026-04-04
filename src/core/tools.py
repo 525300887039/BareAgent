@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import secrets
-import string
 import threading
 from copy import deepcopy
 from functools import partial
@@ -9,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.concurrency.background import BackgroundManager
+from src.core.fileutil import generate_random_id
 from src.core.handlers.bash import run_bash
 from src.core.handlers.file_edit import run_edit
 from src.core.handlers.file_read import run_read
@@ -41,7 +40,6 @@ DEFERRED_TOOLS = {
     "team_send",
     "team_list",
 }
-_BACKGROUND_TASK_ID_ALPHABET = string.ascii_letters + string.digits
 
 
 BACKGROUND_TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -272,7 +270,11 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     **_make_lazy_task_handlers(Path(".tasks.json")),
     "load_skill": lambda skill_name: make_skill_handlers(_get_default_skill_loader())["load_skill"](skill_name),
     "background_run": lambda **_: "Background manager unavailable.",
-    "subagent": lambda task: "Subagent unavailable: provider is not configured.",
+    "subagent": (
+        lambda task, agent_type=None, run_in_background=False: (
+            "Subagent unavailable: provider is not configured."
+        )
+    ),
     "team_spawn": lambda name: f"Team spawning unavailable for {name}.",
     "team_send": lambda to_agent, content: f"Team messaging unavailable for {to_agent}.",
     "team_list": lambda: [],
@@ -294,6 +296,8 @@ def get_handlers(
     permission: Any = None,
     bg_manager: BackgroundManager | None = None,
     subagent_system_prompt: str = "",
+    subagent_max_depth: int = 3,
+    subagent_default_type: str = "general-purpose",
     team_handlers: dict[str, Callable[..., Any]] | None = None,
     subagent_depth: int = 0,
 ) -> dict[str, Callable[..., Any]]:
@@ -331,17 +335,24 @@ def get_handlers(
     available_tools = tools or get_tools()
     if provider is None:
         handlers["subagent"] = (
-            lambda task: "Subagent unavailable: provider is not configured."
+            lambda task, agent_type=None, run_in_background=False: (
+                "Subagent unavailable: provider is not configured."
+            )
         )
     else:
-        handlers["subagent"] = lambda task: run_subagent(
+        handlers["subagent"] = lambda task, agent_type=None, run_in_background=False: run_subagent(
             provider=provider,
             task=task,
             tools=available_tools,
             handlers=handlers,
             permission=permission,
             system_prompt=subagent_system_prompt,
+            max_depth=subagent_max_depth,
             current_depth=subagent_depth + 1,
+            agent_type=agent_type,
+            bg_manager=bg_manager,
+            run_in_background=run_in_background,
+            default_agent_type=subagent_default_type,
         )
 
     return handlers
@@ -376,4 +387,4 @@ def _make_background_run_handler(
 
 
 def _generate_background_task_id() -> str:
-    return "".join(secrets.choice(_BACKGROUND_TASK_ID_ALPHABET) for _ in range(8))
+    return generate_random_id(8)

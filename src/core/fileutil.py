@@ -1,12 +1,21 @@
-"""Shared file-system utilities."""
+"""Shared file-system and small utilities."""
 
 from __future__ import annotations
 
 import json
 import os
+import secrets
+import string
 import tempfile
 from pathlib import Path
 from typing import Any
+
+_ID_ALPHABET = string.ascii_letters + string.digits
+
+
+def generate_random_id(length: int = 8) -> str:
+    """Return a cryptographically random alphanumeric string."""
+    return "".join(secrets.choice(_ID_ALPHABET) for _ in range(length))
 
 
 def atomic_write_json(file_path: Path, payload: Any) -> None:

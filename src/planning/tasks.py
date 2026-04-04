@@ -2,19 +2,16 @@ from __future__ import annotations
 
 import copy
 import json
-import secrets
-import string
 import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from src.core.fileutil import atomic_write_json
+from src.core.fileutil import atomic_write_json, generate_random_id
 from src.core.schema import tool_schema as _schema
 
 TASK_STATUSES = {"pending", "in_progress", "done", "failed"}
-_TASK_ID_ALPHABET = string.ascii_letters + string.digits
 
 
 @dataclass(slots=True)
@@ -303,7 +300,7 @@ class TaskManager:
 
     def _generate_task_id(self) -> str:
         while True:
-            task_id = "".join(secrets.choice(_TASK_ID_ALPHABET) for _ in range(8))
+            task_id = generate_random_id(8)
             if task_id not in self.tasks:
                 return task_id
 

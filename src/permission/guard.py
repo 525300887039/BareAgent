@@ -4,7 +4,10 @@ import json
 import re
 import sys
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.planning.agent_types import AgentType
 
 
 class PermissionMode(Enum):
@@ -118,6 +121,29 @@ class PermissionGuard:
             if cmd.strip().startswith(prefix):
                 return True
         return False
+
+    def clone(self, *, mode: PermissionMode | None = None, fail_closed: bool | None = None) -> PermissionGuard:
+        """Create a copy of this guard with optional overrides."""
+        child = PermissionGuard(
+            mode=mode if mode is not None else self.mode,
+            fail_closed=fail_closed if fail_closed is not None else self.fail_closed,
+        )
+        child.allow_rules = list(self.allow_rules)
+        child.deny_rules = list(self.deny_rules)
+        return child
+
+    def for_subagent(
+        self,
+        agent_type: "AgentType",
+        *,
+        background: bool = False,
+    ) -> PermissionGuard:
+        """Clone the guard for child-agent execution."""
+        resolved_mode = agent_type.permission_mode if agent_type.permission_mode is not None else self.mode
+        return self.clone(
+            mode=resolved_mode,
+            fail_closed=self.fail_closed or background or resolved_mode == PermissionMode.PLAN,
+        )
 
 
 def _parse_prefix_rule(rule: str) -> tuple[str, str] | None:

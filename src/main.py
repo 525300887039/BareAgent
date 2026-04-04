@@ -22,6 +22,7 @@ from src.core.tools import get_handlers, get_tools
 from src.memory.compact import Compactor
 from src.memory.transcript import TranscriptManager
 from src.permission.guard import PermissionGuard, PermissionMode
+from src.planning.agent_types import BUILTIN_AGENT_TYPES, DEFAULT_AGENT_TYPE
 from src.planning.skills import SkillLoader, resolve_skills_dir
 from src.planning.tasks import TaskManager
 from src.planning.todo import TodoManager
@@ -38,6 +39,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.toml"
 VALID_PERMISSION_MODES = {"default", "auto", "plan", "bypass"}
 VALID_THINKING_MODES = {"adaptive", "enabled", "disabled"}
+VALID_SUBAGENT_TYPES = set(BUILTIN_AGENT_TYPES)
 MAIN_AGENT_NAME = "main"
 DEFAULT_API_KEY_ENV_BY_PROVIDER = {
     "anthropic": "ANTHROPIC_API_KEY",
@@ -69,10 +71,17 @@ class UIConfig:
 
 
 @dataclass(slots=True)
+class SubagentConfig:
+    max_depth: int
+    default_type: str
+
+
+@dataclass(slots=True)
 class Config:
     provider: ProviderConfig
     permission: PermissionConfig
     ui: UIConfig
+    subagent: SubagentConfig
     thinking: ThinkingConfig
     path: Path
 
@@ -183,6 +192,7 @@ def load_config(
     provider_raw = raw_config.get("provider", {})
     permission_raw = raw_config.get("permission", {})
     ui_raw = raw_config.get("ui", {})
+    subagent_raw = raw_config.get("subagent", {})
     thinking_raw = raw_config.get("thinking", {})
     allow_rules, deny_rules = parse_permission_rules(raw_config)
     configured_provider_name = str(provider_raw.get("name", "anthropic"))
@@ -235,6 +245,20 @@ def load_config(
         stream=_resolve_bool(ui_raw.get("stream", True), "BAREAGENT_UI_STREAM"),
         theme=_resolve_string(ui_raw.get("theme", "dark"), "BAREAGENT_UI_THEME"),
     )
+    subagent = SubagentConfig(
+        max_depth=_resolve_int(
+            int(subagent_raw.get("max_depth", 3)),
+            "BAREAGENT_SUBAGENT_MAX_DEPTH",
+        ),
+        default_type=_validate_mode(
+            "subagent.default_type",
+            _resolve_string(
+                str(subagent_raw.get("default_type", DEFAULT_AGENT_TYPE)),
+                "BAREAGENT_SUBAGENT_DEFAULT_TYPE",
+            ),
+            VALID_SUBAGENT_TYPES,
+        ),
+    )
     thinking = ThinkingConfig(
         mode=_validate_mode(
             "thinking.mode",
@@ -254,6 +278,7 @@ def load_config(
         provider=provider,
         permission=permission,
         ui=ui,
+        subagent=subagent,
         thinking=thinking,
         path=config_path.resolve(),
     )
@@ -640,6 +665,8 @@ def _build_handlers(
         permission=permission,
         bg_manager=bg_manager,
         subagent_system_prompt=system_prompt,
+        subagent_max_depth=config.subagent.max_depth,
+        subagent_default_type=config.subagent.default_type,
         team_handlers=team_handlers,
     )
 
@@ -725,9 +752,7 @@ def _make_team_handlers(
         teammate_name = name.strip()
         agent_instance = teammate_manager.spawn(teammate_name, provider_factory)
         message_bus.ensure_mailbox(teammate_name)
-        teammate_permission = PermissionGuard(permission.mode, fail_closed=True)
-        teammate_permission.allow_rules = list(permission.allow_rules)
-        teammate_permission.deny_rules = list(permission.deny_rules)
+        teammate_permission = permission.clone(fail_closed=True)
         agent_handlers = _build_handlers(
             workspace_path=workspace_path,
             todo_manager=todo_manager,

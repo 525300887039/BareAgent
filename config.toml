@@ -10,6 +10,10 @@ mode = "default"
 stream = true
 theme = "dark"
 
+[subagent]
+max_depth = 3
+default_type = "general-purpose"
+
 [thinking]
 mode = "adaptive"
 budget_tokens = 10000

@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 import re
-import secrets
-import string
 import threading
 from collections import OrderedDict
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from src.core.fileutil import generate_random_id
 
 _VALID_AGENT_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -21,8 +21,6 @@ def _validate_agent_name(name: str) -> str:
     if not _VALID_AGENT_NAME.fullmatch(normalized):
         raise ValueError(f"Invalid agent name (only alphanumeric, _, - allowed): {normalized!r}")
     return normalized
-
-_MESSAGE_ID_ALPHABET = string.ascii_letters + string.digits
 
 
 @dataclass(slots=True)
@@ -211,7 +209,7 @@ class MessageBus:
 
 
 def _generate_message_id(length: int = 12) -> str:
-    return "".join(secrets.choice(_MESSAGE_ID_ALPHABET) for _ in range(length))
+    return generate_random_id(length)
 
 
 def _timestamp() -> str:
