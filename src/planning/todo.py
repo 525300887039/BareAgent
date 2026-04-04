@@ -56,6 +56,12 @@ class TodoManager:
         self._next_id = 1
         self._lock = threading.Lock()
 
+    def reset(self) -> None:
+        """Clear all tasks and reset the ID counter."""
+        with self._lock:
+            self.tasks.clear()
+            self._next_id = 1
+
     def add(self, task: str, priority: str = "normal") -> str:
         with self._lock:
             task_text = task.strip()

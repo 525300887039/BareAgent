@@ -16,6 +16,7 @@ from prompt_toolkit.keys import Keys
 from prompt_toolkit.patch_stdout import patch_stdout
 
 from src.concurrency.background import BackgroundManager
+from src.core.fileutil import generate_random_id
 from src.core.context import assemble_system_prompt
 from src.core.loop import agent_loop, LLMCallError
 from src.core.tools import get_handlers, get_tools
@@ -46,6 +47,7 @@ DEFAULT_API_KEY_ENV_BY_PROVIDER = {
     "openai": "OPENAI_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
 }
+_SESSION_ID_TIMESTAMP_FORMAT = "%Y%m%d-%H%M%S-%f"
 
 
 @dataclass(slots=True)
@@ -363,7 +365,7 @@ _MODE_DESCRIPTIONS = {
     PermissionMode.BYPASS: "No confirmation required",
 }
 _SLASH_COMMANDS = [
-    "/help", "/exit", "/clear", "/compact",
+    "/help", "/exit", "/clear", "/new", "/compact",
     *_PERMISSION_SLASH, "/mode",
     "/sessions", "/resume", "/team",
 ]
@@ -447,7 +449,8 @@ def run_repl(
 ) -> int:
     ui_console = agent_console or AgentConsole()
     workspace_path = (workspace or Path.cwd()).resolve()
-    session_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+    transcript_mgr = TranscriptManager(workspace_path / ".transcripts")
+    session_id = _generate_session_id(transcript_mgr)
     _kb = KeyBindings()
 
     @_kb.add(Keys.ControlZ)
@@ -473,12 +476,12 @@ def run_repl(
     task_manager = _load_task_manager(workspace_path, ui_console)
     bg_manager = BackgroundManager()
     teammate_manager = _load_teammate_manager(workspace_path, ui_console)
-    message_bus = MessageBus(workspace_path / ".mailbox")
-    message_bus.ensure_mailbox(MAIN_AGENT_NAME)
-    spawned_agents: dict[str, AutonomousAgent] = {}
-    main_mailbox_cursor: str | None = message_bus.latest_message_id(MAIN_AGENT_NAME)
     skill_loader = SkillLoader(resolve_skills_dir())
-    transcript_mgr = TranscriptManager(workspace_path / ".transcripts")
+    message_bus, main_mailbox_cursor = _switch_session_mailbox(
+        workspace_path,
+        session_id,
+    )
+    spawned_agents: dict[str, AutonomousAgent] = {}
     messages = _initial_messages(
         workspace_path,
         skill_summary=skill_loader.get_skill_list_prompt(),
@@ -502,6 +505,7 @@ def run_repl(
         bg_manager=bg_manager,
         messages=messages,
         config=config,
+        runtime_id=session_id,
         teammate_manager=teammate_manager,
         message_bus=message_bus,
         spawned_agents=spawned_agents,
@@ -553,7 +557,8 @@ def run_repl(
                 "Available commands:\n"
                 "  /help      Show this help message\n"
                 "  /exit      Exit BareAgent\n"
-                "  /clear     Clear the screen\n"
+                "  /clear     Clear screen and start new conversation\n"
+                "  /new       Start a new conversation\n"
                 "  /compact   Compress conversation context\n"
                 "  /default   Switch to DEFAULT permission mode\n"
                 "  /auto      Switch to AUTO permission mode\n"
@@ -566,8 +571,46 @@ def run_repl(
                 "  Shift+Tab  Cycle through permission modes"
             )
             continue
-        if text == "/clear":
+        if text in ("/clear", "/new"):
+            # Reset messages to initial state
+            messages[:] = _initial_messages(
+                workspace_path, skill_summary=skill_loader.get_skill_list_prompt()
+            )
+            # Clear session-scoped TODO
+            todo_manager.reset()
+            # Generate new session_id
+            new_session_id = _generate_session_id(
+                transcript_mgr,
+                reserved_ids={_get_compact_session_id(compact_fn)},
+            )
+            _set_compact_session_id(compact_fn, new_session_id)
+            message_bus, main_mailbox_cursor = _switch_session_mailbox(
+                workspace_path,
+                new_session_id,
+                current_bus=message_bus,
+            )
+            spawned_agents = {}
+            # Rebuild handlers (messages reference changed)
+            handlers = _build_handlers(
+                workspace_path=workspace_path,
+                todo_manager=todo_manager,
+                task_manager=task_manager,
+                skill_loader=skill_loader,
+                provider=provider,
+                tools=tools,
+                permission=permission,
+                bg_manager=bg_manager,
+                messages=messages,
+                config=config,
+                runtime_id=new_session_id,
+                teammate_manager=teammate_manager,
+                message_bus=message_bus,
+                spawned_agents=spawned_agents,
+                agent_name=MAIN_AGENT_NAME,
+            )
+            # Clear screen
             ui_console.console.clear()
+            ui_console.print_status("New conversation started.")
             continue
         if text == "/compact":
             compact_fn(messages, force=True)
@@ -584,6 +627,7 @@ def run_repl(
                 bg_manager=bg_manager,
                 messages=messages,
                 config=config,
+                runtime_id=_get_compact_session_id(compact_fn),
                 teammate_manager=teammate_manager,
                 message_bus=message_bus,
                 spawned_agents=spawned_agents,
@@ -610,6 +654,12 @@ def run_repl(
             resumed_session = requested_session or transcript_mgr.get_latest_session()
             if resumed_session is not None:
                 _set_compact_session_id(compact_fn, resumed_session)
+                message_bus, main_mailbox_cursor = _switch_session_mailbox(
+                    workspace_path,
+                    resumed_session,
+                    current_bus=message_bus,
+                )
+                spawned_agents = {}
             handlers = _build_handlers(
                 workspace_path=workspace_path,
                 todo_manager=todo_manager,
@@ -621,6 +671,7 @@ def run_repl(
                 bg_manager=bg_manager,
                 messages=messages,
                 config=config,
+                runtime_id=_get_compact_session_id(compact_fn),
                 teammate_manager=teammate_manager,
                 message_bus=message_bus,
                 spawned_agents=spawned_agents,
@@ -683,6 +734,42 @@ def _build_permission_guard(config: Config) -> PermissionGuard:
     return guard
 
 
+def _generate_session_id(
+    transcript_mgr: TranscriptManager,
+    *,
+    reserved_ids: set[str] | None = None,
+) -> str:
+    known_session_ids = set(transcript_mgr.list_sessions())
+    if reserved_ids:
+        known_session_ids.update(
+            session_id
+            for session_id in reserved_ids
+            if session_id
+        )
+
+    while True:
+        candidate = (
+            f"{datetime.now().strftime(_SESSION_ID_TIMESTAMP_FORMAT)}"
+            f"-{generate_random_id(6)}"
+        )
+        if candidate not in known_session_ids:
+            return candidate
+
+
+def _switch_session_mailbox(
+    workspace_path: Path,
+    session_id: str,
+    *,
+    current_bus: MessageBus | None = None,
+) -> tuple[MessageBus, str | None]:
+    if current_bus is not None:
+        _broadcast_team_shutdown(current_bus)
+
+    message_bus = MessageBus(workspace_path / ".mailbox" / session_id)
+    message_bus.ensure_mailbox(MAIN_AGENT_NAME)
+    return message_bus, message_bus.latest_message_id(MAIN_AGENT_NAME)
+
+
 def _get_compact_session_id(compact_fn: object) -> str:
     getter = getattr(compact_fn, "get_session_id", None)
     if callable(getter):
@@ -716,6 +803,7 @@ def _build_handlers(
     bg_manager: BackgroundManager,
     messages: list[dict[str, object]],
     config: Config,
+    runtime_id: str,
     teammate_manager: TeammateManager,
     message_bus: MessageBus,
     spawned_agents: dict[str, AutonomousAgent],
@@ -732,6 +820,7 @@ def _build_handlers(
         permission=permission,
         bg_manager=bg_manager,
         tools=tools,
+        runtime_id=runtime_id,
         teammate_manager=teammate_manager,
         message_bus=message_bus,
         spawned_agents=spawned_agents,
@@ -798,6 +887,7 @@ def _make_team_handlers(
     permission: PermissionGuard,
     bg_manager: BackgroundManager,
     tools: list[dict[str, object]],
+    runtime_id: str,
     teammate_manager: TeammateManager,
     message_bus: MessageBus,
     spawned_agents: dict[str, AutonomousAgent],
@@ -846,6 +936,7 @@ def _make_team_handlers(
             bg_manager=bg_manager,
             messages=[],
             config=config,
+            runtime_id=runtime_id,
             teammate_manager=teammate_manager,
             message_bus=message_bus,
             spawned_agents=spawned_agents,
@@ -864,7 +955,7 @@ def _make_team_handlers(
             poll_interval=1.0,
         )
         try:
-            bg_manager.submit(f"team:{teammate_name}", autonomous_agent.run)
+            bg_manager.submit(f"team:{runtime_id}:{teammate_name}", autonomous_agent.run)
         except ValueError:
             return f"Teammate {teammate_name} is already running."
         spawned_agents[teammate_name] = autonomous_agent
