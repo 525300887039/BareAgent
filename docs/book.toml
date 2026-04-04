@@ -1,0 +1,15 @@
+[book]
+title = "BareAgent 文档"
+authors = ["BareAgent Contributors"]
+language = "zh"
+multilingual = false
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/user/BareAgent"
+edit-url-template = "https://github.com/user/BareAgent/edit/main/docs/src/{path}"
