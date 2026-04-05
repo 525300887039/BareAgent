@@ -77,9 +77,12 @@ class Compactor:
         self._session_id = new_session_id
 
     def __call__(self, messages: list[dict[str, Any]], force: bool = False) -> None:
+        _backup = [_clone_message(m) for m in messages]
+
         _micro_compact(messages, keep_recent=3)
 
         if not force and estimate_tokens(messages) <= self._threshold:
+            messages[:] = _backup
             return
 
         history_messages, pending_user_message = _split_pending_user_turn(messages)
@@ -87,6 +90,7 @@ class Compactor:
             message for message in history_messages if message.get("role") != "system"
         ]
         if not summary_source_messages:
+            messages[:] = _backup
             return
 
         if self._transcript_mgr is not None:
@@ -108,6 +112,7 @@ class Compactor:
             )
         except Exception:
             logger.warning("Context compression failed", exc_info=True)
+            messages[:] = _backup
             return
 
         system_messages = [
