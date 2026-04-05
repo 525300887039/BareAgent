@@ -260,6 +260,34 @@ def test_resume_restores_latest_or_specific_session(tmp_path: Path) -> None:
     assert manager.resume("session-alpha") == newer_alpha_messages
 
 
+def test_auto_compact_keeps_messages_when_summary_fails_with_tool_results(tmp_path: Path) -> None:
+    """BUG-02 回归：_micro_compact 截断后 provider 失败，消息必须完全不变。"""
+    provider = StubProvider(error=RuntimeError("summary failed"))
+    compact = Compactor(
+        provider=provider,
+        transcript_mgr=TranscriptManager(tmp_path / ".transcripts"),
+        threshold=1,
+        session_id="session-bug02",
+    )
+    messages = [
+        {"role": "system", "content": "系统提示"},
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "bash", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "result 1"}]},
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "t2", "name": "read_file", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t2", "content": "result 2"}]},
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "t3", "name": "grep", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t3", "content": "result 3"}]},
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "t4", "name": "glob", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t4", "content": "result 4"}]},
+        {"role": "user", "content": "最新请求"},
+    ]
+    original = deepcopy(messages)
+
+    compact(messages)
+
+    assert messages == original
+
+
 def _write_transcript(path: Path, messages: list[dict]) -> None:
     with path.open("w", encoding="utf-8") as file:
         for message in messages:

@@ -540,6 +540,36 @@ def test_factory_builds_anthropic_provider_with_thinking(monkeypatch) -> None:
     )
 
 
+def test_openai_convert_assistant_message_missing_id_and_name(monkeypatch) -> None:
+    """BUG-03：tool_use 块缺少 id/name 时不应 KeyError。"""
+    class FakeOpenAIClient:
+        def __init__(self, **kwargs) -> None:
+            _ = kwargs
+            self.chat = SimpleNamespace(completions=SimpleNamespace())
+
+    monkeypatch.setattr("src.provider.openai.openai.OpenAI", FakeOpenAIClient)
+    provider = OpenAIProvider(api_key="x", model="gpt-4")
+    content = [{"type": "tool_use", "input": {}}]
+    result = provider._convert_assistant_message(content)
+    assert result["tool_calls"][0]["id"] == ""
+    assert result["tool_calls"][0]["function"]["name"] == ""
+
+
+def test_anthropic_convert_message_content_missing_id_and_name(monkeypatch) -> None:
+    """BUG-10：tool_use 块缺少 id/name 时不应 KeyError。"""
+    class FakeAnthropicClient:
+        def __init__(self, **kwargs) -> None:
+            _ = kwargs
+            self.messages = SimpleNamespace()
+
+    monkeypatch.setattr("src.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient)
+    provider = AnthropicProvider(api_key="x", model="claude-3-5-sonnet-20241022")
+    content = [{"type": "tool_use", "input": {}}]
+    result = provider._convert_message_content(content)
+    assert result[0]["id"] == ""
+    assert result[0]["name"] == ""
+
+
 def test_factory_builds_deepseek_via_openai_provider(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
