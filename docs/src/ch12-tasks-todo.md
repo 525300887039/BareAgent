@@ -7,6 +7,8 @@ BareAgent 当前有两套名字相近、但职责完全不同的任务机制：
 
 它们都位于 `src/planning/`，也都向模型暴露了工具，但心智模型不能混在一起。
 
+![TaskManager 与 TodoManager 对比](images/ch12-task-vs-todo.png)
+
 ## 12.1 `TaskManager`
 
 `TaskManager` 实现位于 `src/planning/tasks.py`。它管理的是一个工作区共享的任务图，而不是某一次对话里的临时清单。

@@ -9,6 +9,8 @@ BareAgent 的上下文压缩由 `src/memory/compact.py` 和 `src/memory/token_co
 
 这两层不是二选一关系，而是先后执行的。
 
+![消息压缩两阶段流程](images/ch11-compression-flow.png)
+
 ## 11.1 微压缩
 
 `Compactor.__call__()` 每次被调用时，都会先执行：

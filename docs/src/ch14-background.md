@@ -215,6 +215,8 @@ bg_manager.drain_notifications()
 1. 从 `BackgroundManager` 提取完成通知
 2. 用 `inject_notifications()` 把通知写回消息历史
 
+![后台任务生命周期时序](images/ch14-background-lifecycle.png)
+
 因此在阅读这部分代码时，不要把：
 
 - “提交后台任务”

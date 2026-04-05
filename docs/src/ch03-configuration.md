@@ -42,6 +42,8 @@ BareAgent 按以下顺序决定主配置文件路径：
 4. `BAREAGENT_*` 环境变量
 5. `--provider`、`--model`
 
+![配置加载优先级金字塔](images/ch03-config-priority.png)
+
 ### 环境变量的类型转换
 
 环境变量并不是简单的字符串拼接，加载时会按字段类型解析：

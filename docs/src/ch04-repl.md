@@ -132,6 +132,8 @@ default -> auto -> plan -> bypass -> default
 
 会话管理由 `TranscriptManager` 驱动，核心目标是：每轮成功交互后都能恢复到最近状态。
 
+![REPL 会话管理生命周期](images/ch04-repl-session.png)
+
 ### transcript 保存位置
 
 BareAgent 会在当前工作目录下自动创建：

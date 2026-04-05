@@ -118,6 +118,8 @@ permission.for_subagent(agent_type, background=run_in_background)
 
 有些系统会在子智能体里自动收紧权限，但 BareAgent 当前实现不是这样。除非 `AgentType` 显式指定模式，否则父级 `AUTO` 会原样继承给 `general-purpose` 子智能体。
 
+![子智能体权限隔离与嵌套边界](images/ch09-subagent-isolation.png)
+
 ### Fail-closed
 
 下面几种情况会让子智能体进入 fail-closed：

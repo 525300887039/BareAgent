@@ -242,6 +242,8 @@ BareAgent 对上层暴露的不是厂商原始响应，而是归一化后的 `LL
 - UI 层只要处理 `text` 与 `StreamEvent`
 - 压缩器只要依赖 `provider.create()` 的普通文本总结能力
 
+![Provider 请求响应统一转换](images/ch07-provider-transform.png)
+
 ### 统一后的工具调用
 
 无论底层来自：

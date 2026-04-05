@@ -29,6 +29,8 @@
 LLM -> tool_calls -> permission -> handlers -> tool_result -> LLM
 ```
 
+![agent_loop() 执行循环流程](images/ch08-agent-loop-flow.png)
+
 ### 一轮典型交互
 
 下面是一次典型工具回合在消息历史中的形态：
@@ -107,6 +109,8 @@ ToolCall(
 | 用户拒绝 / fail-closed 拒绝 | 生成 `User denied.` 的错误型 `tool_result` |
 | handler 不存在 | 生成 `Unknown tool: <name>` 的错误型 `tool_result` |
 | handler 执行异常 | 生成 `Error: <type>: <message>` 的错误型 `tool_result` |
+
+![工具调用分发与错误处理状态图](images/ch08-tool-dispatch.png)
 
 ### 工具结果格式
 

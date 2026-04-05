@@ -12,6 +12,8 @@ BareAgent 的工具系统分成两层：
 3. 根据工具名从 handler 映射中找到对应实现
 4. 执行并把结果写回消息历史
 
+![工具系统执行管道](images/ch05-tool-pipeline.png)
+
 ## 5.1 基础工具
 
 基础工具由 `src/core/tools.py` 中的 `BASE_TOOLS` 定义，当前共有 6 个：

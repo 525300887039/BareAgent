@@ -174,6 +174,8 @@ deny = [
 4. `AUTO_SAFE_PATTERNS`
 5. 当前模式默认策略
 
+![bash 命令权限评估优先级阶梯](images/ch06-permission-ladder.png)
+
 因此可以把它理解为：
 
 - `deny` 是最强的手工拦截
