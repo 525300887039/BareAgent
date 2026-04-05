@@ -5,7 +5,7 @@ from typing import Any, Callable
 
 from src.concurrency.notification import inject_notifications
 from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
-from src.ui.console import AgentConsole
+from src.ui.protocol import StreamProtocol, UIProtocol
 from src.ui.stream import StreamPrinter
 
 
@@ -26,7 +26,7 @@ def agent_loop(
     compact_fn: Callable[[list[dict[str, Any]]], None] | None = None,
     bg_manager: Any = None,
     stream: bool = False,
-    console: AgentConsole | None = None,
+    console: UIProtocol | None = None,
     max_iterations: int = 200,
 ) -> str:
     compact = compact_fn or (lambda _messages: None)
@@ -107,7 +107,7 @@ def _invoke_provider(
     tools: list[dict[str, Any]],
     *,
     stream: bool,
-    console: AgentConsole | None,
+    console: UIProtocol | None,
 ) -> tuple[LLMResponse, bool, set[str]]:
     if not stream:
         return provider.create(messages=messages, tools=tools), False, set()
@@ -143,7 +143,7 @@ def _fallback_to_non_stream(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]],
     *,
-    console: AgentConsole | None,
+    console: UIProtocol | None,
     exc: Exception,
 ) -> tuple[LLMResponse, bool, set[str]]:
     if console is not None:
@@ -160,9 +160,9 @@ def _is_streaming_unsupported(exc: Exception) -> bool:
 def _consume_stream(
     stream_iter: Any,
     *,
-    console: AgentConsole | None,
+    console: UIProtocol | None,
 ) -> tuple[LLMResponse, bool, set[str]]:
-    printer = StreamPrinter(console.console if console is not None else None)
+    printer = _get_stream_printer(console)
     displayed_tool_calls: set[str] = set()
     saw_stream_event = False
     printer.start()
@@ -195,8 +195,8 @@ def _consume_stream(
 def _handle_stream_event(
     event: StreamEvent,
     *,
-    printer: StreamPrinter,
-    console: AgentConsole | None,
+    printer: StreamProtocol,
+    console: UIProtocol | None,
     displayed_tool_calls: set[str],
 ) -> None:
     if event.type == "text":
@@ -211,6 +211,19 @@ def _handle_stream_event(
         displayed_tool_calls.add(event.tool_call_id)
     if console is not None:
         console.print_tool_call(event.name, event.input)
+
+
+def _get_stream_printer(console: UIProtocol | None) -> StreamProtocol:
+    if console is None:
+        return StreamPrinter()
+
+    get_stream_printer = getattr(console, "get_stream_printer", None)
+    if callable(get_stream_printer):
+        return get_stream_printer()
+
+    # Backward compatibility for older console duck types that exposed `.console`
+    # but not a `get_stream_printer()` hook.
+    return StreamPrinter(getattr(console, "console", None))
 
 
 def _tool_result(tool_use_id: str, output: Any, *, is_error: bool = False) -> dict[str, Any]:

@@ -51,6 +51,33 @@ class MockProvider(BaseLLMProvider):
 
 class FakeConsole:
     def __init__(self) -> None:
+        self.assistant: list[str] = []
+        self.tool_calls: list[tuple[str, dict]] = []
+        self.tool_results: list[tuple[str, str]] = []
+        self.statuses: list[str] = []
+        self.errors: list[str] = []
+
+    def print_assistant(self, text: str) -> None:
+        self.assistant.append(text)
+
+    def print_tool_call(self, name: str, input_data: dict) -> None:
+        self.tool_calls.append((name, input_data))
+
+    def print_tool_result(self, name: str, output) -> None:
+        self.tool_results.append((name, str(output)))
+
+    def print_status(self, msg: str) -> None:
+        self.statuses.append(msg)
+
+    def print_error(self, msg: str) -> None:
+        self.errors.append(msg)
+
+    def get_stream_printer(self) -> FakeStreamPrinter:
+        return FakeStreamPrinter()
+
+
+class LegacyConsole:
+    def __init__(self) -> None:
         self.console = type("ConsoleProxy", (), {"print": lambda *args, **kwargs: None})()
         self.assistant: list[str] = []
         self.tool_calls: list[tuple[str, dict]] = []
@@ -78,7 +105,8 @@ class FakeStreamPrinter:
     instances: list["FakeStreamPrinter"] = []
 
     def __init__(self, *args, **kwargs) -> None:
-        _ = args, kwargs
+        _ = kwargs
+        self.args = args
         self.started = False
         self.chunks: list[str] = []
         FakeStreamPrinter.instances.append(self)
@@ -292,6 +320,46 @@ def test_agent_loop_falls_back_to_non_stream_mode(monkeypatch) -> None:
     assert len(provider.calls) == 1
     assert console.assistant == ["Done."]
     assert any("falling back to non-stream mode" in status for status in console.statuses)
+
+
+def test_agent_loop_streams_with_legacy_console_shape(monkeypatch) -> None:
+    FakeStreamPrinter.instances.clear()
+    monkeypatch.setattr("src.core.loop.StreamPrinter", FakeStreamPrinter)
+
+    provider = MockProvider(
+        [],
+        stream_payloads=[
+            (
+                [StreamEvent(type="text", text="Legacy stream.")],
+                LLMResponse(
+                    text="Legacy stream.",
+                    tool_calls=[],
+                    stop_reason="end_turn",
+                    input_tokens=8,
+                    output_tokens=3,
+                ),
+            ),
+        ],
+    )
+    console = LegacyConsole()
+
+    result = agent_loop(
+        provider=provider,
+        messages=[
+            {"role": "system", "content": "You are BareAgent."},
+            {"role": "user", "content": "Say hi."},
+        ],
+        tools=[],
+        handlers={},
+        stream=True,
+        console=console,  # type: ignore[arg-type]
+    )
+
+    assert result == "Legacy stream."
+    assert len(provider.stream_calls) == 1
+    assert console.assistant == []
+    assert [instance.chunks for instance in FakeStreamPrinter.instances] == [["Legacy stream."]]
+    assert FakeStreamPrinter.instances[0].args == (console.console,)
 
 
 def test_agent_loop_does_not_fall_back_for_stream_runtime_error(monkeypatch) -> None:

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
+
+if TYPE_CHECKING:
+    from src.ui.stream import StreamPrinter
 
 MAX_TOOL_OUTPUT_CHARS = 2000
 
@@ -45,6 +48,11 @@ class AgentConsole:
 
     def print_status(self, msg: str) -> None:
         self.console.print(msg, style="dim")
+
+    def get_stream_printer(self) -> StreamPrinter:
+        from src.ui.stream import StreamPrinter
+
+        return StreamPrinter(self.console)
 
 
 def _render_payload(payload: Any, *, max_chars: int | None = None) -> tuple[str, str]:
