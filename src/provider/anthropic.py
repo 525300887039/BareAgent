@@ -136,8 +136,8 @@ class AnthropicProvider(BaseLLMProvider):
                 converted_blocks.append(
                     {
                         "type": "tool_use",
-                        "id": block["id"],
-                        "name": block["name"],
+                        "id": block.get("id", ""),
+                        "name": block.get("name", ""),
                         "input": block.get("input", {}),
                     }
                 )
@@ -145,7 +145,7 @@ class AnthropicProvider(BaseLLMProvider):
             if block_type == "tool_result":
                 result_block: dict[str, Any] = {
                     "type": "tool_result",
-                    "tool_use_id": block["tool_use_id"],
+                    "tool_use_id": block.get("tool_use_id", ""),
                     "content": self._convert_tool_result_content(block.get("content", "")),
                 }
                 if block.get("is_error"):

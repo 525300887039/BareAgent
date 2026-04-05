@@ -299,7 +299,7 @@ class OpenAIProvider(BaseLLMProvider):
                 converted.append(
                     {
                         "type": "function_call_output",
-                        "call_id": block["tool_use_id"],
+                        "call_id": block.get("tool_use_id", ""),
                         "output": self._stringify_content(block.get("content", "")),
                     }
                 )
@@ -308,8 +308,8 @@ class OpenAIProvider(BaseLLMProvider):
                 converted.append(
                     {
                         "type": "function_call",
-                        "call_id": block["id"],
-                        "name": block["name"],
+                        "call_id": block.get("id", ""),
+                        "name": block.get("name", ""),
                         "arguments": json.dumps(block.get("input", {}), ensure_ascii=False),
                     }
                 )
@@ -360,7 +360,7 @@ class OpenAIProvider(BaseLLMProvider):
                 converted.append(
                     {
                         "role": "tool",
-                        "tool_call_id": block["tool_use_id"],
+                        "tool_call_id": block.get("tool_use_id", ""),
                         "content": self._stringify_content(block.get("content", "")),
                     }
                 )
@@ -389,10 +389,10 @@ class OpenAIProvider(BaseLLMProvider):
             if block_type == "tool_use":
                 tool_calls.append(
                     {
-                        "id": block["id"],
+                        "id": block.get("id", ""),
                         "type": "function",
                         "function": {
-                            "name": block["name"],
+                            "name": block.get("name", ""),
                             "arguments": json.dumps(
                                 block.get("input", {}),
                                 ensure_ascii=False,
