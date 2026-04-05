@@ -29,7 +29,6 @@ def test_mailbox_isolation(tmp_path):
         content="给 c 的消息", msg_type="chat", timestamp=""
     ))
     msgs_b = bus.receive("b")
-    msgs_c = bus.receive("c")
     assert any("给 b" in m.content for m in msgs_b)
     assert not any("给 c" in m.content for m in msgs_b)
 

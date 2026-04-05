@@ -3,7 +3,6 @@
 适配：create_provider(config) 接受 config 对象（需有 provider 和 thinking 属性）。
 需要设置环境变量才能创建 provider，这里用 monkeypatch 模拟。
 """
-import os
 from types import SimpleNamespace
 
 import pytest

@@ -30,6 +30,15 @@ def _make_provider():
     return create_provider(config)
 
 
+def _read_text_with_common_encodings(path: Path) -> str:
+    for encoding in ("utf-8", "utf-8-sig", "utf-16", "utf-16-le"):
+        try:
+            return path.read_text(encoding=encoding)
+        except UnicodeDecodeError:
+            continue
+    return path.read_text(encoding="utf-8")
+
+
 def _make_handlers(workspace: Path, provider=None):
     tools = get_tools()
     permission = PermissionGuard(PermissionMode.BYPASS)
@@ -125,5 +134,5 @@ def test_e2e_file_operations(tmp_path: Path):
 
     target = tmp_path / "smoke_test.txt"
     assert target.exists(), f"文件 {target} 应被创建"
-    content = target.read_text(encoding="utf-8")
+    content = _read_text_with_common_encodings(target)
     assert "test ok" in content, f"文件内容应包含 'test ok'，实际: {content!r}"

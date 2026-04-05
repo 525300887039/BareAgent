@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_local_overrides_default():
     """config.local.toml 的值应覆盖 config.toml"""
     with open(ROOT / "config.toml", "rb") as f:
-        base = tomllib.load(f)
+        tomllib.load(f)
     local_path = ROOT / "config.local.toml"
     if not local_path.exists():
         return  # 跳过
