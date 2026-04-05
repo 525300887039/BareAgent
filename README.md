@@ -1,21 +1,45 @@
 # BareAgent
 
-纯 Python 终端代码智能体。支持可插拔 LLM 提供商、细粒度权限控制、多智能体协调和可扩展技能系统。
+> 纯 Python 终端代码智能体 — 可插拔 LLM、细粒度权限、多智能体协调、可扩展技能系统
 
-## 特性
+<!-- badges placeholder -->
+![Python](https://img.shields.io/badge/Python-3.12%2B-blue)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-- **多提供商支持** — Anthropic / OpenAI，统一接口，流式与非流式输出
-- **内置工具** — bash、文件读写编辑、glob、grep，开箱即用
-- **权限守卫** — 四种模式（default / auto / plan / bypass），危险命令自动拦截
-- **多智能体协调** — 基于 JSONL 邮箱的消息总线，守护进程式自治智能体
-- **子智能体委派** — 隔离上下文、递归深度限制、自动消息压缩、类型化智能体（explore/plan/code-review）、后台异步执行
-- **技能系统** — 从 `skills/*/SKILL.md` 自动发现，按需加载（code-review、git、test）
-- **任务管理** — 持久化任务 + 会话级 TODO，支持依赖追踪和优先级
-- **消息压缩** — 微压缩 + LLM 摘要，基于 token 阈值（50k）触发，支撑超长对话
-- **会话管理** — 会话转录持久化，支持列出历史会话和恢复
-- **运行时权限切换** — 斜杠命令或 Shift+Tab 快捷键实时切换权限模式
+---
 
-## 快速开始
+## ✨ 核心特性
+
+<p align="center">
+  <img src="docs/src/images/readme-features-overview.png" alt="BareAgent 核心特性概览" width="720" />
+</p>
+
+| 特性 | 说明 |
+|------|------|
+| **多提供商支持** | Anthropic / OpenAI / DeepSeek，统一接口，流式与非流式输出自由切换 |
+| **内置工具** | bash、文件读写编辑、glob、grep 等开箱即用，延迟加载按需注册 |
+| **权限守卫** | 四种模式（DEFAULT / AUTO / PLAN / BYPASS），危险命令自动拦截 |
+| **多智能体协调** | 基于 JSONL 邮箱的消息总线，守护进程式自治智能体，请求-响应协议 |
+| **子智能体委派** | 隔离上下文、递归深度限制、类型化智能体（explore/plan/code-review）、后台异步执行 |
+| **技能系统** | 从 `skills/*/SKILL.md` 自动发现，按需加载（code-review、git、test） |
+| **任务管理** | 持久化任务 + 会话级 TODO，支持依赖追踪和优先级 |
+| **消息压缩** | 微压缩 + LLM 摘要，基于 token 阈值（50k）触发，支撑超长对话 |
+| **会话管理** | 会话转录持久化，支持列出历史会话和恢复上下文 |
+| **运行时切换** | 斜杠命令或 `Shift+Tab` 快捷键实时切换权限模式，无需重启 |
+
+---
+
+## 🏗️ 架构概览
+
+<p align="center">
+  <img src="docs/src/images/ch01-architecture.png" alt="BareAgent 架构图" width="720" />
+</p>
+
+核心循环 `agent_loop()` 是中央调度器：**调用 LLM → 解析工具调用 → 权限检查 → 执行处理器 → 收集结果**，最多迭代 200 次。支持流式输出和长对话消息自动压缩。
+
+---
+
+## 🚀 快速开始
 
 ### 环境要求
 
@@ -30,7 +54,7 @@ uv pip install -e ".[dev]"
 
 ### 配置
 
-设置 API 密钥环境变量：
+#### API Key 设置
 
 ```bash
 # Linux / macOS
@@ -44,6 +68,8 @@ $env:OPENAI_API_KEY="your-key-here"
 # Windows PowerShell（永久生效）
 [Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "your-key-here", "User")
 ```
+
+#### 配置文件
 
 默认配置在 `config.toml`，本地覆盖写入 `config.local.toml`（已 git-ignore）：
 
@@ -69,20 +95,28 @@ max_depth = 3
 default_type = "general-purpose"
 ```
 
-也可通过环境变量覆盖任意配置项：
+#### 环境变量
 
-| 环境变量 | 说明 |
-|---|---|
-| `BAREAGENT_PROVIDER` | 提供商名称 |
-| `BAREAGENT_MODEL` | 模型名称 |
-| `BAREAGENT_API_KEY_ENV` | API 密钥环境变量名 |
-| `BAREAGENT_PERMISSION_MODE` | 权限模式 |
-| `BAREAGENT_UI_STREAM` | 是否流式输出 |
-| `BAREAGENT_THINKING_MODE` | 思考模式（adaptive/enabled/disabled） |
-| `BAREAGENT_THINKING_BUDGET_TOKENS` | 思考 token 预算 |
-| `BAREAGENT_SKILLS_DIR` | 技能目录路径 |
-| `BAREAGENT_SUBAGENT_MAX_DEPTH` | 子智能体最大递归深度 |
-| `BAREAGENT_SUBAGENT_DEFAULT_TYPE` | 子智能体默认类型 |
+<p align="center">
+  <img src="docs/src/images/readme-config-flow.png" alt="配置流程图" width="640" />
+</p>
+
+配置优先级：`config.toml` → `config.local.toml` → 环境变量 / CLI 参数（优先级递增）。
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `BAREAGENT_PROVIDER` | 提供商名称 | `openai` |
+| `BAREAGENT_MODEL` | 模型名称 | `gpt-4.1` |
+| `BAREAGENT_API_KEY_ENV` | API 密钥环境变量名 | 按提供商自动设置 |
+| `BAREAGENT_BASE_URL` | 自定义 API 基础 URL | — |
+| `BAREAGENT_PERMISSION_MODE` | 权限模式 | `default` |
+| `BAREAGENT_UI_STREAM` | 是否流式输出 | `true` |
+| `BAREAGENT_UI_THEME` | UI 主题 | `dark` |
+| `BAREAGENT_THINKING_MODE` | 思考模式（adaptive/enabled/disabled） | `adaptive` |
+| `BAREAGENT_THINKING_BUDGET_TOKENS` | 思考 token 预算 | `10000` |
+| `BAREAGENT_SKILLS_DIR` | 技能目录路径 | 自动发现 |
+| `BAREAGENT_SUBAGENT_MAX_DEPTH` | 子智能体最大递归深度 | `3` |
+| `BAREAGENT_SUBAGENT_DEFAULT_TYPE` | 子智能体默认类型 | `general-purpose` |
 
 ### 运行
 
@@ -92,7 +126,68 @@ bareagent
 python -m src.main
 ```
 
-## 项目结构
+#### CLI 参数
+
+```bash
+bareagent --provider anthropic --model claude-sonnet-4-20250514
+bareagent --provider openai --model gpt-4.1
+bareagent --config ~/my_config.toml
+```
+
+| 参数 | 说明 |
+|------|------|
+| `--provider` | 覆盖配置文件中的 LLM 提供商（anthropic / openai / deepseek） |
+| `--model` | 覆盖配置文件中的模型名称 |
+| `--config` | 指定 TOML 配置文件路径（默认 `config.toml`，支持 `~` 扩展） |
+
+---
+
+## 💻 REPL 命令速查
+
+| 命令 | 说明 |
+|------|------|
+| `/help` | 显示帮助信息，列出所有可用命令 |
+| `/exit` | 退出 BareAgent，广播关闭信号给所有团队成员 |
+| `/clear` | 清屏并启动新对话（重置消息历史和会话 ID） |
+| `/new` | 启动新对话（仅重置消息，不清屏） |
+| `/compact` | 压缩对话上下文，生成 LLM 摘要释放 token |
+| `/default` | 切换到 DEFAULT 权限模式 |
+| `/auto` | 切换到 AUTO 权限模式 |
+| `/plan` | 切换到 PLAN 权限模式（只读） |
+| `/bypass` | 切换到 BYPASS 权限模式（无确认） |
+| `/mode` | 交互式权限模式选择菜单 |
+| `/sessions` | 列出已保存的历史会话 |
+| `/resume [id]` | 恢复上一个会话（可选指定会话 ID） |
+| `/team` | 管理团队智能体（子命令：`list`、`spawn <name>`、`send <name> <msg>`） |
+
+**快捷键：**
+
+| 按键 | 功能 |
+|------|------|
+| `Shift+Tab` | 循环切换权限模式（DEFAULT → AUTO → PLAN → BYPASS） |
+| `Ctrl+C` | 中断当前操作（按两次退出） |
+| `Ctrl+Z` | 立即退出 REPL |
+
+---
+
+## 🔐 权限模式
+
+| 模式 | 行为 | 适用场景 |
+|------|------|---------|
+| **DEFAULT** | 写操作需用户确认，安全工具自动批准 | 日常使用（默认） |
+| **AUTO** | 安全命令（ls、cat、git status、pytest 等）自动通过，仅拦截危险命令 | 信任环境下的高效开发 |
+| **PLAN** | 只允许只读工具，所有写操作被阻止 | 代码审查、方案设计 |
+| **BYPASS** | 所有操作自动批准，无任何确认 | 完全信任的自动化场景 |
+
+切换方式：`/default`、`/auto`、`/plan`、`/bypass`、`/mode` 或 `Shift+Tab`。
+
+---
+
+## 📁 项目结构
+
+<p align="center">
+  <img src="docs/src/images/readme-project-layers.png" alt="项目分层架构图" width="640" />
+</p>
 
 ```
 src/
@@ -135,24 +230,41 @@ src/
     ├── console.py         #   AgentConsole
     └── stream.py          #   StreamPrinter
 skills/                    # 可扩展技能模块
-tests/                     # pytest 测试（29 个测试文件）
+tests/                     # pytest 测试
 ```
 
-## 开发
+---
+
+## 🔗 完整文档
+
+项目提供基于 [mdBook](https://rust-lang.github.io/mdBook/) 的完整文档，涵盖架构设计、模块详解、开发指南等 15 个章节：
+
+```bash
+cd docs && mdbook serve
+```
+
+文档源码位于 [`docs/`](docs/) 目录。
+
+---
+
+## 🛠️ 开发
 
 ```bash
 # 测试
-pytest
-pytest tests/test_loop.py -k "test_name"
+pytest                             # 全部测试
+pytest tests/test_loop.py          # 单个文件
+pytest tests/test_loop.py -k "test_name"  # 单个测试
 
 # 代码检查与格式化
-ruff check src tests
-ruff check --fix src tests
-ruff format src tests
+ruff check src tests               # 检查
+ruff check --fix src tests          # 自动修复
+ruff format src tests               # 格式化
 ```
 
 提交信息遵循 Conventional Commits：`Fix:`、`Feat:`、`Refactor:`、`Test:`、`Docs:`
 
-## 许可证
+---
 
-MIT
+## 📄 许可证
+
+[MIT](LICENSE)
