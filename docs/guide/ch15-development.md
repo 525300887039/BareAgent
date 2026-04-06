@@ -62,7 +62,7 @@
 |------|------|
 | `skills/` | 内置技能目录，按 `skills/*/SKILL.md` 组织 |
 | `tests/` | pytest 测试 |
-| `docs/` | mdBook 文档源文件 |
+| `docs/` | VitePress 文档源文件 |
 | `config.toml` | 默认配置 |
 
 ## 15.2 开发环境搭建
@@ -304,12 +304,19 @@ skills/<name>/SKILL.md
 
 ### 文档扩展
 
-文档系统当前使用 mdBook，关键入口是：
+文档系统当前使用 VitePress，关键入口是：
 
-- `docs/book.toml`
-- `docs/src/SUMMARY.md`
+- `docs/.vitepress/config.mts`
+- `docs/guide/`
 
-如果你新增章节，除了正文文件本身，还要同步更新 `SUMMARY.md`，否则新页面不会出现在书籍目录中。
+如果你新增章节，除了正文文件本身，还要同步更新 `config.mts` 中的 `sidebar` 配置，否则新页面不会出现在侧边栏中。
+
+本地预览：
+
+```bash
+cd docs
+npm run docs:dev
+```
 
 ## 小结
 

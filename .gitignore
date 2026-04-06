@@ -22,5 +22,9 @@ dist/
 *.egg-info/
 config.local.toml
 docs/subagent-refactor-plan.md
-docs/book/
 docs/outline.md
+
+# VitePress
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+docs/node_modules/
