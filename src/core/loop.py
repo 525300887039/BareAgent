@@ -165,6 +165,7 @@ def _consume_stream(
     printer = _get_stream_printer(console)
     displayed_tool_calls: set[str] = set()
     saw_stream_event = False
+    streamed_any_text = False
     printer.start()
 
     try:
@@ -176,9 +177,11 @@ def _consume_stream(
                 response = stop.value
                 if response is None:
                     raise RuntimeError("Streaming provider did not return a response.")
-                return response, bool(streamed_text), displayed_tool_calls
+                return response, streamed_any_text or bool(streamed_text), displayed_tool_calls
 
             saw_stream_event = True
+            if event.type == "text" and bool(event.text):
+                streamed_any_text = True
             _handle_stream_event(
                 event=event,
                 printer=printer,

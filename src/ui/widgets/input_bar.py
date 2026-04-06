@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+from typing import Any
+
+from textual.message import Message
+from textual.suggester import SuggestFromList
+from textual.widgets import Input
+
+_SLASH_COMMANDS = [
+    "/help",
+    "/exit",
+    "/clear",
+    "/new",
+    "/compact",
+    "/default",
+    "/auto",
+    "/plan",
+    "/bypass",
+    "/mode",
+    "/sessions",
+    "/resume",
+    "/team",
+]
+
+
+class InputBar(Input):
+    """Input widget with slash-command suggestions."""
+
+    class Submitted(Message):
+        """Custom message emitted after a trimmed submission."""
+
+        def __init__(
+            self,
+            input_bar: InputBar,
+            value: str,
+            validation_result: Any = None,
+        ) -> None:
+            super().__init__()
+            self.input = input_bar
+            self.value = value.strip()
+            self.validation_result = validation_result
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(
+            suggester=SuggestFromList(_SLASH_COMMANDS, case_sensitive=False),
+            **kwargs,
+        )
+
+    def on_input_bar_submitted(self, event: Submitted) -> None:
+        """Clear the input and suppress empty submissions."""
+        self.value = ""
+        if not event.value:
+            event.stop()

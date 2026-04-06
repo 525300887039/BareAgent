@@ -1,0 +1,24 @@
+Screen {
+    layout: vertical;
+}
+
+#chat {
+    height: 1fr;
+    scrollbar-gutter: stable;
+}
+
+#input {
+    dock: bottom;
+    height: 3;
+    margin: 0 1 1 1;
+}
+
+ChatView > Static {
+    margin: 0 1;
+    padding: 0 1;
+}
+
+ChatView > Markdown {
+    margin: 0 1;
+    padding: 0 1;
+}
