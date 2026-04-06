@@ -46,8 +46,11 @@ class InputBar(Input):
             **kwargs,
         )
 
-    def on_input_bar_submitted(self, event: Submitted) -> None:
-        """Clear the input and suppress empty submissions."""
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Forward trimmed submissions through the custom message type."""
+        event.stop()
+        value = self.value.strip()
         self.value = ""
-        if not event.value:
-            event.stop()
+        if not value:
+            return
+        self.post_message(self.Submitted(self, value, event.validation_result))

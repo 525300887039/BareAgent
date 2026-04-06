@@ -9,16 +9,10 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import Completer, Completion
-from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.keys import Keys
-from prompt_toolkit.patch_stdout import patch_stdout
-
 from src.concurrency.background import BackgroundManager
 from src.core.fileutil import generate_random_id
 from src.core.context import assemble_system_prompt
-from src.core.loop import agent_loop, LLMCallError
+from src.core.loop import LLMCallError, agent_loop
 from src.core.tools import get_handlers, get_tools
 from src.memory.compact import Compactor
 from src.memory.transcript import TranscriptManager
@@ -95,7 +89,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--config",
         type=Path,
-        help="Path to the TOML config file. Defaults to BAREAGENT_CONFIG or the bundled config.toml.",
+        help=(
+            "Path to the TOML config file. Defaults to BAREAGENT_CONFIG "
+            "or the bundled config.toml."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -336,7 +333,10 @@ def _refresh_nag_reminder(
 
 
 def _build_loop_compact(compact_fn: object, todo_manager: TodoManager):
-    def _compact(messages: list[dict[str, str | list[dict[str, str]]]], force: bool = False) -> None:
+    def _compact(
+        messages: list[dict[str, str | list[dict[str, str]]]],
+        force: bool = False,
+    ) -> None:
         _refresh_nag_reminder(messages, todo_manager.get_nag_reminder())
         compact_fn(messages, force=force)  # type: ignore[misc]
 
@@ -357,7 +357,12 @@ _PERMISSION_SLASH = {
     "/plan": PermissionMode.PLAN,
     "/bypass": PermissionMode.BYPASS,
 }
-_MODE_CYCLE = [PermissionMode.DEFAULT, PermissionMode.AUTO, PermissionMode.PLAN, PermissionMode.BYPASS]
+_MODE_CYCLE = [
+    PermissionMode.DEFAULT,
+    PermissionMode.AUTO,
+    PermissionMode.PLAN,
+    PermissionMode.BYPASS,
+]
 _MODE_DESCRIPTIONS = {
     PermissionMode.DEFAULT: "Write operations require confirmation",
     PermissionMode.AUTO: "Safe commands auto-approved",
@@ -369,362 +374,6 @@ _SLASH_COMMANDS = [
     *_PERMISSION_SLASH, "/mode",
     "/sessions", "/resume", "/team",
 ]
-
-
-def _print_mode_change(old: PermissionMode, new: PermissionMode, ui_console: AgentConsole) -> None:
-    ui_console.print_status(f"Permission mode: {old.value} → {new.value}")
-
-
-def _next_permission_mode(current: PermissionMode) -> PermissionMode:
-    current_idx = _MODE_CYCLE.index(current)
-    return _MODE_CYCLE[(current_idx + 1) % len(_MODE_CYCLE)]
-
-
-def _handle_shift_tab_mode_cycle(
-    _event: object,
-    permission: PermissionGuard,
-    ui_console: AgentConsole,
-) -> None:
-    """Cycle permission mode without mutating the current prompt buffer."""
-    old = permission.mode
-    permission.mode = _next_permission_mode(permission.mode)
-    _print_mode_change(old, permission.mode, ui_console)
-
-
-def _handle_mode_interactive(
-    permission: PermissionGuard,
-    ui_console: AgentConsole,
-    session: PromptSession | None = None,
-) -> None:
-    """Display an interactive menu for selecting permission mode."""
-    lines = ["Permission modes:"]
-    for idx, mode in enumerate(_MODE_CYCLE, 1):
-        marker = "*" if mode == permission.mode else " "
-        lines.append(f"  {marker} {idx}) {mode.value:<10} {_MODE_DESCRIPTIONS[mode]}")
-    ui_console.print_status("\n".join(lines))
-    ui_console.print_status(f"Select [1-{len(_MODE_CYCLE)}] on the next prompt.")
-    valid_choices = {str(i) for i in range(1, len(_MODE_CYCLE) + 1)}
-    try:
-        choice = _read_user_input(session).strip()
-    except (EOFError, KeyboardInterrupt):
-        ui_console.print_status("Mode selection cancelled.")
-        return
-    if choice in valid_choices:
-        old = permission.mode
-        permission.mode = _MODE_CYCLE[int(choice) - 1]
-        _print_mode_change(old, permission.mode, ui_console)
-    else:
-        ui_console.print_status("Invalid choice, mode unchanged.")
-
-
-class _SlashCompleter(Completer):
-    """当输入以 / 开头时自动补全斜杠命令。"""
-
-    def get_completions(self, document, complete_event):
-        text = document.text_before_cursor
-        if not text.startswith("/"):
-            return
-        for cmd in _SLASH_COMMANDS:
-            if cmd.startswith(text):
-                yield Completion(cmd, start_position=-len(text))
-
-
-def _supports_prompt_toolkit() -> bool:
-    return sys.stdin.isatty() and sys.stdout.isatty()
-
-
-def _read_user_input(session: PromptSession | None) -> str:
-    if session is None:
-        return input("bareagent> ")
-
-    with patch_stdout():
-        return session.prompt("bareagent> ")
-
-
-def run_repl(
-    config: Config,
-    provider: BaseLLMProvider,
-    workspace: Path | None = None,
-    agent_console: AgentConsole | None = None,
-) -> int:
-    ui_console = agent_console or AgentConsole()
-    workspace_path = (workspace or Path.cwd()).resolve()
-    transcript_mgr = TranscriptManager(workspace_path / ".transcripts")
-    session_id = _generate_session_id(transcript_mgr)
-    _kb = KeyBindings()
-
-    @_kb.add(Keys.ControlZ)
-    def _handle_ctrl_z(event):
-        """Ctrl+Z immediately raises EOFError to exit the REPL."""
-        event.app.exit(exception=EOFError())
-
-    @_kb.add(Keys.BackTab)
-    def _handle_shift_tab(event):
-        """Shift+Tab cycles through permission modes."""
-        _handle_shift_tab_mode_cycle(event, permission, ui_console)
-
-    session = (
-        PromptSession(
-            completer=_SlashCompleter(),
-            complete_while_typing=True,
-            key_bindings=_kb,
-        )
-        if _supports_prompt_toolkit()
-        else None
-    )
-    todo_manager = TodoManager()
-    task_manager = _load_task_manager(workspace_path, ui_console)
-    bg_manager = BackgroundManager()
-    teammate_manager = _load_teammate_manager(workspace_path, ui_console)
-    skill_loader = SkillLoader(resolve_skills_dir())
-    message_bus, main_mailbox_cursor = _switch_session_mailbox(
-        workspace_path,
-        session_id,
-    )
-    spawned_agents: dict[str, AutonomousAgent] = {}
-    messages = _initial_messages(
-        workspace_path,
-        skill_summary=skill_loader.get_skill_list_prompt(),
-    )
-    tools = get_tools()
-    permission = _build_permission_guard(config)
-    base_compact_fn = Compactor(
-        provider=provider,
-        transcript_mgr=transcript_mgr,
-        session_id=session_id,
-    )
-    compact_fn = _build_loop_compact(base_compact_fn, todo_manager)
-    handlers = _build_handlers(
-        workspace_path=workspace_path,
-        todo_manager=todo_manager,
-        task_manager=task_manager,
-        skill_loader=skill_loader,
-        provider=provider,
-        tools=tools,
-        permission=permission,
-        bg_manager=bg_manager,
-        messages=messages,
-        config=config,
-        runtime_id=session_id,
-        teammate_manager=teammate_manager,
-        message_bus=message_bus,
-        spawned_agents=spawned_agents,
-        agent_name=MAIN_AGENT_NAME,
-    )
-
-    ui_console.console.print(
-        f"BareAgent REPL ({config.provider.name}/{config.provider.model})",
-        style="bold cyan",
-    )
-    ui_console.print_status(
-        f"Permission mode: {permission.mode.value}. Type /help to see available commands."
-    )
-
-    ctrl_c_count = 0
-    while True:
-        main_mailbox_cursor = _drain_team_mailbox(
-            ui_console,
-            message_bus=message_bus,
-            since=main_mailbox_cursor,
-        )
-        try:
-            user_input = _read_user_input(session)
-        except KeyboardInterrupt:
-            ctrl_c_count += 1
-            if ctrl_c_count >= 2:
-                _broadcast_team_shutdown(message_bus)
-                ui_console.print_status("\nExiting BareAgent.")
-                return 0
-            ui_console.console.print(
-                "\nPress Ctrl+C again to exit, or continue typing.", style="yellow"
-            )
-            continue
-        except EOFError:
-            _broadcast_team_shutdown(message_bus)
-            ui_console.print_status("\nExiting BareAgent.")
-            return 0
-
-        ctrl_c_count = 0
-        text = user_input.strip()
-        if not text:
-            continue
-        if text == "/exit":
-            _broadcast_team_shutdown(message_bus)
-            ui_console.print_status("Exiting BareAgent.")
-            return 0
-        if text == "/help":
-            ui_console.print_status(
-                "Available commands:\n"
-                "  /help      Show this help message\n"
-                "  /exit      Exit BareAgent\n"
-                "  /clear     Clear screen and start new conversation\n"
-                "  /new       Start a new conversation\n"
-                "  /compact   Compress conversation context\n"
-                "  /default   Switch to DEFAULT permission mode\n"
-                "  /auto      Switch to AUTO permission mode\n"
-                "  /plan      Switch to PLAN permission mode\n"
-                "  /bypass    Switch to BYPASS permission mode\n"
-                "  /mode      Interactive permission mode selection\n"
-                "  /sessions  List saved sessions\n"
-                "  /resume    Resume a previous session\n"
-                "  /team      Manage team agents (list | spawn | send)\n"
-                "  Shift+Tab  Cycle through permission modes"
-            )
-            continue
-        if text in ("/clear", "/new"):
-            # Reset messages to initial state
-            messages[:] = _initial_messages(
-                workspace_path, skill_summary=skill_loader.get_skill_list_prompt()
-            )
-            # Clear session-scoped TODO
-            todo_manager.reset()
-            # Generate new session_id
-            new_session_id = _generate_session_id(
-                transcript_mgr,
-                reserved_ids={_get_compact_session_id(compact_fn)},
-            )
-            _set_compact_session_id(compact_fn, new_session_id)
-            message_bus, main_mailbox_cursor = _switch_session_mailbox(
-                workspace_path,
-                new_session_id,
-                current_bus=message_bus,
-            )
-            spawned_agents = {}
-            # Rebuild handlers (messages reference changed)
-            handlers = _build_handlers(
-                workspace_path=workspace_path,
-                todo_manager=todo_manager,
-                task_manager=task_manager,
-                skill_loader=skill_loader,
-                provider=provider,
-                tools=tools,
-                permission=permission,
-                bg_manager=bg_manager,
-                messages=messages,
-                config=config,
-                runtime_id=new_session_id,
-                teammate_manager=teammate_manager,
-                message_bus=message_bus,
-                spawned_agents=spawned_agents,
-                agent_name=MAIN_AGENT_NAME,
-            )
-            # Clear screen
-            ui_console.console.clear()
-            ui_console.print_status("New conversation started.")
-            continue
-        if text == "/compact":
-            compact_fn(messages, force=True)
-            _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
-            ui_console.print_status("Context compaction finished.")
-            handlers = _build_handlers(
-                workspace_path=workspace_path,
-                todo_manager=todo_manager,
-                task_manager=task_manager,
-                skill_loader=skill_loader,
-                provider=provider,
-                tools=tools,
-                permission=permission,
-                bg_manager=bg_manager,
-                messages=messages,
-                config=config,
-                runtime_id=_get_compact_session_id(compact_fn),
-                teammate_manager=teammate_manager,
-                message_bus=message_bus,
-                spawned_agents=spawned_agents,
-                agent_name=MAIN_AGENT_NAME,
-            )
-            continue
-        if text == "/sessions":
-            sessions = transcript_mgr.list_sessions()
-            if not sessions:
-                ui_console.print_status("No saved sessions.")
-            else:
-                for saved_session in sessions:
-                    ui_console.console.print(saved_session)
-            continue
-        if text == "/resume" or text.startswith("/resume "):
-            _, _, raw_session_id = text.partition(" ")
-            requested_session = raw_session_id.strip() or None
-            try:
-                restored_messages = transcript_mgr.resume(requested_session)
-            except FileNotFoundError as exc:
-                ui_console.print_error(str(exc))
-                continue
-            messages[:] = restored_messages
-            resumed_session = requested_session or transcript_mgr.get_latest_session()
-            if resumed_session is not None:
-                _set_compact_session_id(compact_fn, resumed_session)
-                message_bus, main_mailbox_cursor = _switch_session_mailbox(
-                    workspace_path,
-                    resumed_session,
-                    current_bus=message_bus,
-                )
-                spawned_agents = {}
-            handlers = _build_handlers(
-                workspace_path=workspace_path,
-                todo_manager=todo_manager,
-                task_manager=task_manager,
-                skill_loader=skill_loader,
-                provider=provider,
-                tools=tools,
-                permission=permission,
-                bg_manager=bg_manager,
-                messages=messages,
-                config=config,
-                runtime_id=_get_compact_session_id(compact_fn),
-                teammate_manager=teammate_manager,
-                message_bus=message_bus,
-                spawned_agents=spawned_agents,
-                agent_name=MAIN_AGENT_NAME,
-            )
-            ui_console.print_status(f"Resumed session: {resumed_session}")
-            continue
-        if text in _PERMISSION_SLASH:
-            old = permission.mode
-            permission.mode = _PERMISSION_SLASH[text]
-            _print_mode_change(old, permission.mode, ui_console)
-            continue
-        if text == "/mode":
-            _handle_mode_interactive(permission, ui_console, session)
-            continue
-        if text == "/team" or text.startswith("/team "):
-            _handle_team_command(
-                text,
-                ui_console,
-                teammate_manager=teammate_manager,
-                team_handlers=handlers,
-            )
-            continue
-
-        messages.append({"role": "user", "content": text})
-        snapshot_len = len(messages) - 1
-        try:
-            agent_loop(
-                provider=provider,
-                messages=messages,
-                tools=tools,
-                handlers=handlers,
-                permission=permission,
-                compact_fn=compact_fn,
-                bg_manager=bg_manager,
-                stream=config.ui.stream,
-                console=ui_console,
-            )
-            _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
-            main_mailbox_cursor = _drain_team_mailbox(
-                ui_console,
-                message_bus=message_bus,
-                since=main_mailbox_cursor,
-            )
-        except LLMCallError:
-            del messages[snapshot_len:]
-            ui_console.console.print("LLM call failed, please try again.", style="yellow")
-            continue
-        except KeyboardInterrupt:
-            ctrl_c_count = 0
-            del messages[snapshot_len:]
-            ui_console.console.print("\nAgent loop interrupted.", style="yellow")
-            continue
 
 
 def _build_permission_guard(config: Config) -> PermissionGuard:
@@ -1079,8 +728,291 @@ def _broadcast_team_shutdown(message_bus: MessageBus) -> None:
     )
 
 
+def _supports_textual_ui() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _read_stdio_input() -> str:
+    prompt = "bareagent> " if sys.stdin.isatty() and sys.stdout.isatty() else ""
+    return input(prompt)
+
+
+def _handle_mode_selection_stdio(
+    permission: PermissionGuard,
+    ui_console: AgentConsole,
+) -> None:
+    lines = ["Permission modes:"]
+    for idx, mode in enumerate(_MODE_CYCLE, 1):
+        marker = "*" if mode == permission.mode else " "
+        lines.append(f"  {marker} {idx}) {mode.value:<10} {_MODE_DESCRIPTIONS[mode]}")
+    ui_console.print_status("\n".join(lines))
+    ui_console.print_status(f"Select [1-{len(_MODE_CYCLE)}] on the next prompt.")
+    valid_choices = {str(i) for i in range(1, len(_MODE_CYCLE) + 1)}
+    try:
+        choice = _read_stdio_input().strip()
+    except (EOFError, KeyboardInterrupt):
+        ui_console.print_status("Mode selection cancelled.")
+        return
+
+    if choice in valid_choices:
+        old = permission.mode
+        permission.mode = _MODE_CYCLE[int(choice) - 1]
+        ui_console.print_status(f"Permission mode: {old.value} → {permission.mode.value}")
+        return
+
+    ui_console.print_status("Invalid choice, mode unchanged.")
+
+
+def _run_stdio_session(
+    config: Config,
+    provider: BaseLLMProvider,
+    *,
+    workspace: Path | None = None,
+    agent_console: AgentConsole | None = None,
+) -> int:
+    ui_console = agent_console or AgentConsole()
+    workspace_path = (workspace or Path.cwd()).resolve()
+    transcript_mgr = TranscriptManager(workspace_path / ".transcripts")
+    session_id = _generate_session_id(transcript_mgr)
+    todo_manager = TodoManager()
+    task_manager = _load_task_manager(workspace_path, ui_console)
+    bg_manager = BackgroundManager()
+    teammate_manager = _load_teammate_manager(workspace_path, ui_console)
+    skill_loader = SkillLoader(resolve_skills_dir())
+    message_bus, main_mailbox_cursor = _switch_session_mailbox(
+        workspace_path,
+        session_id,
+    )
+    spawned_agents: dict[str, AutonomousAgent] = {}
+    messages = _initial_messages(
+        workspace_path,
+        skill_summary=skill_loader.get_skill_list_prompt(),
+    )
+    tools = get_tools()
+    permission = _build_permission_guard(config)
+    base_compact_fn = Compactor(
+        provider=provider,
+        transcript_mgr=transcript_mgr,
+        session_id=session_id,
+    )
+    compact_fn = _build_loop_compact(base_compact_fn, todo_manager)
+    handlers = _build_handlers(
+        workspace_path=workspace_path,
+        todo_manager=todo_manager,
+        task_manager=task_manager,
+        skill_loader=skill_loader,
+        provider=provider,
+        tools=tools,
+        permission=permission,
+        bg_manager=bg_manager,
+        messages=messages,
+        config=config,
+        runtime_id=session_id,
+        teammate_manager=teammate_manager,
+        message_bus=message_bus,
+        spawned_agents=spawned_agents,
+        agent_name=MAIN_AGENT_NAME,
+    )
+
+    ui_console.console.print(
+        f"BareAgent REPL ({config.provider.name}/{config.provider.model})",
+        style="bold cyan",
+    )
+    ui_console.print_status(
+        f"Permission mode: {permission.mode.value}. Type /help to see available commands."
+    )
+
+    while True:
+        main_mailbox_cursor = _drain_team_mailbox(
+            ui_console,
+            message_bus=message_bus,
+            since=main_mailbox_cursor,
+        )
+        try:
+            user_input = _read_stdio_input()
+        except KeyboardInterrupt:
+            _broadcast_team_shutdown(message_bus)
+            ui_console.print_status("\nExiting BareAgent.")
+            return 0
+        except EOFError:
+            _broadcast_team_shutdown(message_bus)
+            ui_console.print_status("\nExiting BareAgent.")
+            return 0
+
+        text = user_input.strip()
+        if not text:
+            continue
+        if text == "/exit":
+            _broadcast_team_shutdown(message_bus)
+            ui_console.print_status("Exiting BareAgent.")
+            return 0
+        if text == "/help":
+            ui_console.print_status(
+                "Available commands:\n"
+                "  /help      Show this help message\n"
+                "  /exit      Exit BareAgent\n"
+                "  /clear     Clear screen and start new conversation\n"
+                "  /new       Start a new conversation\n"
+                "  /compact   Compress conversation context\n"
+                "  /default   Switch to DEFAULT permission mode\n"
+                "  /auto      Switch to AUTO permission mode\n"
+                "  /plan      Switch to PLAN permission mode\n"
+                "  /bypass    Switch to BYPASS permission mode\n"
+                "  /mode      Interactive permission mode selection\n"
+                "  /sessions  List saved sessions\n"
+                "  /resume    Resume a previous session\n"
+                "  /team      Manage team agents (list | spawn | send)"
+            )
+            continue
+        if text in ("/clear", "/new"):
+            messages[:] = _initial_messages(
+                workspace_path,
+                skill_summary=skill_loader.get_skill_list_prompt(),
+            )
+            todo_manager.reset()
+            new_session_id = _generate_session_id(
+                transcript_mgr,
+                reserved_ids={_get_compact_session_id(compact_fn)},
+            )
+            _set_compact_session_id(compact_fn, new_session_id)
+            message_bus, main_mailbox_cursor = _switch_session_mailbox(
+                workspace_path,
+                new_session_id,
+                current_bus=message_bus,
+            )
+            spawned_agents = {}
+            handlers = _build_handlers(
+                workspace_path=workspace_path,
+                todo_manager=todo_manager,
+                task_manager=task_manager,
+                skill_loader=skill_loader,
+                provider=provider,
+                tools=tools,
+                permission=permission,
+                bg_manager=bg_manager,
+                messages=messages,
+                config=config,
+                runtime_id=new_session_id,
+                teammate_manager=teammate_manager,
+                message_bus=message_bus,
+                spawned_agents=spawned_agents,
+                agent_name=MAIN_AGENT_NAME,
+            )
+            ui_console.print_status("New conversation started.")
+            continue
+        if text == "/compact":
+            compact_fn(messages, force=True)
+            _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
+            ui_console.print_status("Context compaction finished.")
+            handlers = _build_handlers(
+                workspace_path=workspace_path,
+                todo_manager=todo_manager,
+                task_manager=task_manager,
+                skill_loader=skill_loader,
+                provider=provider,
+                tools=tools,
+                permission=permission,
+                bg_manager=bg_manager,
+                messages=messages,
+                config=config,
+                runtime_id=_get_compact_session_id(compact_fn),
+                teammate_manager=teammate_manager,
+                message_bus=message_bus,
+                spawned_agents=spawned_agents,
+                agent_name=MAIN_AGENT_NAME,
+            )
+            continue
+        if text == "/sessions":
+            sessions = transcript_mgr.list_sessions()
+            if not sessions:
+                ui_console.print_status("No saved sessions.")
+            else:
+                for saved_session in sessions:
+                    ui_console.console.print(saved_session)
+            continue
+        if text == "/resume" or text.startswith("/resume "):
+            _, _, raw_session_id = text.partition(" ")
+            requested_session = raw_session_id.strip() or None
+            try:
+                restored_messages = transcript_mgr.resume(requested_session)
+            except FileNotFoundError as exc:
+                ui_console.print_error(str(exc))
+                continue
+            messages[:] = restored_messages
+            resumed_session = requested_session or transcript_mgr.get_latest_session()
+            if resumed_session is not None:
+                _set_compact_session_id(compact_fn, resumed_session)
+                message_bus, main_mailbox_cursor = _switch_session_mailbox(
+                    workspace_path,
+                    resumed_session,
+                    current_bus=message_bus,
+                )
+                spawned_agents = {}
+            handlers = _build_handlers(
+                workspace_path=workspace_path,
+                todo_manager=todo_manager,
+                task_manager=task_manager,
+                skill_loader=skill_loader,
+                provider=provider,
+                tools=tools,
+                permission=permission,
+                bg_manager=bg_manager,
+                messages=messages,
+                config=config,
+                runtime_id=_get_compact_session_id(compact_fn),
+                teammate_manager=teammate_manager,
+                message_bus=message_bus,
+                spawned_agents=spawned_agents,
+                agent_name=MAIN_AGENT_NAME,
+            )
+            ui_console.print_status(f"Resumed session: {resumed_session}")
+            continue
+        if text in _PERMISSION_SLASH:
+            old = permission.mode
+            permission.mode = _PERMISSION_SLASH[text]
+            ui_console.print_status(f"Permission mode: {old.value} → {permission.mode.value}")
+            continue
+        if text == "/mode":
+            _handle_mode_selection_stdio(permission, ui_console)
+            continue
+        if text == "/team" or text.startswith("/team "):
+            _handle_team_command(
+                text,
+                ui_console,
+                teammate_manager=teammate_manager,
+                team_handlers=handlers,
+            )
+            continue
+
+        messages.append({"role": "user", "content": text})
+        snapshot_len = len(messages) - 1
+        try:
+            agent_loop(
+                provider=provider,
+                messages=messages,
+                tools=tools,
+                handlers=handlers,
+                permission=permission,
+                compact_fn=compact_fn,
+                bg_manager=bg_manager,
+                stream=config.ui.stream,
+                console=ui_console,
+            )
+            _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
+            main_mailbox_cursor = _drain_team_mailbox(
+                ui_console,
+                message_bus=message_bus,
+                since=main_mailbox_cursor,
+            )
+        except LLMCallError:
+            del messages[snapshot_len:]
+            ui_console.print_error("LLM call failed, please try again.")
+        except KeyboardInterrupt:
+            del messages[snapshot_len:]
+            ui_console.print_status("Agent loop interrupted.")
+
+
 def main(argv: list[str] | None = None) -> int:
-    app_console = AgentConsole()
     args = parse_args(argv)
     config_path = resolve_config_path(args.config)
 
@@ -1091,19 +1023,30 @@ def main(argv: list[str] | None = None) -> int:
             model_override=args.model,
         )
     except FileNotFoundError:
-        app_console.print_error(f"Config file not found: {config_path}")
+        print(f"Config file not found: {config_path}")
         return 1
     except (tomllib.TOMLDecodeError, ValueError) as exc:
-        app_console.print_error(f"Failed to load config: {exc}")
+        print(f"Failed to load config: {exc}")
         return 1
 
     try:
         provider = create_provider(config)
     except ValueError as exc:
-        app_console.print_error(f"Failed to initialize provider: {exc}")
+        print(f"Failed to initialize provider: {exc}")
         return 1
 
-    return run_repl(config, provider, agent_console=app_console)
+    if not _supports_textual_ui():
+        print(
+            "Interactive terminal not detected; falling back to stdio mode.",
+            file=sys.stderr,
+        )
+        return _run_stdio_session(config, provider)
+
+    from src.ui.app import BareAgentApp
+
+    app = BareAgentApp(config=config, provider=provider)
+    app.run()
+    return 0
 
 
 if __name__ == "__main__":

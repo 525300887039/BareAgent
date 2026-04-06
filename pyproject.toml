@@ -11,7 +11,6 @@ dependencies = [
     "anthropic>=0.52",
     "openai>=1.70",
     "rich>=14.0",
-    "prompt-toolkit>=3.0",
     "textual>=1.0",
 ]
 

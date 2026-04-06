@@ -4,7 +4,7 @@ import json
 import re
 import sys
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from src.planning.agent_types import AgentType
@@ -60,11 +60,18 @@ class PermissionGuard:
         re.compile(r"find\b.*-delete\b"),
     ]
 
-    def __init__(self, mode: PermissionMode = PermissionMode.DEFAULT, *, fail_closed: bool = False) -> None:
+    def __init__(
+        self,
+        mode: PermissionMode = PermissionMode.DEFAULT,
+        *,
+        fail_closed: bool = False,
+        ask_user_fn: Callable[[Any], bool] | None = None,
+    ) -> None:
         self.mode = mode
         self.allow_rules: list[str] = []
         self.deny_rules: list[str] = []
         self.fail_closed = fail_closed
+        self._ask_user_fn = ask_user_fn
 
     def requires_confirm(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
         if self.mode == PermissionMode.BYPASS:
@@ -100,6 +107,8 @@ class PermissionGuard:
         if self.mode == PermissionMode.PLAN:
             print(f"Plan mode: {call.name} blocked (read-only)")
             return False
+        if self._ask_user_fn is not None:
+            return self._ask_user_fn(call)
         if not sys.stdin.isatty():
             print(f"Non-interactive environment: {call.name} denied")
             return False
@@ -127,6 +136,7 @@ class PermissionGuard:
         child = PermissionGuard(
             mode=mode if mode is not None else self.mode,
             fail_closed=fail_closed if fail_closed is not None else self.fail_closed,
+            ask_user_fn=self._ask_user_fn,
         )
         child.allow_rules = list(self.allow_rules)
         child.deny_rules = list(self.deny_rules)
