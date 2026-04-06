@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from rich import box
 from rich.panel import Panel
@@ -14,12 +14,18 @@ from textual.widget import Widget
 from textual.widgets import Markdown, Static
 
 from src.ui.console import MAX_TOOL_OUTPUT_CHARS, _render_payload
-from src.ui.theme import get_theme
+from src.ui.theme import ThemeManager, get_theme
+
+
+_EntryKind = Literal[
+    "separator", "user", "tool_call", "tool_result",
+    "status", "error", "assistant_markdown",
+]
 
 
 @dataclass(slots=True)
 class _TranscriptEntry:
-    kind: str
+    kind: _EntryKind
     payload: Any = None
     name: str | None = None
 
@@ -106,13 +112,14 @@ class ChatView(VerticalScroll):
         if len(transcript_widgets) != len(self._entries):
             return
 
+        tm = get_theme()
         for widget, entry in zip(transcript_widgets, self._entries):
             if entry.kind == "assistant_markdown":
                 if isinstance(widget, Markdown):
                     widget.update(str(entry.payload))
                 continue
             if isinstance(widget, Static):
-                widget.update(self._build_renderable(entry))
+                widget.update(self._build_renderable(entry, tm))
 
         self.scroll_end(animate=False)
 
@@ -129,8 +136,11 @@ class ChatView(VerticalScroll):
             return Markdown(str(entry.payload))
         return Static(self._build_renderable(entry))
 
-    def _build_renderable(self, entry: _TranscriptEntry) -> Rule | Text | Panel:
-        tm = get_theme()
+    def _build_renderable(
+        self, entry: _TranscriptEntry, tm: ThemeManager | None = None,
+    ) -> Rule | Text | Panel:
+        if tm is None:
+            tm = get_theme()
         if entry.kind == "separator":
             return Rule(style=tm.palette.text_muted)
         if entry.kind == "user":

@@ -3,7 +3,7 @@
 from src.ui.console import AgentConsole
 from src.ui.protocol import StreamProtocol, UIProtocol
 from src.ui.stream import StreamPrinter
-from src.ui.theme import ThemeManager, get_theme, init_theme
+from src.ui.theme import ThemeManager, format_theme_list, format_unknown_theme, get_theme, init_theme
 
 __all__ = [
     "AgentConsole",
@@ -13,4 +13,6 @@ __all__ = [
     "ThemeManager",
     "get_theme",
     "init_theme",
+    "format_theme_list",
+    "format_unknown_theme",
 ]

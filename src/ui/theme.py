@@ -209,6 +209,24 @@ def get_theme() -> ThemeManager:
     return _manager
 
 
+def format_theme_list(tm: ThemeManager) -> str:
+    """Build the 'Available themes:' listing with a marker on the active theme."""
+    lines = ["Available themes:"]
+    for name in tm.available_themes():
+        marker = "●" if name == tm.name else "○"
+        lines.append(f"  {marker} {name}")
+    lines.append("Usage: /theme <name>")
+    return "\n".join(lines)
+
+
+def format_unknown_theme(theme_name: str) -> str:
+    """Build the error message for an unrecognised theme name."""
+    return (
+        f"Unknown theme: {theme_name}. "
+        f"Available: {', '.join(ThemeManager.available_themes())}"
+    )
+
+
 __all__ = [
     "ColorPalette",
     "Icons",
@@ -217,4 +235,6 @@ __all__ = [
     "ThemeManager",
     "init_theme",
     "get_theme",
+    "format_theme_list",
+    "format_unknown_theme",
 ]
