@@ -122,6 +122,26 @@ class FakeStreamPrinter:
         return "".join(self.chunks)
 
 
+class ResettingStreamPrinter:
+    def __init__(self) -> None:
+        self._active = False
+        self._chunks: list[str] = []
+
+    def start(self) -> None:
+        self._active = True
+
+    def feed(self, token: str) -> None:
+        if not self._active:
+            self.start()
+        self._chunks.append(token)
+
+    def finish(self) -> str:
+        result = "".join(self._chunks)
+        self._chunks = []
+        self._active = False
+        return result
+
+
 def test_agent_loop_returns_text_without_tool_calls() -> None:
     provider = MockProvider(
         [
@@ -283,6 +303,60 @@ def test_agent_loop_streams_and_formats_tool_activity(monkeypatch) -> None:
         ["Checking file."],
         ["Tool finished."],
     ]
+
+
+def test_agent_loop_treats_pre_tool_stream_text_as_streamed_output() -> None:
+    provider = MockProvider(
+        [],
+        stream_payloads=[
+            (
+                [
+                    StreamEvent(type="text", text="Checking file."),
+                    StreamEvent(
+                        type="tool_call",
+                        tool_call_id="toolu_1",
+                        name="echo",
+                        input={"value": "hello"},
+                    ),
+                ],
+                LLMResponse(
+                    text="Checking file.",
+                    tool_calls=[ToolCall(id="toolu_1", name="echo", input={"value": "hello"})],
+                    stop_reason="tool_use",
+                    input_tokens=10,
+                    output_tokens=5,
+                ),
+            ),
+            (
+                [StreamEvent(type="text", text="Done.")],
+                LLMResponse(
+                    text="Done.",
+                    tool_calls=[],
+                    stop_reason="end_turn",
+                    input_tokens=8,
+                    output_tokens=3,
+                ),
+            ),
+        ],
+    )
+    console = FakeConsole()
+    console.get_stream_printer = lambda: ResettingStreamPrinter()  # type: ignore[method-assign]
+
+    result = agent_loop(
+        provider=provider,
+        messages=[
+            {"role": "system", "content": "You are BareAgent."},
+            {"role": "user", "content": "Run the tool."},
+        ],
+        tools=[],
+        handlers={"echo": lambda value: f"handled {value}"},
+        permission=PermissionGuard(PermissionMode.BYPASS),
+        stream=True,
+        console=console,
+    )
+
+    assert result == "Done."
+    assert console.assistant == []
 
 
 def test_agent_loop_falls_back_to_non_stream_mode(monkeypatch) -> None:

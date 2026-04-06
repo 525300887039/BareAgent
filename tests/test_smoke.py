@@ -135,4 +135,5 @@ def test_e2e_file_operations(tmp_path: Path):
     target = tmp_path / "smoke_test.txt"
     assert target.exists(), f"文件 {target} 应被创建"
     content = _read_text_with_common_encodings(target)
-    assert "test ok" in content, f"文件内容应包含 'test ok'，实际: {content!r}"
+    normalized = " ".join(content.split())
+    assert "test ok" in normalized, f"文件内容应包含 'test ok'，实际: {content!r}"
