@@ -8,6 +8,7 @@ from textual.widgets import Markdown
 
 from src.permission.guard import PermissionMode
 from src.provider.base import BaseLLMProvider, LLMResponse
+from src.ui.theme import ThemeManager, get_theme
 from src.ui.app import BareAgentApp
 from src.ui.widgets import ChatView, InputBar, PermissionModal
 
@@ -227,6 +228,96 @@ async def test_slash_mode_command_consumes_next_numeric_input(make_app) -> None:
         rendered = "\n".join(_widget_text(child) for child in chat.children)
         assert app._permission.mode is PermissionMode.AUTO
         assert "Permission mode: default → auto" in rendered
+
+
+@pytest.mark.anyio
+async def test_on_mount_initializes_theme_from_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config = make_test_config(tmp_path)
+    config.ui.theme = "nord"
+    app = BareAgentApp(config=config, provider=ReplayProvider())
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        assert get_theme().name == "nord"
+
+
+@pytest.mark.anyio
+async def test_slash_theme_lists_available_themes_and_marks_current(make_app) -> None:
+    app = make_app()
+
+    async with app.run_test() as pilot:
+        input_bar = app.query_one("#input", InputBar)
+        chat = app.query_one("#chat", ChatView)
+
+        input_bar.value = "/theme"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        rendered = "\n".join(_widget_text(child) for child in chat.children)
+        assert "Available themes:" in rendered
+        assert "● catppuccin-mocha" in rendered
+        assert "Usage: /theme <name>" in rendered
+        for theme_name in ThemeManager.available_themes():
+            assert theme_name in rendered
+
+
+@pytest.mark.anyio
+async def test_slash_theme_switches_theme(make_app) -> None:
+    app = make_app()
+
+    async with app.run_test() as pilot:
+        input_bar = app.query_one("#input", InputBar)
+        chat = app.query_one("#chat", ChatView)
+
+        input_bar.value = "/theme dracula"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        rendered = "\n".join(_widget_text(child) for child in chat.children)
+        assert get_theme().name == "dracula"
+        assert "Theme switched to: dracula" in rendered
+
+
+@pytest.mark.anyio
+async def test_slash_theme_rerenders_existing_transcript(make_app) -> None:
+    app = make_app()
+
+    async with app.run_test() as pilot:
+        input_bar = app.query_one("#input", InputBar)
+        chat = app.query_one("#chat", ChatView)
+        initial_status_style = chat.children[0].content.style
+
+        input_bar.value = "/theme dracula"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert chat.children[0].content.style == get_theme().palette.text_muted
+        assert chat.children[0].content.style != initial_status_style
+        assert "> /theme dracula" in _widget_text(chat.children[-2])
+        assert chat.children[-2].content.style == f"bold {get_theme().palette.accent}"
+
+
+@pytest.mark.anyio
+async def test_slash_theme_rejects_unknown_theme(make_app) -> None:
+    app = make_app()
+
+    async with app.run_test() as pilot:
+        input_bar = app.query_one("#input", InputBar)
+        chat = app.query_one("#chat", ChatView)
+
+        input_bar.value = "/theme nonexistent"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        rendered = "\n".join(_widget_text(child) for child in chat.children)
+        assert get_theme().name == "catppuccin-mocha"
+        assert "Unknown theme: nonexistent." in rendered
+        assert ", ".join(ThemeManager.available_themes()) in rendered
 
 
 @pytest.mark.anyio

@@ -1,9 +1,11 @@
 import json
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
 
 import src.main as main_module
+from rich.console import Console
 from src.main import (
     DEFAULT_CONFIG_PATH,
     Config,
@@ -18,6 +20,8 @@ from src.main import (
 )
 from src.memory.transcript import TranscriptManager
 from src.provider.base import ThinkingConfig
+from src.ui.console import AgentConsole
+from tests.conftest import make_test_config
 
 
 def test_resolve_config_path_uses_bundled_config_outside_project_cwd(
@@ -245,6 +249,20 @@ def test_slash_new_appears_in_slash_commands() -> None:
     assert "/new" in main_module._SLASH_COMMANDS
 
 
+def test_slash_theme_appears_after_mode_in_slash_commands() -> None:
+    mode_index = main_module._SLASH_COMMANDS.index("/mode")
+
+    assert main_module._SLASH_COMMANDS[mode_index + 1] == "/theme"
+
+
+def test_help_text_describes_theme_command() -> None:
+    assert (
+        "  /theme     Switch color theme "
+        "(catppuccin-mocha, dracula, nord, tokyo-night, gruvbox)\n"
+        in main_module._HELP_TEXT
+    )
+
+
 def test_main_falls_back_to_stdio_when_textual_ui_is_unavailable(
     monkeypatch,
 ) -> None:
@@ -271,6 +289,57 @@ def test_main_falls_back_to_stdio_when_textual_ui_is_unavailable(
 
     assert main_module.main([]) == 7
     assert captured == {"config": config, "provider": provider}
+
+
+def test_stdio_theme_switch_preserves_injected_console(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config = make_test_config(tmp_path)
+    output_buffer = StringIO()
+    agent_console = AgentConsole(
+        Console(
+            file=output_buffer,
+            force_terminal=False,
+            color_system=None,
+            width=100,
+        )
+    )
+    inputs = iter(["/theme dracula", "/exit"])
+
+    class _FakeSkillLoader:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def get_skill_list_prompt(self) -> str:
+            return ""
+
+    monkeypatch.setattr(main_module, "_read_stdio_input", lambda: next(inputs))
+    monkeypatch.setattr(main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1")
+    monkeypatch.setattr(main_module, "_load_task_manager", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None))
+    monkeypatch.setattr(main_module, "_initial_messages", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(main_module, "get_tools", lambda: [])
+    monkeypatch.setattr(main_module, "SkillLoader", _FakeSkillLoader)
+    monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
+    monkeypatch.setattr(main_module, "Compactor", lambda **_kwargs: object())
+    monkeypatch.setattr(
+        main_module,
+        "_build_loop_compact",
+        lambda *_args, **_kwargs: (lambda _messages, force=False: None),
+    )
+    monkeypatch.setattr(main_module, "_build_handlers", lambda **_kwargs: {})
+    monkeypatch.setattr(main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None)
+
+    assert main_module._run_stdio_session(config, object(), agent_console=agent_console) == 0
+
+    rendered = output_buffer.getvalue()
+    assert "BareAgent REPL" in rendered
+    assert "Theme switched to: dracula" in rendered
+    assert "Exiting BareAgent." in rendered
 
 
 def test_nag_reminder_skips_tool_result_messages() -> None:
