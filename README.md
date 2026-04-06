@@ -11,7 +11,7 @@
 ## ✨ 核心特性
 
 <p align="center">
-  <img src="docs/src/images/readme-features-overview.png" alt="BareAgent 核心特性概览" width="720" />
+  <img src="docs/public/readme-features-overview.png" alt="BareAgent 核心特性概览" width="720" />
 </p>
 
 | 特性 | 说明 |
@@ -32,7 +32,7 @@
 ## 🏗️ 架构概览
 
 <p align="center">
-  <img src="docs/src/images/ch01-architecture.png" alt="BareAgent 架构图" width="720" />
+  <img src="docs/guide/images/ch01-architecture.png" alt="BareAgent 架构图" width="720" />
 </p>
 
 核心循环 `agent_loop()` 是中央调度器：**调用 LLM → 解析工具调用 → 权限检查 → 执行处理器 → 收集结果**，最多迭代 200 次。支持流式输出和长对话消息自动压缩。
@@ -98,7 +98,7 @@ default_type = "general-purpose"
 #### 环境变量
 
 <p align="center">
-  <img src="docs/src/images/readme-config-flow.png" alt="配置流程图" width="640" />
+  <img src="docs/public/readme-config-flow.png" alt="配置流程图" width="640" />
 </p>
 
 配置优先级：`config.toml` → `config.local.toml` → 环境变量 / CLI 参数（优先级递增）。
@@ -186,7 +186,7 @@ bareagent --config ~/my_config.toml
 ## 📁 项目结构
 
 <p align="center">
-  <img src="docs/src/images/readme-project-layers.png" alt="项目分层架构图" width="640" />
+  <img src="docs/public/readme-project-layers.png" alt="项目分层架构图" width="640" />
 </p>
 
 ```
@@ -237,10 +237,12 @@ tests/                     # pytest 测试
 
 ## 🔗 完整文档
 
-项目提供基于 [mdBook](https://rust-lang.github.io/mdBook/) 的完整文档，涵盖架构设计、模块详解、开发指南等 15 个章节：
+项目提供基于 [VitePress](https://vitepress.dev/) 的完整文档，涵盖架构设计、模块详解、开发指南等 15 个章节：
 
 ```bash
-cd docs && mdbook serve
+cd docs
+npm install
+npm run docs:dev
 ```
 
 文档源码位于 [`docs/`](docs/) 目录。
