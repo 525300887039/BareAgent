@@ -5,6 +5,7 @@ specs/
 config/
 .mailbox/
 .transcripts/
+steps/
 code-agent-design.md
 简历.md
 code-review-report.md
