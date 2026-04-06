@@ -27,8 +27,15 @@ class AgentConsole:
             theme=tm.rich_theme,
             no_color=tm.no_color,
         )
-        if console is not None:
-            self.console.push_theme(tm.rich_theme)
+        self._theme_pushed = False
+        self.set_theme(tm)
+
+    def set_theme(self, theme: ThemeManager | None = None) -> None:
+        tm = theme or get_theme()
+        if self._theme_pushed:
+            self.console.pop_theme()
+        self.console.push_theme(tm.rich_theme)
+        self._theme_pushed = True
 
     def print_assistant(self, text: str) -> None:
         if not text.strip():

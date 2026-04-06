@@ -361,6 +361,7 @@ class BareAgentApp(App):
                 return
 
             if tm.switch(theme_name):
+                chat.rerender_transcript()
                 chat.append_status(f"Theme switched to: {theme_name}")
             else:
                 chat.append_error(

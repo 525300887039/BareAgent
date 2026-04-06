@@ -791,6 +791,7 @@ def _run_stdio_session(
 
     init_theme(config.ui.theme)
     ui_console = agent_console or AgentConsole()
+    ui_console.set_theme()
     workspace_path = (workspace or Path.cwd()).resolve()
     transcript_mgr = TranscriptManager(workspace_path / ".transcripts")
     session_id = _generate_session_id(transcript_mgr)
@@ -995,7 +996,7 @@ def _run_stdio_session(
                 ui_console.print_status("\n".join(lines))
                 continue
             if tm.switch(theme_name):
-                ui_console = AgentConsole(theme=tm)
+                ui_console.set_theme(tm)
                 ui_console.print_status(f"Theme switched to: {theme_name}")
                 continue
             ui_console.print_error(
