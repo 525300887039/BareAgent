@@ -1,0 +1,19 @@
+[provider]
+name = "openai"
+model = "gpt-4.1"
+api_key_env = "OPENAI_API_KEY"
+
+[permission]
+mode = "default"
+
+[ui]
+stream = true
+theme = "catppuccin-mocha"
+
+[subagent]
+max_depth = 3
+default_type = "general-purpose"
+
+[thinking]
+mode = "adaptive"
+budget_tokens = 10000
