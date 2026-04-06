@@ -348,26 +348,18 @@ class BareAgentApp(App):
             _, _, theme_arg = text.partition(" ")
             theme_name = theme_arg.strip()
 
-            from src.ui.theme import get_theme
+            from src.ui.theme import format_theme_list, format_unknown_theme, get_theme
 
             tm = get_theme()
             if not theme_name:
-                lines = ["Available themes:"]
-                for name in tm.available_themes():
-                    marker = "●" if name == tm.name else "○"
-                    lines.append(f"  {marker} {name}")
-                lines.append("Usage: /theme <name>")
-                chat.append_status("\n".join(lines))
+                chat.append_status(format_theme_list(tm))
                 return
 
             if tm.switch(theme_name):
                 chat.rerender_transcript()
                 chat.append_status(f"Theme switched to: {theme_name}")
             else:
-                chat.append_error(
-                    f"Unknown theme: {theme_name}. "
-                    f"Available: {', '.join(tm.available_themes())}"
-                )
+                chat.append_error(format_unknown_theme(theme_name))
             return
 
         if text == "/mode":

@@ -982,27 +982,19 @@ def _run_stdio_session(
             _handle_mode_selection_stdio(permission, ui_console)
             continue
         if text == "/theme" or text.startswith("/theme "):
-            from src.ui.theme import get_theme
+            from src.ui.theme import format_theme_list, format_unknown_theme, get_theme
 
             _, _, theme_arg = text.partition(" ")
             theme_name = theme_arg.strip()
             tm = get_theme()
             if not theme_name:
-                lines = ["Available themes:"]
-                for name in tm.available_themes():
-                    marker = "●" if name == tm.name else "○"
-                    lines.append(f"  {marker} {name}")
-                lines.append("Usage: /theme <name>")
-                ui_console.print_status("\n".join(lines))
+                ui_console.print_status(format_theme_list(tm))
                 continue
             if tm.switch(theme_name):
                 ui_console.set_theme(tm)
                 ui_console.print_status(f"Theme switched to: {theme_name}")
                 continue
-            ui_console.print_error(
-                f"Unknown theme: {theme_name}. "
-                f"Available: {', '.join(tm.available_themes())}"
-            )
+            ui_console.print_error(format_unknown_theme(theme_name))
             continue
         if text == "/team" or text.startswith("/team "):
             _handle_team_command(

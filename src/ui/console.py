@@ -24,7 +24,6 @@ class AgentConsole:
     ) -> None:
         tm = theme or get_theme()
         self.console = console or Console(
-            theme=tm.rich_theme,
             no_color=tm.no_color,
         )
         self._theme_pushed = False
