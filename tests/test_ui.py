@@ -51,3 +51,22 @@ def test_stream_printer_defaults_to_console_file() -> None:
     assert "Thinking..." in rendered
     assert rendered.count("Hello") == 1
     assert rendered.endswith("Hello\n")
+
+
+def test_stream_printer_does_not_leak_theme_stack_on_shared_console() -> None:
+    output_buffer = StringIO()
+    console = Console(
+        file=output_buffer,
+        force_terminal=False,
+        color_system=None,
+        width=80,
+    )
+    baseline = len(console._theme_stack._entries)
+
+    for token in ("alpha", "beta"):
+        printer = StreamPrinter(console)
+        printer.start()
+        printer.feed(token)
+        assert printer.finish() == token
+
+    assert len(console._theme_stack._entries) == baseline

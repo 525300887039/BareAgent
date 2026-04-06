@@ -78,6 +78,26 @@ async def test_chat_view_append_user(make_app) -> None:
 
 
 @pytest.mark.anyio
+async def test_chat_view_reset_clears_turn_separator_state(make_app) -> None:
+    app = make_app()
+
+    async with app.run_test() as pilot:
+        chat = app.query_one("#chat", ChatView)
+
+        chat.append_user("First")
+        chat.append_user("Second")
+        await pilot.pause()
+        await chat.remove_children()
+        await pilot.pause()
+
+        chat.append_user("After reset")
+        await pilot.pause()
+
+        assert len(chat.children) == 1
+        assert "> After reset" in _widget_text(chat.children[-1])
+
+
+@pytest.mark.anyio
 async def test_chat_view_stream_flow(make_app) -> None:
     app = make_app()
 
