@@ -371,7 +371,7 @@ _MODE_DESCRIPTIONS = {
 }
 _SLASH_COMMANDS = [
     "/help", "/exit", "/clear", "/new", "/compact",
-    *_PERMISSION_SLASH, "/mode",
+    *_PERMISSION_SLASH, "/mode", "/theme",
     "/sessions", "/resume", "/team",
 ]
 _HELP_TEXT = (
@@ -386,6 +386,7 @@ _HELP_TEXT = (
     "  /plan      Switch to PLAN permission mode\n"
     "  /bypass    Switch to BYPASS permission mode\n"
     "  /mode      Interactive permission mode selection\n"
+    "  /theme     Switch color theme (catppuccin-mocha, dracula, nord, tokyo-night, gruvbox)\n"
     "  /sessions  List saved sessions\n"
     "  /resume    Resume a previous session\n"
     "  /team      Manage team agents (list | spawn | send)"
@@ -786,6 +787,9 @@ def _run_stdio_session(
     workspace: Path | None = None,
     agent_console: AgentConsole | None = None,
 ) -> int:
+    from src.ui.theme import init_theme
+
+    init_theme(config.ui.theme)
     ui_console = agent_console or AgentConsole()
     workspace_path = (workspace or Path.cwd()).resolve()
     transcript_mgr = TranscriptManager(workspace_path / ".transcripts")
@@ -975,6 +979,29 @@ def _run_stdio_session(
             continue
         if text == "/mode":
             _handle_mode_selection_stdio(permission, ui_console)
+            continue
+        if text == "/theme" or text.startswith("/theme "):
+            from src.ui.theme import get_theme
+
+            _, _, theme_arg = text.partition(" ")
+            theme_name = theme_arg.strip()
+            tm = get_theme()
+            if not theme_name:
+                lines = ["Available themes:"]
+                for name in tm.available_themes():
+                    marker = "●" if name == tm.name else "○"
+                    lines.append(f"  {marker} {name}")
+                lines.append("Usage: /theme <name>")
+                ui_console.print_status("\n".join(lines))
+                continue
+            if tm.switch(theme_name):
+                ui_console = AgentConsole(theme=tm)
+                ui_console.print_status(f"Theme switched to: {theme_name}")
+                continue
+            ui_console.print_error(
+                f"Unknown theme: {theme_name}. "
+                f"Available: {', '.join(tm.available_themes())}"
+            )
             continue
         if text == "/team" or text.startswith("/team "):
             _handle_team_command(

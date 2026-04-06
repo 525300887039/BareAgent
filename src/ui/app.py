@@ -120,6 +120,9 @@ class BareAgentApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
+        from src.ui.theme import init_theme
+
+        init_theme(self.config.ui.theme)
         chat = self.query_one("#chat", ChatView)
         self._chat_console = _ChatViewAsConsole(chat)
         startup_console = self._chat_console
@@ -338,6 +341,32 @@ class BareAgentApp(App):
                 f"Permission mode: {old.value} → {self._permission.mode.value}"
             )
             self._update_subtitle()
+            return
+
+        if text == "/theme" or text.startswith("/theme "):
+            self._pending_mode_select = False
+            _, _, theme_arg = text.partition(" ")
+            theme_name = theme_arg.strip()
+
+            from src.ui.theme import get_theme
+
+            tm = get_theme()
+            if not theme_name:
+                lines = ["Available themes:"]
+                for name in tm.available_themes():
+                    marker = "●" if name == tm.name else "○"
+                    lines.append(f"  {marker} {name}")
+                lines.append("Usage: /theme <name>")
+                chat.append_status("\n".join(lines))
+                return
+
+            if tm.switch(theme_name):
+                chat.append_status(f"Theme switched to: {theme_name}")
+            else:
+                chat.append_error(
+                    f"Unknown theme: {theme_name}. "
+                    f"Available: {', '.join(tm.available_themes())}"
+                )
             return
 
         if text == "/mode":

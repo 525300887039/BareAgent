@@ -8,7 +8,7 @@ mode = "default"
 
 [ui]
 stream = true
-theme = "dark"
+theme = "catppuccin-mocha"
 
 [subagent]
 max_depth = 3

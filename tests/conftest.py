@@ -17,7 +17,7 @@ def make_test_config(tmp_path: Path) -> Config:
             api_key_env="ANTHROPIC_API_KEY",
         ),
         permission=PermissionConfig(mode="default", allow=[], deny=[]),
-        ui=UIConfig(stream=False, theme="dark"),
+        ui=UIConfig(stream=False, theme="catppuccin-mocha"),
         subagent=SubagentConfig(max_depth=3, default_type="general-purpose"),
         thinking=ThinkingConfig(),
         path=tmp_path / "config.toml",
