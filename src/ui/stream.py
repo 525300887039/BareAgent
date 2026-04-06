@@ -4,6 +4,7 @@ import sys
 from typing import TextIO
 
 from rich.console import Console
+from src.ui.theme import get_theme
 
 
 class StreamPrinter:
@@ -14,7 +15,13 @@ class StreamPrinter:
         status_message: str = "Thinking...",
         writer: TextIO | None = None,
     ) -> None:
-        self.console = console or Console()
+        tm = get_theme()
+        self.console = console or Console(
+            theme=tm.rich_theme,
+            no_color=tm.no_color,
+        )
+        if console is not None:
+            self.console.push_theme(tm.rich_theme)
         self.status_message = status_message
         console_writer = getattr(self.console, "file", None)
         self.writer = writer or console_writer or sys.stdout
@@ -26,7 +33,8 @@ class StreamPrinter:
         if self._active:
             return
         if not self._chunks:
-            self.console.print(self.status_message, style="dim")
+            icons = get_theme().icons
+            self.console.print(f"{icons.running} {self.status_message}", style="status")
         self._active = True
 
     def feed(self, token: str) -> None:

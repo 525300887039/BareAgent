@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from rich import box
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
+from src.ui.theme import ThemeManager, get_theme
 
 if TYPE_CHECKING:
     from src.ui.stream import StreamPrinter
@@ -15,8 +17,18 @@ MAX_TOOL_OUTPUT_CHARS = 2000
 
 
 class AgentConsole:
-    def __init__(self, console: Console | None = None) -> None:
-        self.console = console or Console()
+    def __init__(
+        self,
+        console: Console | None = None,
+        theme: ThemeManager | None = None,
+    ) -> None:
+        tm = theme or get_theme()
+        self.console = console or Console(
+            theme=tm.rich_theme,
+            no_color=tm.no_color,
+        )
+        if console is not None:
+            self.console.push_theme(tm.rich_theme)
 
     def print_assistant(self, text: str) -> None:
         if not text.strip():
@@ -24,30 +36,37 @@ class AgentConsole:
         self.console.print(Markdown(text))
 
     def print_tool_call(self, name: str, input_data: Any) -> None:
+        icons = get_theme().icons
         code, lexer = _render_payload(input_data)
         self.console.print(
             Panel(
                 Syntax(code, lexer, word_wrap=True),
-                title=f"[bold cyan]Tool Call[/bold cyan] {name}",
-                border_style="cyan",
+                title=f"[tool.name]{icons.tool} Tool Call[/] [muted]{name}[/]",
+                border_style="tool.border",
+                box=box.ROUNDED,
+                padding=(0, 1),
             )
         )
 
     def print_tool_result(self, name: str, output: Any) -> None:
+        icons = get_theme().icons
         code, lexer = _render_payload(output, max_chars=MAX_TOOL_OUTPUT_CHARS)
         self.console.print(
             Panel(
                 Syntax(code, lexer, word_wrap=True),
-                title=f"[bold green]Tool Result[/bold green] {name}",
-                border_style="green",
+                title=f"[success]{icons.success} Result[/] [muted]{name}[/]",
+                border_style="result.border",
+                box=box.ROUNDED,
+                padding=(0, 1),
             )
         )
 
     def print_error(self, msg: str) -> None:
-        self.console.print(msg, style="bold red")
+        icons = get_theme().icons
+        self.console.print(f"{icons.error} {msg}", style="error")
 
     def print_status(self, msg: str) -> None:
-        self.console.print(msg, style="dim")
+        self.console.print(msg, style="status")
 
     def get_stream_printer(self) -> StreamPrinter:
         from src.ui.stream import StreamPrinter

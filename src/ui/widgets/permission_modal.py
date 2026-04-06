@@ -8,6 +8,8 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Static
 
+from src.ui.theme import get_theme
+
 
 class PermissionModal(ModalScreen[bool]):
     """Modal dialog for confirming tool execution."""
@@ -60,6 +62,7 @@ class PermissionModal(ModalScreen[bool]):
         self._tool_input = tool_input
 
     def compose(self) -> ComposeResult:
+        tm = get_theme()
         detail = json.dumps(
             self._tool_input,
             ensure_ascii=False,
@@ -70,7 +73,10 @@ class PermissionModal(ModalScreen[bool]):
             detail = f"{detail[:500]}\n... [truncated]"
 
         with Vertical():
-            yield Label(f"Permission Required: {self._tool_name}", id="pm-title")
+            yield Label(
+                f"{tm.icons.warning} Permission Required: {self._tool_name}",
+                id="pm-title",
+            )
             yield Static(detail, id="pm-detail", markup=False)
             with Horizontal(id="pm-buttons"):
                 yield Button("Allow (y)", id="pm-allow", variant="success")

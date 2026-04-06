@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from rich import box
 from rich.panel import Panel
+from rich.rule import Rule
 from rich.syntax import Syntax
 from rich.text import Text
 from textual.containers import VerticalScroll
@@ -10,6 +12,7 @@ from textual.widget import Widget
 from textual.widgets import Markdown, Static
 
 from src.ui.console import MAX_TOOL_OUTPUT_CHARS, _render_payload
+from src.ui.theme import get_theme
 
 
 class ChatView(VerticalScroll):
@@ -20,10 +23,17 @@ class ChatView(VerticalScroll):
         self._stream_widget: Static | None = None
         self._stream_chunks: list[str] = []
         self._stream_renderable = Text()
+        self._turn_count: int = 0
 
     def append_user(self, text: str) -> None:
         """Append a user message."""
-        self._mount_and_scroll(Static(Text(f"> {text}", style="bold blue")))
+        tm = get_theme()
+        if self._turn_count > 0:
+            self._mount_and_scroll(Static(Rule(style=tm.palette.text_muted)))
+        self._turn_count += 1
+        self._mount_and_scroll(
+            Static(Text(f"> {text}", style=f"bold {tm.palette.accent}"))
+        )
 
     def append_assistant_markdown(self, text: str) -> None:
         """Append an assistant response rendered as Markdown."""
@@ -33,31 +43,47 @@ class ChatView(VerticalScroll):
 
     def append_tool_call(self, name: str, data: Any) -> None:
         """Append a tool call panel."""
+        tm = get_theme()
         code, lexer = _render_payload(data)
         panel = Panel(
             Syntax(code, lexer, word_wrap=True),
-            title=f"[bold cyan]Tool Call[/bold cyan] {name}",
-            border_style="cyan",
+            title=(
+                f"[bold {tm.palette.info}]{tm.icons.tool} Tool Call[/] "
+                f"[{tm.palette.text_muted}]{name}[/]"
+            ),
+            border_style=tm.palette.border,
+            box=box.ROUNDED,
+            padding=(0, 1),
         )
         self._mount_and_scroll(Static(panel))
 
     def append_tool_result(self, name: str, output: Any) -> None:
         """Append a tool result panel."""
+        tm = get_theme()
         code, lexer = _render_payload(output, max_chars=MAX_TOOL_OUTPUT_CHARS)
         panel = Panel(
             Syntax(code, lexer, word_wrap=True),
-            title=f"[bold green]Tool Result[/bold green] {name}",
-            border_style="green",
+            title=(
+                f"[bold {tm.palette.success}]{tm.icons.success} Result[/] "
+                f"[{tm.palette.text_muted}]{name}[/]"
+            ),
+            border_style=tm.palette.border,
+            box=box.ROUNDED,
+            padding=(0, 1),
         )
         self._mount_and_scroll(Static(panel))
 
     def append_status(self, msg: str) -> None:
         """Append a dim status message."""
-        self._mount_and_scroll(Static(Text(msg, style="dim")))
+        tm = get_theme()
+        self._mount_and_scroll(Static(Text(msg, style=tm.palette.text_muted)))
 
     def append_error(self, msg: str) -> None:
         """Append an error message."""
-        self._mount_and_scroll(Static(Text(msg, style="bold red")))
+        tm = get_theme()
+        self._mount_and_scroll(
+            Static(Text(f"{tm.icons.error} {msg}", style=f"bold {tm.palette.error}"))
+        )
 
     def begin_stream(self) -> None:
         """Begin streaming assistant output."""
