@@ -20,8 +20,6 @@ class StreamPrinter:
             theme=tm.rich_theme,
             no_color=tm.no_color,
         )
-        if console is not None:
-            self.console.push_theme(tm.rich_theme)
         self.status_message = status_message
         console_writer = getattr(self.console, "file", None)
         self.writer = writer or console_writer or sys.stdout
@@ -33,8 +31,12 @@ class StreamPrinter:
         if self._active:
             return
         if not self._chunks:
-            icons = get_theme().icons
-            self.console.print(f"{icons.running} {self.status_message}", style="status")
+            tm = get_theme()
+            with self.console.use_theme(tm.rich_theme):
+                self.console.print(
+                    f"{tm.icons.running} {self.status_message}",
+                    style="status",
+                )
         self._active = True
 
     def feed(self, token: str) -> None:

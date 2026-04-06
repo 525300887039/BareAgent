@@ -7,6 +7,7 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.syntax import Syntax
 from rich.text import Text
+from textual.await_remove import AwaitRemove
 from textual.containers import VerticalScroll
 from textual.widget import Widget
 from textual.widgets import Markdown, Static
@@ -122,3 +123,14 @@ class ChatView(VerticalScroll):
     def _mount_and_scroll(self, widget: Widget) -> None:
         self.mount(widget)
         self.scroll_end(animate=False)
+
+    def remove_children(
+        self,
+        selector: str | type[Widget] | list[Widget] = "*",
+    ) -> AwaitRemove:
+        if selector == "*":
+            self._stream_widget = None
+            self._stream_chunks = []
+            self._stream_renderable = Text()
+            self._turn_count = 0
+        return super().remove_children(selector)
