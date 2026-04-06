@@ -6,11 +6,12 @@ from typing import Any
 import pytest
 from textual.widgets import Markdown
 
-from src.main import Config, PermissionConfig, ProviderConfig, SubagentConfig, UIConfig
 from src.permission.guard import PermissionMode
-from src.provider.base import BaseLLMProvider, LLMResponse, ThinkingConfig
+from src.provider.base import BaseLLMProvider, LLMResponse
 from src.ui.app import BareAgentApp
 from src.ui.widgets import ChatView, InputBar, PermissionModal
+
+from tests.conftest import make_test_config
 
 
 class ReplayProvider(BaseLLMProvider):
@@ -43,27 +44,12 @@ class ReplayProvider(BaseLLMProvider):
         raise NotImplementedError
 
 
-def _make_config(tmp_path: Path) -> Config:
-    return Config(
-        provider=ProviderConfig(
-            name="anthropic",
-            model="claude-sonnet-4-20250514",
-            api_key_env="ANTHROPIC_API_KEY",
-        ),
-        permission=PermissionConfig(mode="default", allow=[], deny=[]),
-        ui=UIConfig(stream=False, theme="dark"),
-        subagent=SubagentConfig(max_depth=3, default_type="general-purpose"),
-        thinking=ThinkingConfig(),
-        path=tmp_path / "config.toml",
-    )
-
-
 @pytest.fixture
 def make_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     def _factory() -> BareAgentApp:
         monkeypatch.chdir(tmp_path)
         return BareAgentApp(
-            config=_make_config(tmp_path),
+            config=make_test_config(tmp_path),
             provider=ReplayProvider(),
         )
 

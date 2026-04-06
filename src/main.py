@@ -374,6 +374,22 @@ _SLASH_COMMANDS = [
     *_PERMISSION_SLASH, "/mode",
     "/sessions", "/resume", "/team",
 ]
+_HELP_TEXT = (
+    "Available commands:\n"
+    "  /help      Show this help message\n"
+    "  /exit      Exit BareAgent\n"
+    "  /clear     Clear screen and start new conversation\n"
+    "  /new       Start a new conversation\n"
+    "  /compact   Compress conversation context\n"
+    "  /default   Switch to DEFAULT permission mode\n"
+    "  /auto      Switch to AUTO permission mode\n"
+    "  /plan      Switch to PLAN permission mode\n"
+    "  /bypass    Switch to BYPASS permission mode\n"
+    "  /mode      Interactive permission mode selection\n"
+    "  /sessions  List saved sessions\n"
+    "  /resume    Resume a previous session\n"
+    "  /team      Manage team agents (list | spawn | send)"
+)
 
 
 def _build_permission_guard(config: Config) -> PermissionGuard:
@@ -847,22 +863,7 @@ def _run_stdio_session(
             ui_console.print_status("Exiting BareAgent.")
             return 0
         if text == "/help":
-            ui_console.print_status(
-                "Available commands:\n"
-                "  /help      Show this help message\n"
-                "  /exit      Exit BareAgent\n"
-                "  /clear     Clear screen and start new conversation\n"
-                "  /new       Start a new conversation\n"
-                "  /compact   Compress conversation context\n"
-                "  /default   Switch to DEFAULT permission mode\n"
-                "  /auto      Switch to AUTO permission mode\n"
-                "  /plan      Switch to PLAN permission mode\n"
-                "  /bypass    Switch to BYPASS permission mode\n"
-                "  /mode      Interactive permission mode selection\n"
-                "  /sessions  List saved sessions\n"
-                "  /resume    Resume a previous session\n"
-                "  /team      Manage team agents (list | spawn | send)"
-            )
+            ui_console.print_status(_HELP_TEXT)
             continue
         if text in ("/clear", "/new"):
             messages[:] = _initial_messages(

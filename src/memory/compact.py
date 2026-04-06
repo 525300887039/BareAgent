@@ -77,13 +77,12 @@ class Compactor:
         self._session_id = new_session_id
 
     def __call__(self, messages: list[dict[str, Any]], force: bool = False) -> None:
+        if not force and estimate_tokens(messages) <= self._threshold:
+            return
+
         _backup = [_clone_message(m) for m in messages]
 
         _micro_compact(messages, keep_recent=3)
-
-        if not force and estimate_tokens(messages) <= self._threshold:
-            messages[:] = _backup
-            return
 
         history_messages, pending_user_message = _split_pending_user_turn(messages)
         summary_source_messages = [

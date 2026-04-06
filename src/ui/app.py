@@ -15,28 +15,19 @@ from src.core.loop import LLMCallError, agent_loop
 from src.core.tools import get_tools
 from src.memory.compact import Compactor
 from src.memory.transcript import TranscriptManager
+from src.permission.guard import PermissionGuard
 from src.planning.skills import SkillLoader, resolve_skills_dir
+from src.planning.tasks import TaskManager
 from src.planning.todo import TodoManager
 from src.provider.base import BaseLLMProvider
 from src.team.autonomous import AutonomousAgent
+from src.team.mailbox import MessageBus
+from src.team.manager import TeammateManager
 from src.ui.protocol import StreamProtocol
 from src.ui.widgets import ChatView, InputBar, PermissionModal
 
 _HELP_TEXT = (
-    "Available commands:\n"
-    "  /help      Show this help message\n"
-    "  /exit      Exit BareAgent\n"
-    "  /clear     Clear screen and start new conversation\n"
-    "  /new       Start a new conversation\n"
-    "  /compact   Compress conversation context\n"
-    "  /default   Switch to DEFAULT permission mode\n"
-    "  /auto      Switch to AUTO permission mode\n"
-    "  /plan      Switch to PLAN permission mode\n"
-    "  /bypass    Switch to BYPASS permission mode\n"
-    "  /mode      Interactive permission mode selection\n"
-    "  /sessions  List saved sessions\n"
-    "  /resume    Resume a previous session\n"
-    "  /team      Manage team agents (list | spawn | send)\n"
+    main_module._HELP_TEXT + "\n"
     "  Shift+Tab  Cycle through permission modes"
 )
 
@@ -102,24 +93,25 @@ class BareAgentApp(App):
         super().__init__(**kwargs)
         self.config = config
         self.provider = provider
-        self._workspace = Path.cwd().resolve()
+        self._workspace: Path = Path.cwd().resolve()
         self._transcript_mgr: TranscriptManager | None = None
-        self._session_id = ""
-        self._todo_manager = TodoManager()
-        self._task_manager: Any = None
-        self._bg_manager = BackgroundManager()
-        self._teammate_manager: Any = None
+        self._session_id: str = ""
+        self._todo_manager: TodoManager | None = None
+        self._task_manager: TaskManager | None = None
+        self._bg_manager: BackgroundManager | None = None
+        self._teammate_manager: TeammateManager | None = None
         self._skill_loader: SkillLoader | None = None
-        self._message_bus: Any = None
+        self._message_bus: MessageBus | None = None
         self._mailbox_cursor: str | None = None
         self._spawned_agents: dict[str, AutonomousAgent] = {}
         self._messages: list[dict[str, Any]] = []
         self._tools: list[dict[str, Any]] = []
         self._handlers: dict[str, Callable[..., Any]] = {}
-        self._permission: Any = None
+        self._permission: PermissionGuard | None = None
         self._compact_fn: Callable[..., Any] | None = None
         self._textual_ui: TextualUI | None = None
         self._pending_mode_select = False
+        self._chat_console: _ChatViewAsConsole | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -129,7 +121,8 @@ class BareAgentApp(App):
 
     def on_mount(self) -> None:
         chat = self.query_one("#chat", ChatView)
-        startup_console = _ChatViewAsConsole(chat)
+        self._chat_console = _ChatViewAsConsole(chat)
+        startup_console = self._chat_console
         self._workspace = Path.cwd().resolve()
         self._transcript_mgr = TranscriptManager(self._workspace / ".transcripts")
         self._session_id = main_module._generate_session_id(self._transcript_mgr)
@@ -364,7 +357,7 @@ class BareAgentApp(App):
             self._pending_mode_select = False
             main_module._handle_team_command(
                 text,
-                _ChatViewAsConsole(chat),
+                self._chat_console,
                 teammate_manager=self._teammate_manager,
                 team_handlers=self._handlers,
             )
@@ -438,9 +431,8 @@ class BareAgentApp(App):
         )
 
     def _drain_team_messages(self) -> None:
-        chat = self.query_one("#chat", ChatView)
         self._mailbox_cursor = main_module._drain_team_mailbox(
-            _ChatViewAsConsole(chat),
+            self._chat_console,
             message_bus=self._message_bus,
             since=self._mailbox_cursor,
         )

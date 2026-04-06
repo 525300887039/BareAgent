@@ -6,21 +6,7 @@ from textual.message import Message
 from textual.suggester import SuggestFromList
 from textual.widgets import Input
 
-_SLASH_COMMANDS = [
-    "/help",
-    "/exit",
-    "/clear",
-    "/new",
-    "/compact",
-    "/default",
-    "/auto",
-    "/plan",
-    "/bypass",
-    "/mode",
-    "/sessions",
-    "/resume",
-    "/team",
-]
+from src.main import _SLASH_COMMANDS
 
 
 class InputBar(Input):
