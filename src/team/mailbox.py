@@ -5,11 +5,11 @@ import re
 import threading
 from collections import OrderedDict
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from src.core.fileutil import generate_random_id
+from src.core.fileutil import generate_random_id, optional_string, utc_timestamp_iso
 
 _VALID_AGENT_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -196,7 +196,7 @@ class MessageBus:
             raise ValueError("msg_type must not be empty")
 
         message_id = msg.id.strip() or _generate_message_id()
-        timestamp = msg.timestamp.strip() or _timestamp()
+        timestamp = msg.timestamp.strip() or utc_timestamp_iso()
         return Message(
             id=message_id,
             from_agent=from_agent,
@@ -212,16 +212,5 @@ def _generate_message_id(length: int = 12) -> str:
     return generate_random_id(length)
 
 
-def _timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
 def _parse_timestamp(value: str) -> datetime:
     return datetime.fromisoformat(value)
-
-
-def optional_string(value: Any) -> str | None:
-    if value is None:
-        return None
-    normalized = str(value).strip()
-    return normalized or None
