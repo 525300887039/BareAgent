@@ -16,8 +16,12 @@ class BackgroundManager:
 
     def submit(self, task_id: str, fn: Callable[..., Any], *args: Any) -> str:
         with self._lock:
+            # Prune dead threads to prevent unbounded growth.
+            self._threads = {
+                tid: t for tid, t in self._threads.items() if t.is_alive()
+            }
             active_thread = self._threads.get(task_id)
-            if active_thread is not None and active_thread.is_alive():
+            if active_thread is not None:
                 raise ValueError(f"Background task already running: {task_id}")
 
             thread = threading.Thread(

@@ -5,22 +5,21 @@ import os
 from pathlib import Path
 from typing import Any
 
+from src.core.schema import tool_schema as _schema
+
 
 LOAD_SKILL_TOOL_SCHEMAS: list[dict[str, Any]] = [
-    {
-        "name": "load_skill",
-        "description": "Load the full content of a named SKILL.md file on demand.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "skill_name": {
-                    "type": "string",
-                    "description": "The skill directory name to load.",
-                }
-            },
-            "required": ["skill_name"],
+    _schema(
+        "load_skill",
+        "Load the full content of a named SKILL.md file on demand.",
+        {
+            "skill_name": {
+                "type": "string",
+                "description": "The skill directory name to load.",
+            }
         },
-    }
+        ["skill_name"],
+    )
 ]
 
 
@@ -61,11 +60,13 @@ class SkillLoader:
         skills: list[SkillMeta] = []
         cache: dict[str, SkillMeta] = {}
 
-        if not self.skills_dir.exists():
+        try:
+            entries = sorted(self.skills_dir.glob("*/SKILL.md"))
+        except OSError:
             self._cache = {}
             return []
 
-        for skill_file in sorted(self.skills_dir.glob("*/SKILL.md")):
+        for skill_file in entries:
             skill_name = skill_file.parent.name
             description = self._extract_description(skill_file)
             meta = SkillMeta(

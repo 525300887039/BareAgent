@@ -89,8 +89,11 @@ def _render_payload(payload: Any, *, max_chars: int | None = None) -> tuple[str,
         return "", "text"
 
     text = str(payload)
-    if _looks_like_json(text):
-        return _truncate(text, max_chars), "json"
+    parsed = _try_parse_json(text)
+    if parsed is not None:
+        # Re-format for consistent indentation.
+        formatted = json.dumps(parsed, ensure_ascii=False, indent=2, default=str)
+        return _truncate(formatted, max_chars), "json"
     return _truncate(text, max_chars), "text"
 
 
@@ -100,12 +103,12 @@ def _truncate(text: str, max_chars: int | None) -> str:
     return f"{text[:max_chars]}\n\n... [truncated]"
 
 
-def _looks_like_json(text: str) -> bool:
+def _try_parse_json(text: str) -> Any:
+    """Return parsed JSON object if *text* looks like JSON, else ``None``."""
     stripped = text.strip()
     if not stripped or stripped[0] not in "{[":
-        return False
+        return None
     try:
-        json.loads(stripped)
+        return json.loads(stripped)
     except json.JSONDecodeError:
-        return False
-    return True
+        return None
