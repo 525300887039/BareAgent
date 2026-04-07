@@ -26,6 +26,7 @@ class StreamPrinter:
         self._chunks: list[str] = []
         self._active = False
         self._printed_anything = False
+        self._theme_pushed = True
 
     def start(self) -> None:
         if self._active:
@@ -53,7 +54,9 @@ class StreamPrinter:
             self.writer.write("\n")
             self.writer.flush()
         self._active = False
-        self.console.pop_theme()
+        if self._theme_pushed:
+            self.console.pop_theme()
+            self._theme_pushed = False
         result = "".join(self._chunks)
         self._chunks = []
         self._printed_anything = False

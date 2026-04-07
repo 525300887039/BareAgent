@@ -212,7 +212,7 @@ def get_theme() -> ThemeManager:
 def format_theme_list(tm: ThemeManager) -> str:
     """Build the 'Available themes:' listing with a marker on the active theme."""
     lines = ["Available themes:"]
-    for name in tm.available_themes():
+    for name in ThemeManager.available_themes():
         marker = "●" if name == tm.name else "○"
         lines.append(f"  {marker} {name}")
     lines.append("Usage: /theme <name>")
