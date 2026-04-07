@@ -110,13 +110,14 @@ class SkillLoader:
         return meta
 
     def _extract_description(self, skill_file: Path) -> str:
-        for raw_line in skill_file.read_text(encoding="utf-8").splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            if line.startswith("#"):
-                continue
-            return line
+        with skill_file.open(encoding="utf-8") as fh:
+            for raw_line in fh:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                if line.startswith("#"):
+                    continue
+                return line
         return "No description provided."
 
 

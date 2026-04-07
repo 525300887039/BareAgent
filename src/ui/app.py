@@ -11,6 +11,7 @@ from textual.widgets import Footer, Header
 
 import src.main as main_module
 from src.concurrency.background import BackgroundManager
+from src.core.fileutil import collect_tool_names
 from src.core.loop import LLMCallError, agent_loop
 from src.core.tools import get_tools
 from src.memory.compact import Compactor
@@ -462,7 +463,7 @@ class BareAgentApp(App):
     def _render_chat_history(self) -> None:
         chat = self.query_one("#chat", ChatView)
         chat.remove_children()
-        tool_name_by_id: dict[str, str] = {}
+        tool_name_by_id = collect_tool_names(self._messages)
 
         for message in self._messages:
             role = message.get("role")
@@ -508,9 +509,6 @@ class BareAgentApp(App):
                 if block_type != "tool_use":
                     continue
 
-                tool_id = str(block.get("id", ""))
-                if tool_id:
-                    tool_name_by_id[tool_id] = str(block.get("name", "unknown"))
                 if text_parts:
                     chat.append_assistant_markdown("\n".join(part for part in text_parts if part))
                     text_parts = []

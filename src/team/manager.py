@@ -115,12 +115,12 @@ class TeammateManager:
         atomic_write_json(self.config_file, payload)
 
     def _load(self) -> None:
-        if not self.config_file.exists():
+        try:
+            with self.config_file.open("r", encoding="utf-8") as file:
+                payload = json.load(file)
+        except FileNotFoundError:
             self.teammates = {}
             return
-
-        with self.config_file.open("r", encoding="utf-8") as file:
-            payload = json.load(file)
 
         if not isinstance(payload, dict):
             raise ValueError("Team config must contain a JSON object")

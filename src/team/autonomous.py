@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
@@ -98,6 +99,7 @@ class AutonomousAgent:
         try:
             self._run_prompt(self._build_task_prompt(task))
         except Exception:
+            logging.exception("Task %s failed in agent %s", task.id, self.name)
             self.task_manager.update(task.id, status="failed")
             return
 
