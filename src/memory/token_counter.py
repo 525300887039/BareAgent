@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import json
 import math
 import re
 from typing import Any
+
+from src.core.fileutil import stringify
 
 _CJK_PATTERN = re.compile(
     "["
@@ -55,7 +56,7 @@ def _estimate_value(value: Any) -> float:
             total += _estimate_text(str(value.get("name", "")))
         return total
 
-    return _estimate_text(_stringify(value))
+    return _estimate_text(stringify(value))
 
 
 def _estimate_text(text: str) -> float:
@@ -64,9 +65,3 @@ def _estimate_text(text: str) -> float:
     whitespace = len(_WHITESPACE_PATTERN.findall(text))
     other = len(text) - cjk - ascii_alnum - whitespace
     return cjk * 1.5 + ascii_alnum * 0.25 + whitespace * 0.25 + other * 0.5
-
-
-def _stringify(value: Any) -> str:
-    if isinstance(value, str):
-        return value
-    return json.dumps(value, ensure_ascii=False, default=str)
