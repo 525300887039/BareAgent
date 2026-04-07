@@ -5,7 +5,6 @@ import re
 import threading
 from collections import OrderedDict
 from dataclasses import asdict, dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -212,5 +211,3 @@ def _generate_message_id(length: int = 12) -> str:
     return generate_random_id(length)
 
 
-def _parse_timestamp(value: str) -> datetime:
-    return datetime.fromisoformat(value)
