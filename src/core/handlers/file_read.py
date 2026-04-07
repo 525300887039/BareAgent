@@ -19,7 +19,25 @@ def run_read(
         raise ValueError("limit must be >= 0")
 
     resolved = safe_path(file_path, workspace)
-    lines = resolved.read_text(encoding="utf-8").splitlines()
+
+    if offset == 0 and limit is None:
+        lines = resolved.read_text(encoding="utf-8").splitlines()
+    else:
+        # Stream lines to avoid loading the entire file when only a slice is needed.
+        selected: list[str] = []
+        end = None if limit is None else offset + limit
+        with resolved.open(encoding="utf-8") as fh:
+            for idx, line in enumerate(fh):
+                if idx < offset:
+                    continue
+                if end is not None and idx >= end:
+                    break
+                selected.append(line.rstrip("\n\r"))
+        return "\n".join(
+            f"{line_number}: {line}"
+            for line_number, line in enumerate(selected, start=offset + 1)
+        )
+
     end = None if limit is None else offset + limit
     selected = lines[offset:end]
     return "\n".join(

@@ -257,6 +257,13 @@ def _unbound_stub(tool_name: str) -> Callable[..., Any]:
     return _stub
 
 
+_TEAM_FALLBACK_HANDLERS: dict[str, Callable[..., Any]] = {
+    "team_spawn": lambda name: f"Team spawning unavailable for {name}.",
+    "team_send": lambda to_agent, content: f"Team messaging unavailable for {to_agent}.",
+    "team_list": lambda: [],
+}
+
+
 TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     "bash": _unbound_stub("bash"),
     "read_file": _unbound_stub("read_file"),
@@ -264,19 +271,17 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     "edit_file": _unbound_stub("edit_file"),
     "glob": _unbound_stub("glob"),
     "grep": _unbound_stub("grep"),
-    "todo_read": lambda: make_todo_handlers(_get_default_todo_manager())["todo_read"](),
+    "todo_read": lambda: _get_default_todo_manager().list(),
     "todo_write": lambda **kw: make_todo_handlers(_get_default_todo_manager())["todo_write"](**kw),
     **_make_lazy_task_handlers(Path(".tasks.json")),
-    "load_skill": lambda skill_name: make_skill_handlers(_get_default_skill_loader())["load_skill"](skill_name),
+    "load_skill": lambda skill_name: _get_default_skill_loader().load(skill_name),
     "background_run": lambda **_: "Background manager unavailable.",
     "subagent": (
         lambda task, agent_type=None, run_in_background=False: (
             "Subagent unavailable: provider is not configured."
         )
     ),
-    "team_spawn": lambda name: f"Team spawning unavailable for {name}.",
-    "team_send": lambda to_agent, content: f"Team messaging unavailable for {to_agent}.",
-    "team_list": lambda: [],
+    **_TEAM_FALLBACK_HANDLERS,
 }
 
 
@@ -322,14 +327,7 @@ def get_handlers(
         workspace=workspace,
     )
 
-    handlers.update(
-        team_handlers
-        or {
-            "team_spawn": lambda name: f"Team spawning unavailable for {name}.",
-            "team_send": lambda to_agent, content: f"Team messaging unavailable for {to_agent}.",
-            "team_list": lambda: [],
-        }
-    )
+    handlers.update(team_handlers or _TEAM_FALLBACK_HANDLERS)
 
     available_tools = tools or get_tools()
     if provider is None:
