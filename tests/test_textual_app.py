@@ -107,3 +107,68 @@ async def test_chat_view_feed_stream_does_not_rejoin_buffer(
 
         assert chunks.values == ["token"]
         assert chat._stream_widget is not None
+
+
+@pytest.mark.anyio
+async def test_render_chat_history_scopes_tool_result_names_to_prior_tool_uses(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _make_app(tmp_path, monkeypatch)
+    resumed_messages = [
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "_fallback_1",
+                    "name": "read_file",
+                    "input": {"path": "a.txt"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "_fallback_1",
+                    "content": "old result",
+                }
+            ],
+        },
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "_fallback_1",
+                    "name": "shell_command",
+                    "input": {"command": "dir"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "_fallback_1",
+                    "content": "new result",
+                }
+            ],
+        },
+    ]
+
+    async with app.run_test() as pilot:
+        app._messages = resumed_messages
+        app._render_chat_history()
+        await pilot.pause()
+
+        chat = app.query_one("#chat", ChatView)
+        tool_results = [entry for entry in chat._entries if entry.kind == "tool_result"]
+
+        assert [(entry.name, entry.payload) for entry in tool_results] == [
+            ("read_file", "old result"),
+            ("shell_command", "new result"),
+        ]
