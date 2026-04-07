@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from src.concurrency.background import BackgroundManager
-from src.core.fileutil import generate_random_id
+from src.core.fileutil import generate_random_id, is_tool_result_message
 from src.core.context import assemble_system_prompt
 from src.core.loop import LLMCallError, agent_loop
 from src.core.tools import get_handlers, get_tools
@@ -286,14 +286,6 @@ def load_config(
 _NAG_REMINDER_PREFIX = "<nag-reminder>"
 
 
-def _is_tool_result_message(msg: dict) -> bool:
-    content = msg.get("content")
-    return isinstance(content, list) and any(
-        isinstance(block, dict) and block.get("type") == "tool_result"
-        for block in content
-    )
-
-
 def _initial_messages(workspace: Path, skill_summary: str = "") -> list[dict[str, str]]:
     return [
         {
@@ -325,7 +317,7 @@ def _refresh_nag_reminder(
     }
     for index in range(len(messages) - 1, -1, -1):
         msg = messages[index]
-        if msg.get("role") == "user" and not _is_tool_result_message(msg):
+        if msg.get("role") == "user" and not is_tool_result_message(msg):
             messages.insert(index + 1, nag_message)
             return
 

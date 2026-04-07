@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
 from typing import Any, Callable
 
 from src.concurrency.notification import inject_notifications
+from src.core.fileutil import stringify
 from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
 from src.ui.protocol import StreamProtocol, UIProtocol
 from src.ui.stream import StreamPrinter
@@ -233,19 +233,11 @@ def _tool_result(tool_use_id: str, output: Any, *, is_error: bool = False) -> di
     result: dict[str, Any] = {
         "type": "tool_result",
         "tool_use_id": tool_use_id,
-        "content": _stringify_output(output),
+        "content": stringify(output),
     }
     if is_error:
         result["is_error"] = True
     return result
-
-
-def _stringify_output(output: Any) -> str:
-    if isinstance(output, str):
-        return output
-    if output is None:
-        return ""
-    return json.dumps(output, ensure_ascii=False, default=str)
 
 
 def _run_background(bg_manager: Any, messages: list[dict[str, Any]]) -> None:

@@ -13,11 +13,11 @@ from src.main import (
     ProviderConfig,
     SubagentConfig,
     UIConfig,
-    _is_tool_result_message,
     _refresh_nag_reminder,
     load_config,
     resolve_config_path,
 )
+from src.core.fileutil import is_tool_result_message
 from src.memory.transcript import TranscriptManager
 from src.provider.base import ThinkingConfig
 from src.ui.console import AgentConsole
@@ -387,4 +387,4 @@ def test_nag_reminder_skips_tool_result_messages() -> None:
     )
     tool_result_msg = messages[assistant_idx + 1]
     assert tool_result_msg.get("role") == "user"
-    assert _is_tool_result_message(tool_result_msg)
+    assert is_tool_result_message(tool_result_msg)

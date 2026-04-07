@@ -13,9 +13,27 @@ from typing import Any
 _ID_ALPHABET = string.ascii_letters + string.digits
 
 
+def stringify(value: Any) -> str:
+    """Convert any value to a string suitable for tool output or serialization."""
+    if isinstance(value, str):
+        return value
+    if value is None:
+        return ""
+    return json.dumps(value, ensure_ascii=False, default=str)
+
+
 def generate_random_id(length: int = 8) -> str:
     """Return a cryptographically random alphanumeric string."""
     return "".join(secrets.choice(_ID_ALPHABET) for _ in range(length))
+
+
+def is_tool_result_message(msg: dict[str, Any]) -> bool:
+    """Check whether a message contains tool_result blocks."""
+    content = msg.get("content")
+    return isinstance(content, list) and any(
+        isinstance(block, dict) and block.get("type") == "tool_result"
+        for block in content
+    )
 
 
 def atomic_write_json(file_path: Path, payload: Any) -> None:

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import json
+import copy
 import logging
 from typing import Any
 
+from src.core.fileutil import is_tool_result_message, stringify
 from src.memory.token_counter import estimate_tokens
 from src.memory.transcript import TranscriptManager
 from src.provider.base import BaseLLMProvider
@@ -18,10 +19,15 @@ _SUMMARY_SYSTEM_PROMPT = (
 )
 
 
-def _micro_compact(messages: list[dict[str, Any]], keep_recent: int = 3) -> None:
-    tool_name_by_id = _collect_tool_names(messages)
+def _micro_compact(
+    messages: list[dict[str, Any]],
+    keep_recent: int = 3,
+    tool_name_by_id: dict[str, str] | None = None,
+) -> dict[str, str]:
+    if tool_name_by_id is None:
+        tool_name_by_id = _collect_tool_names(messages)
     tool_result_indices = [
-        index for index, message in enumerate(messages) if _message_has_tool_results(message)
+        index for index, message in enumerate(messages) if is_tool_result_message(message)
     ]
     if keep_recent > 0:
         compact_indices = set(tool_result_indices[:-keep_recent])
@@ -36,7 +42,7 @@ def _micro_compact(messages: list[dict[str, Any]], keep_recent: int = 3) -> None
         for block in content:
             if not isinstance(block, dict) or block.get("type") != "tool_result":
                 continue
-            original_text = _stringify(block.get("content", ""))
+            original_text = stringify(block.get("content", ""))
             if original_text.startswith(_TRUNCATED_PREFIX):
                 continue
             tool_use_id = str(block.get("tool_use_id", ""))
@@ -44,11 +50,16 @@ def _micro_compact(messages: list[dict[str, Any]], keep_recent: int = 3) -> None
             block["content"] = (
                 f"[truncated: {tool_name} result, {len(original_text)} chars]"
             )
+    return tool_name_by_id
 
 
-def _serialize(messages: list[dict[str, Any]]) -> str:
+def _serialize(
+    messages: list[dict[str, Any]],
+    tool_name_by_id: dict[str, str] | None = None,
+) -> str:
     lines: list[str] = []
-    tool_name_by_id = _collect_tool_names(messages)
+    if tool_name_by_id is None:
+        tool_name_by_id = _collect_tool_names(messages)
     for message in messages:
         role = str(message.get("role", "unknown"))
         lines.append(f"[{role}]")
@@ -82,7 +93,7 @@ class Compactor:
 
         _backup = [_clone_message(m) for m in messages]
 
-        _micro_compact(messages, keep_recent=3)
+        tool_name_by_id = _micro_compact(messages, keep_recent=3)
 
         history_messages, pending_user_message = _split_pending_user_turn(messages)
         summary_source_messages = [
@@ -102,7 +113,7 @@ class Compactor:
                         "role": "user",
                         "content": (
                             "请简洁总结以下对话的关键信息和已完成的工作，供后续继续工作使用：\n\n"
-                            + _serialize(summary_source_messages)
+                            + _serialize(summary_source_messages, tool_name_by_id)
                         ),
                     },
                 ],
@@ -147,15 +158,6 @@ def _collect_tool_names(messages: list[dict[str, Any]]) -> dict[str, str]:
     return tool_name_by_id
 
 
-def _message_has_tool_results(message: dict[str, Any]) -> bool:
-    content = message.get("content")
-    if not isinstance(content, list):
-        return False
-    return any(
-        isinstance(block, dict) and block.get("type") == "tool_result" for block in content
-    )
-
-
 def _serialize_content(content: Any, tool_name_by_id: dict[str, str]) -> str:
     if content is None:
         return ""
@@ -168,14 +170,14 @@ def _serialize_content(content: Any, tool_name_by_id: dict[str, str]) -> str:
             if serialized:
                 parts.append(serialized)
         return "\n".join(parts)
-    return _stringify(content)
+    return stringify(content)
 
 
 def _serialize_block(block: Any, tool_name_by_id: dict[str, str]) -> str:
     if isinstance(block, str):
         return block
     if not isinstance(block, dict):
-        return _stringify(block)
+        return stringify(block)
 
     block_type = block.get("type")
     if block_type == "text":
@@ -183,22 +185,22 @@ def _serialize_block(block: Any, tool_name_by_id: dict[str, str]) -> str:
     if block_type == "tool_use":
         return (
             f"[tool_use:{block.get('name', 'unknown')}] "
-            f"{_stringify(block.get('input', {}))}"
+            f"{stringify(block.get('input', {}))}"
         )
     if block_type == "tool_result":
         tool_use_id = str(block.get("tool_use_id", ""))
         tool_name = tool_name_by_id.get(tool_use_id, "unknown")
-        return f"[tool_result:{tool_name}] {_stringify(block.get('content', ''))}"
+        return f"[tool_result:{tool_name}] {stringify(block.get('content', ''))}"
 
     if "content" in block:
         return _serialize_content(block.get("content"), tool_name_by_id)
     if "text" in block:
         return str(block.get("text", ""))
-    return _stringify(block)
+    return stringify(block)
 
 
 def _clone_message(message: dict[str, Any]) -> dict[str, Any]:
-    return json.loads(json.dumps(message, ensure_ascii=False))
+    return copy.deepcopy(message)
 
 
 def _split_pending_user_turn(
@@ -207,9 +209,3 @@ def _split_pending_user_turn(
     if messages and messages[-1].get("role") == "user":
         return messages[:-1], _clone_message(messages[-1])
     return messages, None
-
-
-def _stringify(value: Any) -> str:
-    if isinstance(value, str):
-        return value
-    return json.dumps(value, ensure_ascii=False, default=str)
