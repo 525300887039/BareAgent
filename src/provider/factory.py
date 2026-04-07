@@ -5,11 +5,10 @@ import os
 from typing import Any
 
 from src.provider.anthropic import AnthropicProvider
-from src.provider.base import BaseLLMProvider, ThinkingConfig
+from src.provider.base import BaseLLMProvider, ThinkingConfig, VALID_THINKING_MODES
 from src.provider.openai import OpenAIProvider
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-_VALID_THINKING_MODES = {"enabled", "adaptive", "disabled"}
 
 
 def create_provider(config: Any) -> BaseLLMProvider:
@@ -54,7 +53,7 @@ def create_provider(config: Any) -> BaseLLMProvider:
 
 
 def _validated_thinking_mode(mode: str) -> str:
-    if mode not in _VALID_THINKING_MODES:
+    if mode not in VALID_THINKING_MODES:
         logging.warning("Invalid thinking mode %r, falling back to 'adaptive'", mode)
         return "adaptive"
     return mode

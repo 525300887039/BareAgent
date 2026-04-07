@@ -22,7 +22,7 @@ from src.planning.skills import SkillLoader, resolve_skills_dir
 from src.planning.tasks import TaskManager
 from src.planning.todo import TodoManager
 from src.permission.rules import parse_permission_rules
-from src.provider.base import BaseLLMProvider, ThinkingConfig
+from src.provider.base import BaseLLMProvider, ThinkingConfig, VALID_THINKING_MODES
 from src.provider.factory import create_provider
 from src.team.autonomous import AutonomousAgent
 from src.team.mailbox import Message, MessageBus
@@ -33,7 +33,6 @@ from src.ui.console import AgentConsole
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.toml"
 VALID_PERMISSION_MODES = {m.value for m in PermissionMode}
-VALID_THINKING_MODES = {"adaptive", "enabled", "disabled"}
 VALID_SUBAGENT_TYPES = set(BUILTIN_AGENT_TYPES)
 MAIN_AGENT_NAME = "main"
 DEFAULT_API_KEY_ENV_BY_PROVIDER = {
