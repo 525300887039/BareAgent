@@ -4,7 +4,7 @@ import copy
 import logging
 from typing import Any
 
-from src.core.fileutil import is_tool_result_message, stringify
+from src.core.fileutil import collect_tool_names, is_tool_result_message, stringify
 from src.memory.token_counter import estimate_tokens
 from src.memory.transcript import TranscriptManager
 from src.provider.base import BaseLLMProvider
@@ -25,7 +25,7 @@ def _micro_compact(
     tool_name_by_id: dict[str, str] | None = None,
 ) -> dict[str, str]:
     if tool_name_by_id is None:
-        tool_name_by_id = _collect_tool_names(messages)
+        tool_name_by_id = collect_tool_names(messages)
     tool_result_indices = [
         index for index, message in enumerate(messages) if is_tool_result_message(message)
     ]
@@ -59,7 +59,7 @@ def _serialize(
 ) -> str:
     lines: list[str] = []
     if tool_name_by_id is None:
-        tool_name_by_id = _collect_tool_names(messages)
+        tool_name_by_id = collect_tool_names(messages)
     for message in messages:
         role = str(message.get("role", "unknown"))
         lines.append(f"[{role}]")
@@ -141,21 +141,6 @@ class Compactor:
 
 
 make_compact_fn = Compactor
-
-
-def _collect_tool_names(messages: list[dict[str, Any]]) -> dict[str, str]:
-    tool_name_by_id: dict[str, str] = {}
-    for message in messages:
-        content = message.get("content")
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if not isinstance(block, dict) or block.get("type") != "tool_use":
-                continue
-            tool_id = str(block.get("id", ""))
-            if tool_id:
-                tool_name_by_id[tool_id] = str(block.get("name", "unknown"))
-    return tool_name_by_id
 
 
 def _serialize_content(content: Any, tool_name_by_id: dict[str, str]) -> str:

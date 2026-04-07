@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from src.concurrency.background import BackgroundManager
-from src.core.fileutil import generate_random_id, is_tool_result_message
+from src.core.fileutil import generate_random_id, is_tool_result_message, optional_string as _coerce_optional_string
 from src.core.context import assemble_system_prompt
 from src.core.loop import LLMCallError, agent_loop
 from src.core.tools import get_handlers, get_tools
@@ -25,14 +25,14 @@ from src.permission.rules import parse_permission_rules
 from src.provider.base import BaseLLMProvider, ThinkingConfig
 from src.provider.factory import create_provider
 from src.team.autonomous import AutonomousAgent
-from src.team.mailbox import Message, MessageBus, optional_string as _coerce_optional_string
+from src.team.mailbox import Message, MessageBus
 from src.team.manager import TeammateManager
 from src.team.protocols import Protocol, ProtocolFSM, decode_protocol_content
 from src.ui.console import AgentConsole
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.toml"
-VALID_PERMISSION_MODES = {"default", "auto", "plan", "bypass"}
+VALID_PERMISSION_MODES = {m.value for m in PermissionMode}
 VALID_THINKING_MODES = {"adaptive", "enabled", "disabled"}
 VALID_SUBAGENT_TYPES = set(BUILTIN_AGENT_TYPES)
 MAIN_AGENT_NAME = "main"
@@ -843,11 +843,7 @@ def _run_stdio_session(
         )
         try:
             user_input = _read_stdio_input()
-        except KeyboardInterrupt:
-            _broadcast_team_shutdown(message_bus)
-            ui_console.print_status("\nExiting BareAgent.")
-            return 0
-        except EOFError:
+        except (KeyboardInterrupt, EOFError):
             _broadcast_team_shutdown(message_bus)
             ui_console.print_status("\nExiting BareAgent.")
             return 0

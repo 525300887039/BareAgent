@@ -4,11 +4,10 @@ import copy
 import json
 import threading
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from src.core.fileutil import atomic_write_json, generate_random_id
+from src.core.fileutil import atomic_write_json, generate_random_id, utc_timestamp_iso
 from src.core.schema import tool_schema as _schema
 
 TASK_STATUSES = {"pending", "in_progress", "done", "failed"}
@@ -229,12 +228,12 @@ class TaskManager:
         atomic_write_json(self.task_file, payload)
 
     def _load(self) -> None:
-        if not self.task_file.exists():
+        try:
+            with self.task_file.open("r", encoding="utf-8") as file:
+                payload = json.load(file)
+        except FileNotFoundError:
             self.tasks = {}
             return
-
-        with self.task_file.open("r", encoding="utf-8") as file:
-            payload = json.load(file)
 
         if not isinstance(payload, dict):
             raise ValueError("Task file must contain a JSON object")
@@ -305,7 +304,7 @@ class TaskManager:
                 return task_id
 
     def _timestamp(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return utc_timestamp_iso()
 
     def _validate_status(self, status: str) -> None:
         if status not in TASK_STATUSES:

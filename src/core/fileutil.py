@@ -7,6 +7,7 @@ import os
 import secrets
 import string
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -50,3 +51,32 @@ def atomic_write_json(file_path: Path, payload: Any) -> None:
         except OSError:
             pass
         raise
+
+
+def utc_timestamp_iso() -> str:
+    """Return the current UTC time as an ISO-8601 string."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def optional_string(value: Any) -> str | None:
+    """Normalize *value* to a stripped string, or ``None`` if blank/None."""
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def collect_tool_names(messages: list[dict[str, Any]]) -> dict[str, str]:
+    """Build a mapping from tool_use id → tool name across all messages."""
+    tool_name_by_id: dict[str, str] = {}
+    for message in messages:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict) or block.get("type") != "tool_use":
+                continue
+            tool_id = str(block.get("id", ""))
+            if tool_id:
+                tool_name_by_id[tool_id] = str(block.get("name", "unknown"))
+    return tool_name_by_id
