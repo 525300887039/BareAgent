@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from src.core.fileutil import stringify
+
 
 @dataclass(slots=True)
 class ThinkingConfig:
@@ -13,6 +15,9 @@ class ThinkingConfig:
 
     mode: Literal["enabled", "adaptive", "disabled"] = "adaptive"
     budget_tokens: int = 10000
+
+
+VALID_THINKING_MODES: frozenset[str] = frozenset({"enabled", "adaptive", "disabled"})
 
 
 @dataclass(slots=True)
@@ -92,8 +97,6 @@ class BaseLLMProvider(ABC):
         """Yield streaming events and return the final normalized response."""
 
     def _stringify_content(self, content: Any) -> str:
-        if isinstance(content, str):
-            return content
         if isinstance(content, list):
             text_parts: list[str] = []
             for block in content:
@@ -102,6 +105,4 @@ class BaseLLMProvider(ABC):
                 else:
                     text_parts.append(json.dumps(block, ensure_ascii=False, default=str))
             return "\n".join(part for part in text_parts if part)
-        if content is None:
-            return ""
-        return json.dumps(content, ensure_ascii=False, default=str)
+        return stringify(content)
