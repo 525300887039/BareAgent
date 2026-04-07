@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from src.core.loop import agent_loop, LLMCallError
+from src.core.loop import agent_loop
 from src.planning.tasks import Task, TaskManager
 from src.team.mailbox import Message, MessageBus
 from src.team.protocols import Protocol, ProtocolFSM, decode_protocol_content
@@ -97,9 +97,6 @@ class AutonomousAgent:
 
         try:
             self._run_prompt(self._build_task_prompt(task))
-        except LLMCallError:
-            self.task_manager.update(task.id, status="failed")
-            return
         except Exception:
             self.task_manager.update(task.id, status="failed")
             return
