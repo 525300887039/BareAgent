@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-from copy import deepcopy
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable
@@ -282,7 +281,7 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
 
 
 def get_tools() -> list[dict[str, Any]]:
-    return deepcopy(TOOL_SCHEMAS)
+    return list(TOOL_SCHEMAS)
 
 
 def get_handlers(
