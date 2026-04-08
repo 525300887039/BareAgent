@@ -92,6 +92,53 @@
         line-height: 1.6;
       }
 
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: end;
+      }
+
+      .locale-switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px;
+        border: 1px solid rgba(137, 180, 250, 0.18);
+        border-radius: 999px;
+        background: rgba(24, 24, 37, 0.78);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(12px);
+      }
+
+      .locale-button {
+        padding: 9px 12px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--text-muted);
+        font-family: var(--font-body);
+        font-size: 0.82rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+      }
+
+      .locale-button:hover,
+      .locale-button:focus-visible {
+        background: rgba(49, 50, 68, 0.72);
+        color: var(--text);
+        transform: translateY(-1px);
+        outline: none;
+      }
+
+      .locale-button.active {
+        background: linear-gradient(180deg, rgba(137, 180, 250, 0.2), rgba(17, 17, 27, 0.82));
+        color: var(--accent-strong);
+      }
+
       .status-pill {
         display: inline-flex;
         align-items: center;
@@ -534,6 +581,11 @@
           flex-direction: column;
         }
 
+        .header-actions {
+          width: 100%;
+          justify-content: space-between;
+        }
+
         .card-header {
           flex-direction: column;
         }
@@ -548,15 +600,21 @@
     <div class="shell">
       <header class="header">
         <div class="header-copy">
-          <h1>BareAgent Debug Viewer</h1>
-          <p>
+          <h1 id="page-title">BareAgent Debug Viewer</h1>
+          <p id="page-subtitle">
             Inspect saved request and response payloads, expand a single interaction, and
             watch new activity stream in over Server-Sent Events.
           </p>
         </div>
-        <div class="status-pill" id="connection-status">
-          <span class="status-dot" id="status-dot"></span>
-          <span id="status-text">Connecting to event stream...</span>
+        <div class="header-actions">
+          <div class="locale-switch" id="locale-switch" role="group" aria-label="Switch language">
+            <button class="locale-button active" id="locale-en" type="button" data-locale="en">EN</button>
+            <button class="locale-button" id="locale-zh" type="button" data-locale="zh">中文</button>
+          </div>
+          <div class="status-pill" id="connection-status">
+            <span class="status-dot" id="status-dot"></span>
+            <span id="status-text">Connecting to event stream...</span>
+          </div>
         </div>
       </header>
 
@@ -564,15 +622,15 @@
         <aside class="panel">
           <div class="panel-header">
             <div>
-              <h2>Sessions</h2>
-              <p>Recorded debug timelines</p>
+              <h2 id="sessions-title">Sessions</h2>
+              <p id="sessions-subtitle">Recorded debug timelines</p>
             </div>
             <span id="session-count">0 loaded</span>
           </div>
           <div class="session-list" id="session-list">
             <div class="empty-state">Loading session index...</div>
           </div>
-          <div class="footer-note">
+          <div class="footer-note" id="sessions-footer-note">
             Session selection refreshes the interaction timeline on the right.
           </div>
         </aside>
@@ -660,7 +718,190 @@
     </template>
 
     <script>
+      const LOCALE_STORAGE_KEY = "bareagent-debug-viewer-locale";
+      const translations = {
+        en: {
+          documentTitle: "BareAgent Debug Viewer",
+          pageTitle: "BareAgent Debug Viewer",
+          pageSubtitle:
+            "Inspect saved request and response payloads, expand a single interaction, and watch new activity stream in over Server-Sent Events.",
+          localeSwitcherLabel: "Switch language",
+          sessionsTitle: "Sessions",
+          sessionsSubtitle: "Recorded debug timelines",
+          sessionsFooterNote: "Session selection refreshes the interaction timeline on the right.",
+          sessionIndexLoading: "Loading session index...",
+          sessionsEmpty: "No debug sessions have been recorded yet.",
+          clickToLoad: "Click to load",
+          noCachedTimeline: "No cached timeline",
+          latestSeq: "Latest #{seq}",
+          timelineTitle: "Interactions",
+          timelineTitleForSession: "Interactions for {sessionId}",
+          timelineSubtitleIdle: "Choose a session to inspect its timeline.",
+          timelineSubtitleActive: "Click a card to expand request, response, and raw JSON payloads.",
+          timelineSubtitleLoadError: "This session timeline could not be loaded from the debug viewer API.",
+          timelineEmpty: "The timeline will appear here after a session is selected.",
+          noSessionSelected: "No session selected",
+          loadingInteractions: "Loading interactions...",
+          noInteractions: "No interactions found for this session.",
+          sessionLoadError: "Failed to load session timeline: {message}",
+          summaryTokens: "Tokens",
+          summaryDuration: "Duration",
+          summaryToolCalls: "Tool Calls",
+          summaryMessages: "Messages",
+          tabRequest: "Request",
+          tabResponse: "Response",
+          tabRaw: "Raw JSON",
+          statusConnecting: "Connecting to event stream...",
+          statusLive: "Live updates connected",
+          statusRetrying: "Event stream reconnecting...",
+          unknownTime: "Unknown time",
+          noContent: "No content",
+          noMessages: "No messages recorded.",
+          noToolSchemas: "No tool schemas were sent with this request.",
+          toolSchemas: "Tool Schemas ({count})",
+          noToolCalls: "No tool calls in this response.",
+          systemPrompt: "System Prompt",
+          noSystemPrompt: "No explicit system prompt found.",
+          messages: "Messages",
+          tools: "Tools",
+          requestUnavailable: "Request payload is not available.",
+          responseUnavailable: "Response has not been logged yet.",
+          responseText: "Text",
+          noAssistantText: "No assistant text in this response.",
+          responseThinking: "Thinking",
+          noThinking: "No thinking trace recorded.",
+          responseToolCalls: "Tool Calls",
+          responseMetrics: "Response Metrics",
+          inputTokens: "Input Tokens",
+          outputTokens: "Output Tokens",
+          responseError: "Error: {message}",
+          loadingRequestPayload: "Loading request payload...",
+          loadingResponsePayload: "Loading response payload...",
+          loadingRawJson: "Loading raw JSON...",
+          bootSessionsError: "Failed to load sessions from the debug viewer API.",
+          bootTimelineError: "The timeline could not be loaded.",
+          interactionLoadError: "Failed to load interaction: {message}",
+          stateError: "error",
+          statePending: "pending",
+          stateComplete: "complete",
+          roleSystem: "system",
+          roleUser: "user",
+          roleAssistant: "assistant",
+          roleTool: "tool",
+          roleUnknown: "unknown",
+        },
+        zh: {
+          documentTitle: "BareAgent 调试查看器",
+          pageTitle: "BareAgent 调试查看器",
+          pageSubtitle: "查看已保存的请求与响应载荷，展开单次交互详情，并通过 Server-Sent Events 观察实时更新。",
+          localeSwitcherLabel: "切换语言",
+          sessionsTitle: "会话",
+          sessionsSubtitle: "已记录的调试时间线",
+          sessionsFooterNote: "切换左侧会话后，右侧时间线会同步刷新。",
+          sessionIndexLoading: "正在加载会话索引...",
+          sessionsEmpty: "当前还没有记录任何调试会话。",
+          clickToLoad: "点击加载",
+          noCachedTimeline: "暂无缓存时间线",
+          latestSeq: "最新 #{seq}",
+          timelineTitle: "交互",
+          timelineTitleForSession: "{sessionId} 的交互",
+          timelineSubtitleIdle: "选择一个会话以查看它的时间线。",
+          timelineSubtitleActive: "点击卡片可展开查看请求、响应和原始 JSON 载荷。",
+          timelineSubtitleLoadError: "无法从调试查看器 API 加载该会话的时间线。",
+          timelineEmpty: "选择会话后即可在这里查看时间线。",
+          noSessionSelected: "尚未选择会话",
+          loadingInteractions: "正在加载交互...",
+          noInteractions: "该会话下没有交互记录。",
+          sessionLoadError: "加载会话时间线失败：{message}",
+          summaryTokens: "Token",
+          summaryDuration: "耗时",
+          summaryToolCalls: "工具调用",
+          summaryMessages: "消息",
+          tabRequest: "请求",
+          tabResponse: "响应",
+          tabRaw: "原始 JSON",
+          statusConnecting: "正在连接事件流...",
+          statusLive: "实时更新已连接",
+          statusRetrying: "事件流正在重连...",
+          unknownTime: "未知时间",
+          noContent: "没有内容",
+          noMessages: "没有记录任何消息。",
+          noToolSchemas: "这次请求没有携带任何工具 Schema。",
+          toolSchemas: "工具 Schema（{count}）",
+          noToolCalls: "这次响应没有工具调用。",
+          systemPrompt: "系统提示词",
+          noSystemPrompt: "未找到显式系统提示词。",
+          messages: "消息",
+          tools: "工具",
+          requestUnavailable: "请求载荷不可用。",
+          responseUnavailable: "响应尚未记录。",
+          responseText: "文本",
+          noAssistantText: "这次响应没有助手文本。",
+          responseThinking: "思考",
+          noThinking: "没有记录思考轨迹。",
+          responseToolCalls: "工具调用",
+          responseMetrics: "响应指标",
+          inputTokens: "输入 Token",
+          outputTokens: "输出 Token",
+          responseError: "错误：{message}",
+          loadingRequestPayload: "正在加载请求载荷...",
+          loadingResponsePayload: "正在加载响应载荷...",
+          loadingRawJson: "正在加载原始 JSON...",
+          bootSessionsError: "无法从调试查看器 API 加载会话。",
+          bootTimelineError: "时间线加载失败。",
+          interactionLoadError: "加载交互失败：{message}",
+          stateError: "错误",
+          statePending: "等待中",
+          stateComplete: "完成",
+          roleSystem: "系统",
+          roleUser: "用户",
+          roleAssistant: "助手",
+          roleTool: "工具",
+          roleUnknown: "未知",
+        },
+      };
+
+      function normalizeLocale(locale) {
+        if (typeof locale !== "string") {
+          return null;
+        }
+        const normalized = locale.toLowerCase();
+        if (normalized.startsWith("zh")) {
+          return "zh";
+        }
+        if (normalized.startsWith("en")) {
+          return "en";
+        }
+        return null;
+      }
+
+      function resolveInitialLocale() {
+        try {
+          const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
+          if (stored) {
+            const resolved = normalizeLocale(stored);
+            if (resolved) {
+              return resolved;
+            }
+          }
+        } catch (_error) {
+          // Ignore localStorage access failures and fall back to browser preferences.
+        }
+
+        const browserLocales = Array.isArray(navigator.languages) && navigator.languages.length > 0
+          ? navigator.languages
+          : [navigator.language];
+        for (const locale of browserLocales) {
+          const resolved = normalizeLocale(locale);
+          if (resolved) {
+            return resolved;
+          }
+        }
+        return "en";
+      }
+
       const state = {
+        locale: resolveInitialLocale(),
         sessions: [],
         activeSessionId: null,
         interactionsBySession: new Map(),
@@ -670,10 +911,19 @@
         loadingSession: false,
         sessionsRequestId: 0,
         sessionRequestIds: new Map(),
+        sessionErrors: new Map(),
         detailRequestIds: new Map(),
+        connectionStatusKind: "connecting",
+        bootError: false,
+        booting: true,
       };
 
       const elements = {
+        pageTitle: document.getElementById("page-title"),
+        pageSubtitle: document.getElementById("page-subtitle"),
+        sessionsTitle: document.getElementById("sessions-title"),
+        sessionsSubtitle: document.getElementById("sessions-subtitle"),
+        sessionsFooterNote: document.getElementById("sessions-footer-note"),
         sessionList: document.getElementById("session-list"),
         sessionCount: document.getElementById("session-count"),
         timeline: document.getElementById("timeline"),
@@ -681,11 +931,95 @@
         timelineSubtitle: document.getElementById("timeline-subtitle"),
         timelineSessionChip: document.getElementById("timeline-session-chip"),
         timelineCountChip: document.getElementById("timeline-count-chip"),
+        localeSwitch: document.getElementById("locale-switch"),
+        localeButtons: Array.from(document.querySelectorAll(".locale-button")),
         statusText: document.getElementById("status-text"),
         statusDot: document.getElementById("status-dot"),
         sessionTemplate: document.getElementById("session-template"),
         interactionTemplate: document.getElementById("interaction-template"),
       };
+
+      function t(key, params = {}) {
+        const active = translations[state.locale] || translations.en;
+        const fallback = translations.en;
+        const template = active[key] || fallback[key] || key;
+        return template.replace(/\{(\w+)\}/g, (_match, name) => String(params[name] ?? ""));
+      }
+
+      function currentLanguageTag() {
+        return state.locale === "zh" ? "zh-CN" : "en";
+      }
+
+      function persistLocale(locale) {
+        try {
+          localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+        } catch (_error) {
+          // Ignore localStorage access failures.
+        }
+      }
+
+      function formatLoadedCount(count) {
+        return state.locale === "zh" ? `已加载 ${count} 个` : `${count} loaded`;
+      }
+
+      function formatInteractionCount(count) {
+        return state.locale === "zh"
+          ? `${count} 次交互`
+          : `${count} interaction${count === 1 ? "" : "s"}`;
+      }
+
+      function formatLatestSeq(seq) {
+        return t("latestSeq", { seq });
+      }
+
+      function formatMessageToolSummary(messageCount, toolCount) {
+        return state.locale === "zh"
+          ? `${messageCount} 条消息 / ${toolCount} 个工具`
+          : `${messageCount} msg / ${toolCount} tools`;
+      }
+
+      function formatRoleLabel(role) {
+        const normalized = String(role || "unknown").toLowerCase();
+        const key = `role${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
+        return translations[state.locale][key] || translations.en[key] || translations[state.locale].roleUnknown;
+      }
+
+      function formatMessageOrdinal(index) {
+        return state.locale === "zh" ? `消息 ${index}` : `Message ${index}`;
+      }
+
+      function formatToolCallLabel(toolName, index) {
+        return state.locale === "zh"
+          ? `${toolName}（#${index}）`
+          : `${toolName} (#${index})`;
+      }
+
+      function applyLocale() {
+        document.documentElement.lang = currentLanguageTag();
+        document.title = t("documentTitle");
+        elements.pageTitle.textContent = t("pageTitle");
+        elements.pageSubtitle.textContent = t("pageSubtitle");
+        elements.sessionsTitle.textContent = t("sessionsTitle");
+        elements.sessionsSubtitle.textContent = t("sessionsSubtitle");
+        elements.sessionsFooterNote.textContent = t("sessionsFooterNote");
+        elements.localeSwitch.setAttribute("aria-label", t("localeSwitcherLabel"));
+        elements.localeButtons.forEach((button) => {
+          button.classList.toggle("active", button.dataset.locale === state.locale);
+        });
+        setConnectionStatus(state.connectionStatusKind);
+        renderSessions();
+        renderTimeline();
+      }
+
+      function setLocale(locale) {
+        const normalized = normalizeLocale(locale) || "en";
+        if (normalized === state.locale) {
+          return;
+        }
+        state.locale = normalized;
+        persistLocale(normalized);
+        applyLocale();
+      }
 
       function detailKey(sessionId, seq) {
         return `${sessionId}:${seq}`;
@@ -703,16 +1037,16 @@
 
       function formatTimestamp(value) {
         if (typeof value === "number" && Number.isFinite(value)) {
-          return new Date(value * 1000).toLocaleString();
+          return new Date(value * 1000).toLocaleString(currentLanguageTag());
         }
         if (typeof value === "string" && value.trim()) {
           const parsed = Date.parse(value);
           if (!Number.isNaN(parsed)) {
-            return new Date(parsed).toLocaleString();
+            return new Date(parsed).toLocaleString(currentLanguageTag());
           }
           return value;
         }
-        return "Unknown time";
+        return t("unknownTime");
       }
 
       function formatDuration(value) {
@@ -721,9 +1055,13 @@
           return "--";
         }
         if (numeric >= 1000) {
-          return `${(numeric / 1000).toFixed(2)} s`;
+          return state.locale === "zh"
+            ? `${(numeric / 1000).toFixed(2)} 秒`
+            : `${(numeric / 1000).toFixed(2)} s`;
         }
-        return `${numeric.toFixed(2)} ms`;
+        return state.locale === "zh"
+          ? `${numeric.toFixed(2)} 毫秒`
+          : `${numeric.toFixed(2)} ms`;
       }
 
       function formatTokens(inputTokens, outputTokens) {
@@ -732,7 +1070,9 @@
         if (!Number.isFinite(input) && !Number.isFinite(output)) {
           return "--";
         }
-        return `${Number.isFinite(input) ? input : 0} in / ${Number.isFinite(output) ? output : 0} out`;
+        return state.locale === "zh"
+          ? `${Number.isFinite(input) ? input : 0} 输入 / ${Number.isFinite(output) ? output : 0} 输出`
+          : `${Number.isFinite(input) ? input : 0} in / ${Number.isFinite(output) ? output : 0} out`;
       }
 
       function normalizeSummary(entry) {
@@ -758,19 +1098,25 @@
         const summaries = getSessionSummaries(sessionId);
         if (summaries.length === 0) {
           return {
-            countText: "Click to load",
-            latestText: "No cached timeline",
+            countText: t("clickToLoad"),
+            latestText: t("noCachedTimeline"),
           };
         }
         const latest = summaries[summaries.length - 1];
         return {
-          countText: `${summaries.length} interaction${summaries.length === 1 ? "" : "s"}`,
-          latestText: `Latest #${latest.seq}`,
+          countText: formatInteractionCount(summaries.length),
+          latestText: formatLatestSeq(latest.seq),
         };
       }
 
-      function setConnectionStatus(kind, text) {
-        elements.statusText.textContent = text;
+      function setConnectionStatus(kind) {
+        state.connectionStatusKind = kind;
+        const labels = {
+          connecting: t("statusConnecting"),
+          live: t("statusLive"),
+          retrying: t("statusRetrying"),
+        };
+        elements.statusText.textContent = labels[kind] || labels.connecting;
         const colors = {
           connecting: "#f9e2af",
           live: "#a6e3a1",
@@ -819,13 +1165,13 @@
         const badge = document.createElement("span");
         const normalized = String(role || "unknown").replace(/[^a-z0-9_]+/gi, "_");
         badge.className = `role-badge role-${normalized}`;
-        badge.textContent = role || "unknown";
+        badge.textContent = formatRoleLabel(role);
         return badge;
       }
 
       function appendContentValue(container, value) {
         if (value === null || value === undefined || value === "") {
-          container.appendChild(createNote("No content", "loading-note"));
+          container.appendChild(createNote(t("noContent"), "loading-note"));
           return;
         }
 
@@ -836,7 +1182,7 @@
 
         if (Array.isArray(value)) {
           if (value.length === 0) {
-            container.appendChild(createNote("No content", "loading-note"));
+            container.appendChild(createNote(t("noContent"), "loading-note"));
             return;
           }
           value.forEach((item) => {
@@ -886,7 +1232,7 @@
         list.className = "message-list";
 
         if (!Array.isArray(messages) || messages.length === 0) {
-          list.appendChild(createNote("No messages recorded.", "loading-note"));
+          list.appendChild(createNote(t("noMessages"), "loading-note"));
           return list;
         }
 
@@ -900,7 +1246,7 @@
 
           const ordinal = document.createElement("span");
           ordinal.className = "card-time";
-          ordinal.textContent = `Message ${index + 1}`;
+          ordinal.textContent = formatMessageOrdinal(index + 1);
           head.appendChild(ordinal);
 
           const body = document.createElement("div");
@@ -920,13 +1266,13 @@
         wrapper.className = "tools-box";
 
         if (!Array.isArray(tools) || tools.length === 0) {
-          wrapper.appendChild(createNote("No tool schemas were sent with this request.", "loading-note"));
+          wrapper.appendChild(createNote(t("noToolSchemas"), "loading-note"));
           return wrapper;
         }
 
         const details = document.createElement("details");
         const summary = document.createElement("summary");
-        summary.textContent = `Tool Schemas (${tools.length})`;
+        summary.textContent = t("toolSchemas", { count: tools.length });
         details.appendChild(summary);
         details.appendChild(createJsonBlock(tools));
         wrapper.appendChild(details);
@@ -938,7 +1284,7 @@
         list.className = "tool-call-list";
 
         if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
-          list.appendChild(createNote("No tool calls in this response.", "loading-note"));
+          list.appendChild(createNote(t("noToolCalls"), "loading-note"));
           return list;
         }
 
@@ -953,7 +1299,7 @@
           const label = document.createElement("span");
           label.className = "card-time";
           const toolName = toolCall?.name || `tool_${index + 1}`;
-          label.textContent = `${toolName} (#${index + 1})`;
+          label.textContent = formatToolCallLabel(toolName, index + 1);
           head.appendChild(label);
 
           item.appendChild(head);
@@ -969,54 +1315,64 @@
         const request = interaction?.request;
 
         if (!request) {
-          panel.appendChild(createNote("Request payload is not available.", "error-note"));
+          panel.appendChild(createNote(t("requestUnavailable"), "error-note"));
           return;
         }
 
         const systemPrompt = collectSystemPrompt(request.messages);
         panel.appendChild(
           createDetailBlock(
-            "System Prompt",
-            systemPrompt ? createTextBlock(systemPrompt) : createNote("No explicit system prompt found.", "loading-note")
+            t("systemPrompt"),
+            systemPrompt ? createTextBlock(systemPrompt) : createNote(t("noSystemPrompt"), "loading-note")
           )
         );
-        panel.appendChild(createDetailBlock("Messages", renderMessages(request.messages)));
-        panel.appendChild(createDetailBlock("Tools", renderTools(request.tools)));
+        panel.appendChild(createDetailBlock(t("messages"), renderMessages(request.messages)));
+        panel.appendChild(createDetailBlock(t("tools"), renderTools(request.tools)));
       }
 
       function renderResponsePanel(panel, interaction, summary) {
         clearElement(panel);
         const response = interaction?.response;
 
+        if (interaction?.viewer_error_message) {
+          panel.appendChild(
+            createNote(
+              t("interactionLoadError", { message: interaction.viewer_error_message }),
+              "error-note"
+            )
+          );
+          return;
+        }
+
         if (!response) {
-          panel.appendChild(createNote("Response has not been logged yet.", "loading-note"));
+          panel.appendChild(createNote(t("responseUnavailable"), "loading-note"));
           return;
         }
 
         panel.appendChild(
           createDetailBlock(
-            "Text",
-            response.text ? createTextBlock(response.text) : createNote("No assistant text in this response.", "loading-note")
+            t("responseText"),
+            response.text ? createTextBlock(response.text) : createNote(t("noAssistantText"), "loading-note")
           )
         );
 
         panel.appendChild(
           createDetailBlock(
-            "Thinking",
+            t("responseThinking"),
             response.thinking
               ? createTextBlock(response.thinking, "code-block thinking-block")
-              : createNote("No thinking trace recorded.", "loading-note")
+              : createNote(t("noThinking"), "loading-note")
           )
         );
 
-        panel.appendChild(createDetailBlock("Tool Calls", renderToolCalls(response.tool_calls)));
+        panel.appendChild(createDetailBlock(t("responseToolCalls"), renderToolCalls(response.tool_calls)));
 
         const stats = document.createElement("div");
         stats.className = "message-list";
         const metrics = [
-          ["Input Tokens", summary.input_tokens],
-          ["Output Tokens", summary.output_tokens],
-          ["Duration", formatDuration(summary.duration_ms)],
+          [t("inputTokens"), summary.input_tokens],
+          [t("outputTokens"), summary.output_tokens],
+          [t("summaryDuration"), formatDuration(summary.duration_ms)],
         ];
         metrics.forEach(([label, value]) => {
           const row = document.createElement("article");
@@ -1030,10 +1386,10 @@
           row.appendChild(createTextBlock(String(value)));
           stats.appendChild(row);
         });
-        panel.appendChild(createDetailBlock("Response Metrics", stats));
+        panel.appendChild(createDetailBlock(t("responseMetrics"), stats));
 
         if (response.error) {
-          panel.appendChild(createNote(`Error: ${response.error}`, "error-note"));
+          panel.appendChild(createNote(t("responseError", { message: response.error }), "error-note"));
         }
       }
 
@@ -1048,36 +1404,49 @@
 
       function getCardState(summary) {
         if (summary.has_error) {
-          return "error";
+          return t("stateError");
         }
         if (!summary.has_response) {
-          return "pending";
+          return t("statePending");
         }
-        return "complete";
+        return t("stateComplete");
       }
 
       function updateTimelineHeader() {
         if (!state.activeSessionId) {
-          elements.timelineTitle.textContent = "Interactions";
-          elements.timelineSubtitle.textContent = "Choose a session to inspect its timeline.";
-          elements.timelineSessionChip.textContent = "No session selected";
-          elements.timelineCountChip.textContent = "0 interactions";
+          elements.timelineTitle.textContent = t("timelineTitle");
+          elements.timelineSubtitle.textContent = t("timelineSubtitleIdle");
+          elements.timelineSessionChip.textContent = t("noSessionSelected");
+          elements.timelineCountChip.textContent = formatInteractionCount(0);
           return;
         }
 
         const summaries = getSessionSummaries(state.activeSessionId);
-        elements.timelineTitle.textContent = `Interactions for ${state.activeSessionId}`;
-        elements.timelineSubtitle.textContent = "Click a card to expand request, response, and raw JSON payloads.";
+        const sessionError = state.sessionErrors.get(state.activeSessionId);
+        elements.timelineTitle.textContent = t("timelineTitleForSession", { sessionId: state.activeSessionId });
+        elements.timelineSubtitle.textContent = sessionError
+          ? t("timelineSubtitleLoadError")
+          : t("timelineSubtitleActive");
         elements.timelineSessionChip.textContent = state.activeSessionId;
-        elements.timelineCountChip.textContent = `${summaries.length} interaction${summaries.length === 1 ? "" : "s"}`;
+        elements.timelineCountChip.textContent = formatInteractionCount(summaries.length);
       }
 
       function renderSessions() {
         clearElement(elements.sessionList);
-        elements.sessionCount.textContent = `${state.sessions.length} loaded`;
+        elements.sessionCount.textContent = formatLoadedCount(state.sessions.length);
+
+        if (state.bootError && state.sessions.length === 0) {
+          elements.sessionList.appendChild(createNote(t("bootSessionsError"), "error-note"));
+          return;
+        }
+
+        if (state.booting && state.sessions.length === 0) {
+          elements.sessionList.appendChild(createNote(t("sessionIndexLoading"), "empty-state"));
+          return;
+        }
 
         if (state.sessions.length === 0) {
-          elements.sessionList.appendChild(createNote("No debug sessions have been recorded yet.", "empty-state"));
+          elements.sessionList.appendChild(createNote(t("sessionsEmpty"), "empty-state"));
           return;
         }
 
@@ -1116,21 +1485,32 @@
         updateTimelineHeader();
         clearElement(elements.timeline);
 
+        if (state.bootError && !state.activeSessionId) {
+          elements.timeline.appendChild(createNote(t("bootTimelineError"), "error-note"));
+          return;
+        }
+
         if (!state.activeSessionId) {
-          elements.timeline.appendChild(
-            createNote("The timeline will appear here after a session is selected.", "empty-state")
-          );
+          elements.timeline.appendChild(createNote(t("timelineEmpty"), "empty-state"));
           return;
         }
 
         const summaries = getSessionSummaries(state.activeSessionId);
+        const sessionError = state.sessionErrors.get(state.activeSessionId);
         if (state.loadingSession && summaries.length === 0) {
-          elements.timeline.appendChild(createNote("Loading interactions...", "empty-state"));
+          elements.timeline.appendChild(createNote(t("loadingInteractions"), "empty-state"));
+          return;
+        }
+
+        if (sessionError) {
+          elements.timeline.appendChild(
+            createNote(t("sessionLoadError", { message: sessionError }), "error-note")
+          );
           return;
         }
 
         if (summaries.length === 0) {
-          elements.timeline.appendChild(createNote("No interactions found for this session.", "empty-state"));
+          elements.timeline.appendChild(createNote(t("noInteractions"), "empty-state"));
           return;
         }
 
@@ -1147,7 +1527,17 @@
           fragment.querySelector(".summary-tokens").textContent = formatTokens(summary.input_tokens, summary.output_tokens);
           fragment.querySelector(".summary-duration").textContent = formatDuration(summary.duration_ms);
           fragment.querySelector(".summary-tool-calls").textContent = String(summary.tool_call_count);
-          fragment.querySelector(".summary-messages").textContent = `${summary.message_count} msg / ${summary.tool_count} tools`;
+          fragment.querySelector(".summary-messages").textContent = formatMessageToolSummary(
+            summary.message_count,
+            summary.tool_count
+          );
+          fragment.querySelectorAll(".summary-label")[0].textContent = t("summaryTokens");
+          fragment.querySelectorAll(".summary-label")[1].textContent = t("summaryDuration");
+          fragment.querySelectorAll(".summary-label")[2].textContent = t("summaryToolCalls");
+          fragment.querySelectorAll(".summary-label")[3].textContent = t("summaryMessages");
+          fragment.querySelector('[data-tab="request"]').textContent = t("tabRequest");
+          fragment.querySelector('[data-tab="response"]').textContent = t("tabResponse");
+          fragment.querySelector('[data-tab="raw"]').textContent = t("tabRaw");
 
           stateChip.textContent = getCardState(summary);
 
@@ -1188,9 +1578,9 @@
             const interaction = state.detailCache.get(key);
 
             if (!interaction) {
-              requestPanel.appendChild(createNote("Loading request payload...", "loading-note"));
-              responsePanel.appendChild(createNote("Loading response payload...", "loading-note"));
-              rawPanel.textContent = "Loading raw JSON...";
+              requestPanel.appendChild(createNote(t("loadingRequestPayload"), "loading-note"));
+              responsePanel.appendChild(createNote(t("loadingResponsePayload"), "loading-note"));
+              rawPanel.textContent = t("loadingRawJson");
             } else {
               renderRequestPanel(requestPanel, interaction);
               renderResponsePanel(responsePanel, interaction, summary);
@@ -1209,6 +1599,7 @@
           return;
         }
 
+        state.bootError = false;
         state.sessions = Array.isArray(sessions) ? sessions : [];
 
         if (!state.activeSessionId || !state.sessions.includes(state.activeSessionId)) {
@@ -1234,6 +1625,7 @@
 
           const normalized = Array.isArray(summaries) ? summaries.map(normalizeSummary) : [];
           state.interactionsBySession.set(sessionId, normalized);
+          state.sessionErrors.delete(sessionId);
 
           if (state.expandedKey) {
             const [expandedSessionId, expandedSeqText] = state.expandedKey.split(":");
@@ -1245,6 +1637,14 @@
               }
             }
           }
+        } catch (error) {
+          if (state.sessionRequestIds.get(sessionId) !== requestId) {
+            return;
+          }
+          state.sessionErrors.set(
+            sessionId,
+            error instanceof Error ? error.message : "Unknown session load error"
+          );
         } finally {
           if (state.activeSessionId === sessionId) {
             state.loadingSession = false;
@@ -1268,7 +1668,8 @@
         } catch (error) {
           state.detailCache.set(key, {
             request: null,
-            response: { error: error instanceof Error ? error.message : "Failed to load interaction." },
+            response: null,
+            viewer_error_message: error instanceof Error ? error.message : "",
           });
         }
 
@@ -1300,11 +1701,11 @@
       }
 
       function connectEvents() {
-        setConnectionStatus("connecting", "Connecting to event stream...");
+        setConnectionStatus("connecting");
         const source = new EventSource("/api/events");
 
         source.onopen = () => {
-          setConnectionStatus("live", "Live updates connected");
+          setConnectionStatus("live");
         };
 
         source.onmessage = async (event) => {
@@ -1317,31 +1718,31 @@
         };
 
         source.onerror = () => {
-          setConnectionStatus("retrying", "Event stream reconnecting...");
+          setConnectionStatus("retrying");
         };
       }
 
       async function boot() {
+        applyLocale();
         try {
           await refreshSessions();
-          renderTimeline();
           if (state.activeSessionId) {
             await loadSession(state.activeSessionId);
           }
         } catch (error) {
           console.error(error);
-          elements.sessionList.innerHTML = "";
-          elements.sessionList.appendChild(
-            createNote("Failed to load sessions from the debug viewer API.", "error-note")
-          );
-          elements.timeline.innerHTML = "";
-          elements.timeline.appendChild(
-            createNote("The timeline could not be loaded.", "error-note")
-          );
+          state.bootError = true;
+        } finally {
+          state.booting = false;
         }
 
+        applyLocale();
         connectEvents();
       }
+
+      elements.localeButtons.forEach((button) => {
+        button.addEventListener("click", () => setLocale(button.dataset.locale || "en"));
+      });
 
       boot();
     </script>
