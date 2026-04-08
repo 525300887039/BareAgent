@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Callable
 
 from src.concurrency.notification import inject_notifications
@@ -28,12 +29,21 @@ def agent_loop(
     stream: bool = False,
     console: UIProtocol | None = None,
     max_iterations: int = 200,
+    interaction_logger: Any = None,
 ) -> str:
     compact = compact_fn or (lambda _messages: None)
 
     for _iteration in range(max_iterations):
         _run_background(bg_manager, messages)
         compact(messages)
+
+        log_seq, log_started_at = _safe_log_request(
+            interaction_logger=interaction_logger,
+            messages=messages,
+            tools=tools,
+            provider=provider,
+            console=console,
+        )
 
         try:
             response, streamed_output, displayed_tool_calls = _invoke_provider(
@@ -43,11 +53,32 @@ def agent_loop(
                 stream=stream,
                 console=console,
             )
-        except Exception as exc:
+        except BaseException as exc:
+            _safe_log_response(
+                interaction_logger=interaction_logger,
+                log_seq=log_seq,
+                console=console,
+                duration_ms=(time.monotonic() - log_started_at) * 1000,
+                error=str(exc) or type(exc).__name__,
+            )
+            if not isinstance(exc, Exception):
+                raise
             msg = f"LLM call failed: {type(exc).__name__}: {exc}"
             if console is not None:
                 console.print_error(msg)
             raise LLMCallError(msg) from exc
+
+        _safe_log_response(
+            interaction_logger=interaction_logger,
+            log_seq=log_seq,
+            console=console,
+            text=response.text,
+            thinking=response.thinking,
+            tool_calls=_serialize_tool_calls(response.tool_calls),
+            input_tokens=response.input_tokens,
+            output_tokens=response.output_tokens,
+            duration_ms=(time.monotonic() - log_started_at) * 1000,
+        )
 
         messages.append(response.to_message())
         if response.text and console is not None and not streamed_output:
@@ -240,6 +271,26 @@ def _tool_result(tool_use_id: str, output: Any, *, is_error: bool = False) -> di
     return result
 
 
+def _provider_info(provider: BaseLLMProvider) -> dict[str, Any]:
+    info: dict[str, Any] = {"provider_type": type(provider).__name__}
+    for name in ("model", "base_url", "wire_api"):
+        value = getattr(provider, name, None)
+        if value not in {None, ""}:
+            info[name] = value
+    return info
+
+
+def _serialize_tool_calls(tool_calls: list[ToolCall]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": tool_call.id,
+            "name": tool_call.name,
+            "input": tool_call.input,
+        }
+        for tool_call in tool_calls
+    ]
+
+
 def _run_background(bg_manager: Any, messages: list[dict[str, Any]]) -> None:
     if bg_manager is None:
         return
@@ -261,3 +312,56 @@ def _ask_permission(permission: Any, call: ToolCall) -> bool:
     if callable(ask_user):
         return bool(ask_user(call))
     return False
+
+
+def _safe_log_request(
+    *,
+    interaction_logger: Any,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    provider: BaseLLMProvider,
+    console: UIProtocol | None,
+) -> tuple[int | None, float]:
+    if interaction_logger is None:
+        return None, 0.0
+
+    try:
+        log_seq = interaction_logger.log_request(
+            messages,
+            tools,
+            provider_info=_provider_info(provider),
+        )
+    except Exception as exc:
+        _report_log_failure(console, "request", exc)
+        return None, 0.0
+
+    return log_seq, time.monotonic()
+
+
+def _safe_log_response(
+    *,
+    interaction_logger: Any,
+    log_seq: int | None,
+    console: UIProtocol | None,
+    **kwargs: Any,
+) -> None:
+    if interaction_logger is None or log_seq is None:
+        return
+
+    try:
+        interaction_logger.log_response(log_seq, **kwargs)
+    except Exception as exc:
+        _report_log_failure(console, "response", exc)
+
+
+def _report_log_failure(
+    console: UIProtocol | None,
+    phase: str,
+    exc: Exception,
+) -> None:
+    if console is None:
+        return
+
+    console.print_status(
+        f"Debug logging failed during {phase} capture ({type(exc).__name__}: {exc})."
+    )

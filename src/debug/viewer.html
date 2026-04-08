@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BareAgent Debug Viewer</title>
+    <style>
+      :root {
+        --bg: #1e1e2e;
+        --bg-elevated: #181825;
+        --bg-panel: rgba(30, 30, 46, 0.92);
+        --bg-soft: #313244;
+        --bg-code: #11111b;
+        --text: #cdd6f4;
+        --text-dim: #a6adc8;
+        --text-muted: #9399b2;
+        --accent: #89b4fa;
+        --accent-strong: #74c7ec;
+        --system: #cba6f7;
+        --user: #89b4fa;
+        --assistant: #a6e3a1;
+        --tool: #89dceb;
+        --warning: #f9e2af;
+        --shadow: 0 18px 45px rgba(17, 17, 27, 0.38);
+        --radius-lg: 22px;
+        --radius-md: 16px;
+        --radius-sm: 12px;
+        --border: rgba(205, 214, 244, 0.1);
+        --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+        --font-body: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        min-height: 100%;
+        margin: 0;
+        background:
+          radial-gradient(circle at top left, rgba(203, 166, 247, 0.18), transparent 28%),
+          radial-gradient(circle at top right, rgba(137, 220, 235, 0.12), transparent 24%),
+          linear-gradient(180deg, #181825 0%, #1e1e2e 55%, #11111b 100%);
+        color: var(--text);
+        font-family: var(--font-body);
+      }
+
+      body {
+        min-width: 800px;
+      }
+
+      .shell {
+        position: relative;
+        min-height: 100vh;
+        padding: 28px;
+        overflow: hidden;
+      }
+
+      .shell::before {
+        content: "";
+        position: absolute;
+        inset: 18px;
+        border: 1px solid rgba(205, 214, 244, 0.06);
+        border-radius: 28px;
+        pointer-events: none;
+      }
+
+      .header {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 22px;
+      }
+
+      .header-copy h1 {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: clamp(2rem, 3vw, 3rem);
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      .header-copy p {
+        max-width: 46rem;
+        margin: 8px 0 0;
+        color: var(--text-dim);
+        line-height: 1.6;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        border: 1px solid rgba(137, 180, 250, 0.24);
+        border-radius: 999px;
+        background: rgba(24, 24, 37, 0.82);
+        color: var(--text-dim);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(12px);
+      }
+
+      .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--warning);
+        box-shadow: 0 0 16px rgba(249, 226, 175, 0.45);
+      }
+
+      .layout {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      .panel {
+        position: relative;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: linear-gradient(180deg, rgba(49, 50, 68, 0.58), rgba(24, 24, 37, 0.92));
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(14px);
+      }
+
+      .panel-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 22px 24px 16px;
+      }
+
+      .panel-header h2 {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: 1.45rem;
+        font-weight: 600;
+      }
+
+      .panel-header p,
+      .panel-header span {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.92rem;
+      }
+
+      .session-list {
+        display: grid;
+        gap: 12px;
+        padding: 0 16px 18px;
+      }
+
+      .session-button {
+        width: 100%;
+        padding: 16px 16px 15px;
+        border: 1px solid transparent;
+        border-radius: var(--radius-md);
+        background: rgba(17, 17, 27, 0.58);
+        color: var(--text);
+        text-align: left;
+        cursor: pointer;
+        transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+      }
+
+      .session-button:hover,
+      .session-button:focus-visible {
+        border-color: rgba(137, 180, 250, 0.35);
+        background: rgba(49, 50, 68, 0.78);
+        transform: translateY(-1px);
+        outline: none;
+      }
+
+      .session-button.active {
+        border-color: rgba(137, 180, 250, 0.48);
+        background: linear-gradient(180deg, rgba(137, 180, 250, 0.18), rgba(30, 30, 46, 0.88));
+      }
+
+      .session-name {
+        display: block;
+        font-family: var(--font-mono);
+        font-size: 0.94rem;
+        word-break: break-word;
+      }
+
+      .session-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 10px;
+        color: var(--text-muted);
+        font-size: 0.82rem;
+      }
+
+      .timeline-shell {
+        padding-bottom: 18px;
+      }
+
+      .timeline-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .meta-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 11px;
+        border-radius: 999px;
+        background: rgba(17, 17, 27, 0.56);
+        color: var(--text-muted);
+        font-size: 0.82rem;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 14px;
+        padding: 0 18px;
+      }
+
+      .empty-state {
+        margin: 0 18px;
+        padding: 38px 22px;
+        border: 1px dashed rgba(205, 214, 244, 0.15);
+        border-radius: var(--radius-md);
+        background: rgba(17, 17, 27, 0.34);
+        color: var(--text-muted);
+        text-align: center;
+        line-height: 1.7;
+      }
+
+      .interaction-card {
+        border: 1px solid rgba(205, 214, 244, 0.08);
+        border-radius: var(--radius-lg);
+        background: linear-gradient(180deg, rgba(17, 17, 27, 0.88), rgba(30, 30, 46, 0.92));
+        box-shadow: 0 12px 28px rgba(17, 17, 27, 0.34);
+        overflow: hidden;
+      }
+
+      .card-toggle {
+        width: 100%;
+        padding: 20px 20px 18px;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+
+      .card-toggle:hover,
+      .card-toggle:focus-visible {
+        background: rgba(49, 50, 68, 0.22);
+        outline: none;
+      }
+
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+      }
+
+      .card-title {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .card-seq {
+        font-family: var(--font-display);
+        font-size: 1.25rem;
+        color: var(--accent-strong);
+      }
+
+      .card-time {
+        color: var(--text-muted);
+        font-family: var(--font-mono);
+        font-size: 0.84rem;
+      }
+
+      .card-summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .summary-item {
+        padding: 12px 12px 11px;
+        border-radius: var(--radius-sm);
+        background: rgba(49, 50, 68, 0.34);
+      }
+
+      .summary-label {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--text-muted);
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .summary-value {
+        display: block;
+        font-family: var(--font-mono);
+        font-size: 0.95rem;
+      }
+
+      .card-detail {
+        display: none;
+        border-top: 1px solid rgba(205, 214, 244, 0.08);
+        background: rgba(17, 17, 27, 0.46);
+      }
+
+      .interaction-card.expanded .card-detail {
+        display: block;
+      }
+
+      .tab-strip {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 18px 20px 0;
+      }
+
+      .tab-button {
+        padding: 10px 14px;
+        border: 1px solid rgba(205, 214, 244, 0.1);
+        border-radius: 999px;
+        background: rgba(30, 30, 46, 0.84);
+        color: var(--text-dim);
+        cursor: pointer;
+      }
+
+      .tab-button.active {
+        border-color: rgba(137, 180, 250, 0.34);
+        background: rgba(137, 180, 250, 0.16);
+        color: var(--text);
+      }
+
+      .tab-panel {
+        display: none;
+        padding: 20px;
+      }
+
+      .tab-panel.active {
+        display: block;
+      }
+
+      .detail-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .detail-block {
+        padding: 16px;
+        border: 1px solid rgba(205, 214, 244, 0.08);
+        border-radius: var(--radius-md);
+        background: rgba(30, 30, 46, 0.72);
+      }
+
+      .detail-block h3,
+      .detail-block h4 {
+        margin: 0 0 12px;
+        font-size: 0.96rem;
+        letter-spacing: 0.03em;
+      }
+
+      .role-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .role-system {
+        color: var(--system);
+        background: rgba(203, 166, 247, 0.1);
+      }
+
+      .role-user {
+        color: var(--user);
+        background: rgba(137, 180, 250, 0.1);
+      }
+
+      .role-assistant {
+        color: var(--assistant);
+        background: rgba(166, 227, 161, 0.1);
+      }
+
+      .role-tool,
+      .role-tool_result {
+        color: var(--tool);
+        background: rgba(137, 220, 235, 0.12);
+      }
+
+      .message-list,
+      .tool-call-list {
+        display: grid;
+        gap: 14px;
+      }
+
+      .message-item,
+      .tool-call-item {
+        padding: 14px;
+        border-radius: var(--radius-md);
+        background: rgba(17, 17, 27, 0.56);
+        border: 1px solid rgba(205, 214, 244, 0.08);
+      }
+
+      .message-head,
+      .tool-call-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .message-body {
+        color: var(--text-dim);
+        line-height: 1.65;
+      }
+
+      .message-body > *:first-child,
+      .detail-block > *:first-child {
+        margin-top: 0;
+      }
+
+      .message-body > *:last-child,
+      .detail-block > *:last-child {
+        margin-bottom: 0;
+      }
+
+      .message-body pre,
+      .json-block,
+      .code-block {
+        margin: 0;
+        padding: 14px 15px;
+        border-radius: var(--radius-sm);
+        background: var(--bg-code);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 0.9rem;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-x: auto;
+      }
+
+      .thinking-block {
+        color: var(--text-muted);
+        font-style: italic;
+      }
+
+      .tools-box details {
+        border-radius: var(--radius-sm);
+        background: rgba(17, 17, 27, 0.56);
+        border: 1px solid rgba(205, 214, 244, 0.08);
+      }
+
+      .tools-box summary {
+        padding: 14px 16px;
+        cursor: pointer;
+        color: var(--text-dim);
+      }
+
+      .tools-box summary::marker {
+        color: var(--accent);
+      }
+
+      .tools-box .json-block {
+        border-top: 1px solid rgba(205, 214, 244, 0.08);
+        border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+      }
+
+      .loading-note,
+      .error-note {
+        padding: 16px;
+        border-radius: var(--radius-md);
+        font-size: 0.92rem;
+      }
+
+      .loading-note {
+        background: rgba(137, 180, 250, 0.08);
+        color: var(--text-dim);
+      }
+
+      .error-note {
+        background: rgba(243, 139, 168, 0.1);
+        color: #f38ba8;
+      }
+
+      .footer-note {
+        padding: 16px 24px 22px;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+      }
+
+      @media (max-width: 1080px) {
+        body {
+          min-width: 0;
+        }
+
+        .shell {
+          padding: 16px;
+        }
+
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        .card-summary {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 720px) {
+        .header {
+          align-items: start;
+          flex-direction: column;
+        }
+
+        .card-header {
+          flex-direction: column;
+        }
+
+        .card-summary {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="header">
+        <div class="header-copy">
+          <h1>BareAgent Debug Viewer</h1>
+          <p>
+            Inspect saved request and response payloads, expand a single interaction, and
+            watch new activity stream in over Server-Sent Events.
+          </p>
+        </div>
+        <div class="status-pill" id="connection-status">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Connecting to event stream...</span>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Sessions</h2>
+              <p>Recorded debug timelines</p>
+            </div>
+            <span id="session-count">0 loaded</span>
+          </div>
+          <div class="session-list" id="session-list">
+            <div class="empty-state">Loading session index...</div>
+          </div>
+          <div class="footer-note">
+            Session selection refreshes the interaction timeline on the right.
+          </div>
+        </aside>
+
+        <section class="panel timeline-shell">
+          <div class="panel-header">
+            <div>
+              <h2 id="timeline-title">Interactions</h2>
+              <p id="timeline-subtitle">Choose a session to inspect its timeline.</p>
+            </div>
+            <div class="timeline-meta">
+              <span class="meta-chip" id="timeline-session-chip">No session selected</span>
+              <span class="meta-chip" id="timeline-count-chip">0 interactions</span>
+            </div>
+          </div>
+          <div class="timeline" id="timeline">
+            <div class="empty-state">
+              The timeline will appear here after a session is selected.
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="session-template">
+      <button class="session-button" type="button">
+        <span class="session-name"></span>
+        <span class="session-meta">
+          <span class="session-count"></span>
+          <span class="session-latest"></span>
+        </span>
+      </button>
+    </template>
+
+    <template id="interaction-template">
+      <article class="interaction-card">
+        <button class="card-toggle" type="button">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-seq"></span>
+              <span class="card-time"></span>
+            </div>
+            <span class="meta-chip card-state"></span>
+          </div>
+          <div class="card-summary">
+            <div class="summary-item">
+              <span class="summary-label">Tokens</span>
+              <span class="summary-value summary-tokens"></span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Duration</span>
+              <span class="summary-value summary-duration"></span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Tool Calls</span>
+              <span class="summary-value summary-tool-calls"></span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Messages</span>
+              <span class="summary-value summary-messages"></span>
+            </div>
+          </div>
+        </button>
+
+        <div class="card-detail">
+          <div class="tab-strip">
+            <button class="tab-button active" type="button" data-tab="request">Request</button>
+            <button class="tab-button" type="button" data-tab="response">Response</button>
+            <button class="tab-button" type="button" data-tab="raw">Raw JSON</button>
+          </div>
+
+          <section class="tab-panel active" data-panel="request">
+            <div class="detail-grid request-panel"></div>
+          </section>
+
+          <section class="tab-panel" data-panel="response">
+            <div class="detail-grid response-panel"></div>
+          </section>
+
+          <section class="tab-panel" data-panel="raw">
+            <pre class="json-block raw-panel"></pre>
+          </section>
+        </div>
+      </article>
+    </template>
+
+    <script>
+      const state = {
+        sessions: [],
+        activeSessionId: null,
+        interactionsBySession: new Map(),
+        detailCache: new Map(),
+        expandedKey: null,
+        activeTabs: new Map(),
+        loadingSession: false,
+        sessionsRequestId: 0,
+        sessionRequestIds: new Map(),
+        detailRequestIds: new Map(),
+      };
+
+      const elements = {
+        sessionList: document.getElementById("session-list"),
+        sessionCount: document.getElementById("session-count"),
+        timeline: document.getElementById("timeline"),
+        timelineTitle: document.getElementById("timeline-title"),
+        timelineSubtitle: document.getElementById("timeline-subtitle"),
+        timelineSessionChip: document.getElementById("timeline-session-chip"),
+        timelineCountChip: document.getElementById("timeline-count-chip"),
+        statusText: document.getElementById("status-text"),
+        statusDot: document.getElementById("status-dot"),
+        sessionTemplate: document.getElementById("session-template"),
+        interactionTemplate: document.getElementById("interaction-template"),
+      };
+
+      function detailKey(sessionId, seq) {
+        return `${sessionId}:${seq}`;
+      }
+
+      async function fetchJson(path) {
+        const response = await fetch(path, {
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${response.statusText}`);
+        }
+        return response.json();
+      }
+
+      function formatTimestamp(value) {
+        if (typeof value === "number" && Number.isFinite(value)) {
+          return new Date(value * 1000).toLocaleString();
+        }
+        if (typeof value === "string" && value.trim()) {
+          const parsed = Date.parse(value);
+          if (!Number.isNaN(parsed)) {
+            return new Date(parsed).toLocaleString();
+          }
+          return value;
+        }
+        return "Unknown time";
+      }
+
+      function formatDuration(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric) || numeric < 0) {
+          return "--";
+        }
+        if (numeric >= 1000) {
+          return `${(numeric / 1000).toFixed(2)} s`;
+        }
+        return `${numeric.toFixed(2)} ms`;
+      }
+
+      function formatTokens(inputTokens, outputTokens) {
+        const input = Number(inputTokens);
+        const output = Number(outputTokens);
+        if (!Number.isFinite(input) && !Number.isFinite(output)) {
+          return "--";
+        }
+        return `${Number.isFinite(input) ? input : 0} in / ${Number.isFinite(output) ? output : 0} out`;
+      }
+
+      function normalizeSummary(entry) {
+        return {
+          seq: Number(entry?.seq ?? 0),
+          timestamp: entry?.timestamp ?? null,
+          message_count: Number(entry?.message_count ?? 0),
+          tool_count: Number(entry?.tool_count ?? 0),
+          input_tokens: Number(entry?.input_tokens ?? 0),
+          output_tokens: Number(entry?.output_tokens ?? 0),
+          duration_ms: Number(entry?.duration_ms ?? 0),
+          tool_call_count: Number(entry?.tool_call_count ?? 0),
+          has_error: Boolean(entry?.has_error),
+          has_response: Object.prototype.hasOwnProperty.call(entry || {}, "input_tokens"),
+        };
+      }
+
+      function getSessionSummaries(sessionId) {
+        return state.interactionsBySession.get(sessionId) || [];
+      }
+
+      function getSessionMeta(sessionId) {
+        const summaries = getSessionSummaries(sessionId);
+        if (summaries.length === 0) {
+          return {
+            countText: "Click to load",
+            latestText: "No cached timeline",
+          };
+        }
+        const latest = summaries[summaries.length - 1];
+        return {
+          countText: `${summaries.length} interaction${summaries.length === 1 ? "" : "s"}`,
+          latestText: `Latest #${latest.seq}`,
+        };
+      }
+
+      function setConnectionStatus(kind, text) {
+        elements.statusText.textContent = text;
+        const colors = {
+          connecting: "#f9e2af",
+          live: "#a6e3a1",
+          retrying: "#f38ba8",
+        };
+        const color = colors[kind] || colors.connecting;
+        elements.statusDot.style.background = color;
+        elements.statusDot.style.boxShadow = `0 0 16px ${color}55`;
+      }
+
+      function clearElement(node) {
+        while (node.firstChild) {
+          node.removeChild(node.firstChild);
+        }
+      }
+
+      function createTextBlock(text, className = "code-block") {
+        const pre = document.createElement("pre");
+        pre.className = className;
+        pre.textContent = String(text ?? "");
+        return pre;
+      }
+
+      function createJsonBlock(value) {
+        return createTextBlock(JSON.stringify(value, null, 2), "json-block");
+      }
+
+      function createNote(text, className) {
+        const div = document.createElement("div");
+        div.className = className;
+        div.textContent = text;
+        return div;
+      }
+
+      function createDetailBlock(title, bodyNode) {
+        const section = document.createElement("section");
+        section.className = "detail-block";
+        const heading = document.createElement("h3");
+        heading.textContent = title;
+        section.appendChild(heading);
+        section.appendChild(bodyNode);
+        return section;
+      }
+
+      function createRoleBadge(role) {
+        const badge = document.createElement("span");
+        const normalized = String(role || "unknown").replace(/[^a-z0-9_]+/gi, "_");
+        badge.className = `role-badge role-${normalized}`;
+        badge.textContent = role || "unknown";
+        return badge;
+      }
+
+      function appendContentValue(container, value) {
+        if (value === null || value === undefined || value === "") {
+          container.appendChild(createNote("No content", "loading-note"));
+          return;
+        }
+
+        if (typeof value === "string") {
+          container.appendChild(createTextBlock(value));
+          return;
+        }
+
+        if (Array.isArray(value)) {
+          if (value.length === 0) {
+            container.appendChild(createNote("No content", "loading-note"));
+            return;
+          }
+          value.forEach((item) => {
+            if (item && typeof item === "object" && item.type === "text") {
+              container.appendChild(createTextBlock(item.text || ""));
+              return;
+            }
+            container.appendChild(createJsonBlock(item));
+          });
+          return;
+        }
+
+        container.appendChild(createJsonBlock(value));
+      }
+
+      function flattenContentToText(content) {
+        if (content === null || content === undefined) {
+          return "";
+        }
+        if (typeof content === "string") {
+          return content;
+        }
+        if (Array.isArray(content)) {
+          return content
+            .map((item) => {
+              if (item && typeof item === "object" && item.type === "text") {
+                return String(item.text || "");
+              }
+              return JSON.stringify(item, null, 2);
+            })
+            .filter(Boolean)
+            .join("\n\n");
+        }
+        return JSON.stringify(content, null, 2);
+      }
+
+      function collectSystemPrompt(messages) {
+        const systemTexts = (Array.isArray(messages) ? messages : [])
+          .filter((message) => message && message.role === "system")
+          .map((message) => flattenContentToText(message.content))
+          .filter(Boolean);
+        return systemTexts.join("\n\n");
+      }
+
+      function renderMessages(messages) {
+        const list = document.createElement("div");
+        list.className = "message-list";
+
+        if (!Array.isArray(messages) || messages.length === 0) {
+          list.appendChild(createNote("No messages recorded.", "loading-note"));
+          return list;
+        }
+
+        messages.forEach((message, index) => {
+          const item = document.createElement("article");
+          item.className = "message-item";
+
+          const head = document.createElement("div");
+          head.className = "message-head";
+          head.appendChild(createRoleBadge(message?.role || "unknown"));
+
+          const ordinal = document.createElement("span");
+          ordinal.className = "card-time";
+          ordinal.textContent = `Message ${index + 1}`;
+          head.appendChild(ordinal);
+
+          const body = document.createElement("div");
+          body.className = "message-body";
+          appendContentValue(body, message?.content);
+
+          item.appendChild(head);
+          item.appendChild(body);
+          list.appendChild(item);
+        });
+
+        return list;
+      }
+
+      function renderTools(tools) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "tools-box";
+
+        if (!Array.isArray(tools) || tools.length === 0) {
+          wrapper.appendChild(createNote("No tool schemas were sent with this request.", "loading-note"));
+          return wrapper;
+        }
+
+        const details = document.createElement("details");
+        const summary = document.createElement("summary");
+        summary.textContent = `Tool Schemas (${tools.length})`;
+        details.appendChild(summary);
+        details.appendChild(createJsonBlock(tools));
+        wrapper.appendChild(details);
+        return wrapper;
+      }
+
+      function renderToolCalls(toolCalls) {
+        const list = document.createElement("div");
+        list.className = "tool-call-list";
+
+        if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+          list.appendChild(createNote("No tool calls in this response.", "loading-note"));
+          return list;
+        }
+
+        toolCalls.forEach((toolCall, index) => {
+          const item = document.createElement("article");
+          item.className = "tool-call-item";
+
+          const head = document.createElement("div");
+          head.className = "tool-call-head";
+          head.appendChild(createRoleBadge("tool"));
+
+          const label = document.createElement("span");
+          label.className = "card-time";
+          const toolName = toolCall?.name || `tool_${index + 1}`;
+          label.textContent = `${toolName} (#${index + 1})`;
+          head.appendChild(label);
+
+          item.appendChild(head);
+          item.appendChild(createJsonBlock(toolCall));
+          list.appendChild(item);
+        });
+
+        return list;
+      }
+
+      function renderRequestPanel(panel, interaction) {
+        clearElement(panel);
+        const request = interaction?.request;
+
+        if (!request) {
+          panel.appendChild(createNote("Request payload is not available.", "error-note"));
+          return;
+        }
+
+        const systemPrompt = collectSystemPrompt(request.messages);
+        panel.appendChild(
+          createDetailBlock(
+            "System Prompt",
+            systemPrompt ? createTextBlock(systemPrompt) : createNote("No explicit system prompt found.", "loading-note")
+          )
+        );
+        panel.appendChild(createDetailBlock("Messages", renderMessages(request.messages)));
+        panel.appendChild(createDetailBlock("Tools", renderTools(request.tools)));
+      }
+
+      function renderResponsePanel(panel, interaction, summary) {
+        clearElement(panel);
+        const response = interaction?.response;
+
+        if (!response) {
+          panel.appendChild(createNote("Response has not been logged yet.", "loading-note"));
+          return;
+        }
+
+        panel.appendChild(
+          createDetailBlock(
+            "Text",
+            response.text ? createTextBlock(response.text) : createNote("No assistant text in this response.", "loading-note")
+          )
+        );
+
+        panel.appendChild(
+          createDetailBlock(
+            "Thinking",
+            response.thinking
+              ? createTextBlock(response.thinking, "code-block thinking-block")
+              : createNote("No thinking trace recorded.", "loading-note")
+          )
+        );
+
+        panel.appendChild(createDetailBlock("Tool Calls", renderToolCalls(response.tool_calls)));
+
+        const stats = document.createElement("div");
+        stats.className = "message-list";
+        const metrics = [
+          ["Input Tokens", summary.input_tokens],
+          ["Output Tokens", summary.output_tokens],
+          ["Duration", formatDuration(summary.duration_ms)],
+        ];
+        metrics.forEach(([label, value]) => {
+          const row = document.createElement("article");
+          row.className = "message-item";
+          const head = document.createElement("div");
+          head.className = "message-head";
+          const heading = document.createElement("strong");
+          heading.textContent = label;
+          head.appendChild(heading);
+          row.appendChild(head);
+          row.appendChild(createTextBlock(String(value)));
+          stats.appendChild(row);
+        });
+        panel.appendChild(createDetailBlock("Response Metrics", stats));
+
+        if (response.error) {
+          panel.appendChild(createNote(`Error: ${response.error}`, "error-note"));
+        }
+      }
+
+      function renderRawPanel(panel, interaction) {
+        panel.textContent = JSON.stringify(interaction, null, 2);
+      }
+
+      function setActiveTab(key, tabName) {
+        state.activeTabs.set(key, tabName);
+        renderTimeline();
+      }
+
+      function getCardState(summary) {
+        if (summary.has_error) {
+          return "error";
+        }
+        if (!summary.has_response) {
+          return "pending";
+        }
+        return "complete";
+      }
+
+      function updateTimelineHeader() {
+        if (!state.activeSessionId) {
+          elements.timelineTitle.textContent = "Interactions";
+          elements.timelineSubtitle.textContent = "Choose a session to inspect its timeline.";
+          elements.timelineSessionChip.textContent = "No session selected";
+          elements.timelineCountChip.textContent = "0 interactions";
+          return;
+        }
+
+        const summaries = getSessionSummaries(state.activeSessionId);
+        elements.timelineTitle.textContent = `Interactions for ${state.activeSessionId}`;
+        elements.timelineSubtitle.textContent = "Click a card to expand request, response, and raw JSON payloads.";
+        elements.timelineSessionChip.textContent = state.activeSessionId;
+        elements.timelineCountChip.textContent = `${summaries.length} interaction${summaries.length === 1 ? "" : "s"}`;
+      }
+
+      function renderSessions() {
+        clearElement(elements.sessionList);
+        elements.sessionCount.textContent = `${state.sessions.length} loaded`;
+
+        if (state.sessions.length === 0) {
+          elements.sessionList.appendChild(createNote("No debug sessions have been recorded yet.", "empty-state"));
+          return;
+        }
+
+        state.sessions.forEach((sessionId) => {
+          const fragment = elements.sessionTemplate.content.cloneNode(true);
+          const button = fragment.querySelector(".session-button");
+          const name = fragment.querySelector(".session-name");
+          const count = fragment.querySelector(".session-count");
+          const latest = fragment.querySelector(".session-latest");
+          const meta = getSessionMeta(sessionId);
+
+          name.textContent = sessionId;
+          count.textContent = meta.countText;
+          latest.textContent = meta.latestText;
+
+          if (sessionId === state.activeSessionId) {
+            button.classList.add("active");
+          }
+
+          button.addEventListener("click", async () => {
+            if (state.activeSessionId === sessionId) {
+              return;
+            }
+            state.activeSessionId = sessionId;
+            state.expandedKey = null;
+            renderSessions();
+            renderTimeline();
+            await loadSession(sessionId);
+          });
+
+          elements.sessionList.appendChild(fragment);
+        });
+      }
+
+      function renderTimeline() {
+        updateTimelineHeader();
+        clearElement(elements.timeline);
+
+        if (!state.activeSessionId) {
+          elements.timeline.appendChild(
+            createNote("The timeline will appear here after a session is selected.", "empty-state")
+          );
+          return;
+        }
+
+        const summaries = getSessionSummaries(state.activeSessionId);
+        if (state.loadingSession && summaries.length === 0) {
+          elements.timeline.appendChild(createNote("Loading interactions...", "empty-state"));
+          return;
+        }
+
+        if (summaries.length === 0) {
+          elements.timeline.appendChild(createNote("No interactions found for this session.", "empty-state"));
+          return;
+        }
+
+        summaries.forEach((summary) => {
+          const fragment = elements.interactionTemplate.content.cloneNode(true);
+          const card = fragment.querySelector(".interaction-card");
+          const toggle = fragment.querySelector(".card-toggle");
+          const stateChip = fragment.querySelector(".card-state");
+          const seqText = `#${summary.seq}`;
+          const key = detailKey(state.activeSessionId, summary.seq);
+
+          fragment.querySelector(".card-seq").textContent = seqText;
+          fragment.querySelector(".card-time").textContent = formatTimestamp(summary.timestamp);
+          fragment.querySelector(".summary-tokens").textContent = formatTokens(summary.input_tokens, summary.output_tokens);
+          fragment.querySelector(".summary-duration").textContent = formatDuration(summary.duration_ms);
+          fragment.querySelector(".summary-tool-calls").textContent = String(summary.tool_call_count);
+          fragment.querySelector(".summary-messages").textContent = `${summary.message_count} msg / ${summary.tool_count} tools`;
+
+          stateChip.textContent = getCardState(summary);
+
+          if (key === state.expandedKey) {
+            card.classList.add("expanded");
+          }
+
+          toggle.addEventListener("click", async () => {
+            if (state.expandedKey === key) {
+              state.expandedKey = null;
+              renderTimeline();
+              return;
+            }
+            state.expandedKey = key;
+            if (!state.activeTabs.has(key)) {
+              state.activeTabs.set(key, "request");
+            }
+            renderTimeline();
+            await loadInteractionDetail(state.activeSessionId, summary.seq);
+          });
+
+          const tabButtons = fragment.querySelectorAll(".tab-button");
+          const tabPanels = fragment.querySelectorAll(".tab-panel");
+          const activeTab = state.activeTabs.get(key) || "request";
+          tabButtons.forEach((button) => {
+            const isActive = button.dataset.tab === activeTab;
+            button.classList.toggle("active", isActive);
+            button.addEventListener("click", () => setActiveTab(key, button.dataset.tab));
+          });
+          tabPanels.forEach((panel) => {
+            panel.classList.toggle("active", panel.dataset.panel === activeTab);
+          });
+
+          if (key === state.expandedKey) {
+            const requestPanel = fragment.querySelector(".request-panel");
+            const responsePanel = fragment.querySelector(".response-panel");
+            const rawPanel = fragment.querySelector(".raw-panel");
+            const interaction = state.detailCache.get(key);
+
+            if (!interaction) {
+              requestPanel.appendChild(createNote("Loading request payload...", "loading-note"));
+              responsePanel.appendChild(createNote("Loading response payload...", "loading-note"));
+              rawPanel.textContent = "Loading raw JSON...";
+            } else {
+              renderRequestPanel(requestPanel, interaction);
+              renderResponsePanel(responsePanel, interaction, summary);
+              renderRawPanel(rawPanel, interaction);
+            }
+          }
+
+          elements.timeline.appendChild(fragment);
+        });
+      }
+
+      async function refreshSessions() {
+        const requestId = ++state.sessionsRequestId;
+        const sessions = await fetchJson("/api/sessions");
+        if (requestId !== state.sessionsRequestId) {
+          return;
+        }
+
+        state.sessions = Array.isArray(sessions) ? sessions : [];
+
+        if (!state.activeSessionId || !state.sessions.includes(state.activeSessionId)) {
+          state.activeSessionId = state.sessions[state.sessions.length - 1] || null;
+          state.expandedKey = null;
+        }
+
+        renderSessions();
+      }
+
+      async function loadSession(sessionId) {
+        state.loadingSession = state.activeSessionId === sessionId;
+        renderTimeline();
+
+        const requestId = (state.sessionRequestIds.get(sessionId) || 0) + 1;
+        state.sessionRequestIds.set(sessionId, requestId);
+
+        try {
+          const summaries = await fetchJson(`/api/sessions/${encodeURIComponent(sessionId)}`);
+          if (state.sessionRequestIds.get(sessionId) !== requestId) {
+            return;
+          }
+
+          const normalized = Array.isArray(summaries) ? summaries.map(normalizeSummary) : [];
+          state.interactionsBySession.set(sessionId, normalized);
+
+          if (state.expandedKey) {
+            const [expandedSessionId, expandedSeqText] = state.expandedKey.split(":");
+            if (expandedSessionId === sessionId) {
+              const expandedSeq = Number(expandedSeqText);
+              const stillExists = normalized.some((item) => item.seq === expandedSeq);
+              if (!stillExists) {
+                state.expandedKey = null;
+              }
+            }
+          }
+        } finally {
+          if (state.activeSessionId === sessionId) {
+            state.loadingSession = false;
+          }
+          renderSessions();
+          renderTimeline();
+        }
+      }
+
+      async function loadInteractionDetail(sessionId, seq) {
+        const key = detailKey(sessionId, seq);
+        const requestId = (state.detailRequestIds.get(key) || 0) + 1;
+        state.detailRequestIds.set(key, requestId);
+
+        try {
+          const detail = await fetchJson(`/api/interactions/${encodeURIComponent(sessionId)}/${seq}`);
+          if (state.detailRequestIds.get(key) !== requestId) {
+            return;
+          }
+          state.detailCache.set(key, detail);
+        } catch (error) {
+          state.detailCache.set(key, {
+            request: null,
+            response: { error: error instanceof Error ? error.message : "Failed to load interaction." },
+          });
+        }
+
+        if (state.expandedKey === key) {
+          renderTimeline();
+        }
+      }
+
+      async function handleIncomingEvent(payload) {
+        const sessionId = payload && payload.session_id ? String(payload.session_id) : "";
+        const seq = Number(payload?.seq);
+
+        try {
+          await refreshSessions();
+
+          if (sessionId && (!state.activeSessionId || state.activeSessionId === sessionId)) {
+            if (!state.activeSessionId) {
+              state.activeSessionId = sessionId;
+            }
+            await loadSession(sessionId);
+
+            if (state.expandedKey === detailKey(sessionId, seq)) {
+              await loadInteractionDetail(sessionId, seq);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to refresh after SSE event", error);
+        }
+      }
+
+      function connectEvents() {
+        setConnectionStatus("connecting", "Connecting to event stream...");
+        const source = new EventSource("/api/events");
+
+        source.onopen = () => {
+          setConnectionStatus("live", "Live updates connected");
+        };
+
+        source.onmessage = async (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            await handleIncomingEvent(payload);
+          } catch (error) {
+            console.error("Failed to process SSE event", error);
+          }
+        };
+
+        source.onerror = () => {
+          setConnectionStatus("retrying", "Event stream reconnecting...");
+        };
+      }
+
+      async function boot() {
+        try {
+          await refreshSessions();
+          renderTimeline();
+          if (state.activeSessionId) {
+            await loadSession(state.activeSessionId);
+          }
+        } catch (error) {
+          console.error(error);
+          elements.sessionList.innerHTML = "";
+          elements.sessionList.appendChild(
+            createNote("Failed to load sessions from the debug viewer API.", "error-note")
+          );
+          elements.timeline.innerHTML = "";
+          elements.timeline.appendChild(
+            createNote("The timeline could not be loaded.", "error-note")
+          );
+        }
+
+        connectEvents();
+      }
+
+      boot();
+    </script>
+  </body>
+</html>
