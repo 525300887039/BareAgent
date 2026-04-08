@@ -17,3 +17,9 @@ default_type = "general-purpose"
 [thinking]
 mode = "adaptive"
 budget_tokens = 10000
+
+[debug]
+enabled = false
+log_dir = ".logs"
+viewer_port = 8321
+pretty = true

@@ -9,6 +9,7 @@ from rich.console import Console
 from src.main import (
     DEFAULT_CONFIG_PATH,
     Config,
+    DebugConfig,
     PermissionConfig,
     ProviderConfig,
     SubagentConfig,
@@ -18,6 +19,7 @@ from src.main import (
     resolve_config_path,
 )
 from src.core.fileutil import is_tool_result_message
+from src.debug.interaction_log import InteractionLogger
 from src.memory.transcript import TranscriptManager
 from src.provider.base import ThinkingConfig
 from src.ui.console import AgentConsole
@@ -143,6 +145,92 @@ def test_load_config_reads_subagent_settings(tmp_path: Path) -> None:
     assert config.subagent.default_type == "plan"
 
 
+def test_load_config_reads_debug_settings(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                '[provider]',
+                'name = "openai"',
+                'model = "gpt-5-codex-mini"',
+                'api_key_env = "OPENAI_API_KEY"',
+                "",
+                '[permission]',
+                'mode = "default"',
+                "",
+                '[ui]',
+                'stream = true',
+                'theme = "dark"',
+                "",
+                '[debug]',
+                'enabled = true',
+                'log_dir = "debug-output"',
+                'viewer_port = 9001',
+                'pretty = false',
+                "",
+                '[thinking]',
+                'mode = "adaptive"',
+                'budget_tokens = 10000',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.debug == DebugConfig(
+        enabled=True,
+        log_dir="debug-output",
+        viewer_port=9001,
+        pretty=False,
+    )
+
+
+def test_load_config_debug_env_overrides(tmp_path: Path, monkeypatch) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                '[provider]',
+                'name = "openai"',
+                'model = "gpt-5-codex-mini"',
+                'api_key_env = "OPENAI_API_KEY"',
+                "",
+                '[permission]',
+                'mode = "default"',
+                "",
+                '[ui]',
+                'stream = true',
+                'theme = "dark"',
+                "",
+                '[debug]',
+                'enabled = false',
+                'log_dir = "debug-output"',
+                'viewer_port = 9001',
+                'pretty = false',
+                "",
+                '[thinking]',
+                'mode = "adaptive"',
+                'budget_tokens = 10000',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BAREAGENT_DEBUG", "1")
+    monkeypatch.setenv("BAREAGENT_DEBUG_LOG_DIR", "env-logs")
+    monkeypatch.setenv("BAREAGENT_DEBUG_VIEWER_PORT", "8123")
+    monkeypatch.setenv("BAREAGENT_DEBUG_PRETTY", "true")
+
+    config = load_config(config_path)
+
+    assert config.debug == DebugConfig(
+        enabled=True,
+        log_dir="env-logs",
+        viewer_port=8123,
+        pretty=True,
+    )
+
+
 def test_load_config_rejects_unknown_subagent_default_type(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(
@@ -202,6 +290,7 @@ def test_make_teammate_provider_factory_inherits_custom_api_key_env(
         subagent=SubagentConfig(max_depth=3, default_type="general-purpose"),
         thinking=ThinkingConfig(),
         path=Path("config.toml"),
+        debug=DebugConfig(),
     )
 
     factory = main_module._make_teammate_provider_factory(config)
@@ -261,6 +350,131 @@ def test_help_text_describes_theme_command() -> None:
         "(catppuccin-mocha, dracula, nord, tokyo-night, gruvbox)\n"
         in main_module._HELP_TEXT
     )
+
+
+def test_slash_log_appears_in_slash_commands() -> None:
+    assert "/log" in main_module._SLASH_COMMANDS
+
+
+def test_help_text_describes_log_command() -> None:
+    assert "  /log       Debug log viewer (status|serve|open|<seq>)\n" in main_module._HELP_TEXT
+
+
+def test_handle_log_command_reports_disabled_debug(tmp_path: Path) -> None:
+    config = make_test_config(tmp_path)
+    messages: list[str] = []
+
+    viewer_server = main_module._handle_log_command(
+        "/log",
+        config=config,
+        interaction_logger=None,
+        viewer_server=None,
+        print_status=messages.append,
+    )
+
+    assert viewer_server is None
+    assert messages == [
+        "Debug logging is disabled. Set [debug] enabled = true in config.toml "
+        "or BAREAGENT_DEBUG=1"
+    ]
+
+
+def test_handle_log_command_reports_status_and_interaction_summary(
+    tmp_path: Path,
+) -> None:
+    config = make_test_config(tmp_path)
+    config.debug = DebugConfig(enabled=True, log_dir=".logs", viewer_port=8321, pretty=True)
+    logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
+    seq = logger.log_request(
+        [{"role": "user", "content": "hello"}],
+        [{"name": "echo"}],
+    )
+    logger.log_response(
+        seq,
+        thinking="a" * 120,
+        input_tokens=7,
+        output_tokens=9,
+        duration_ms=45,
+        tool_calls=[{"id": "toolu_1", "name": "echo", "input": {"value": "hi"}}],
+    )
+    messages: list[str] = []
+
+    main_module._handle_log_command(
+        "/log status",
+        config=config,
+        interaction_logger=logger,
+        viewer_server=None,
+        print_status=messages.append,
+    )
+    main_module._handle_log_command(
+        "/log 0",
+        config=config,
+        interaction_logger=logger,
+        viewer_server=None,
+        print_status=messages.append,
+    )
+
+    assert messages[0] == "\n".join(
+        [
+            "Debug logging: enabled",
+            "Log dir: .logs",
+            "Current session: sess-1",
+            "Interactions: 1",
+            "Total tokens: 16",
+            "Sessions: 1",
+            "Viewer: not running (use /log serve)",
+        ]
+    )
+    assert messages[1].startswith("Interaction #0:\n")
+    assert "Input tokens:  7" in messages[1]
+    assert "Output tokens: 9" in messages[1]
+    assert "Duration:      45ms" in messages[1]
+    assert "Tool calls:    1" in messages[1]
+    assert "Thinking: " in messages[1]
+    assert "..." in messages[1]
+
+
+def test_handle_log_command_serves_and_opens_viewer(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config = make_test_config(tmp_path)
+    config.debug = DebugConfig(enabled=True, log_dir=".logs", viewer_port=9001, pretty=True)
+    logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
+    started: list[tuple[InteractionLogger, int]] = []
+    opened: list[str] = []
+    server_token = object()
+
+    def _fake_start(logger_arg: InteractionLogger, config_arg: Config) -> object:
+        started.append((logger_arg, config_arg.debug.viewer_port))
+        return server_token
+
+    monkeypatch.setattr(main_module, "_start_debug_viewer", _fake_start)
+    monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url) or True)
+    messages: list[str] = []
+
+    viewer_server = main_module._handle_log_command(
+        "/log serve",
+        config=config,
+        interaction_logger=logger,
+        viewer_server=None,
+        print_status=messages.append,
+    )
+    viewer_server = main_module._handle_log_command(
+        "/log open",
+        config=config,
+        interaction_logger=logger,
+        viewer_server=viewer_server,
+        print_status=messages.append,
+    )
+
+    assert viewer_server is server_token
+    assert started == [(logger, 9001)]
+    assert opened == ["http://127.0.0.1:9001"]
+    assert messages == [
+        "Debug viewer started at http://127.0.0.1:9001",
+        "Opening http://127.0.0.1:9001 in browser...",
+    ]
 
 
 def test_main_falls_back_to_stdio_when_textual_ui_is_unavailable(
@@ -340,6 +554,53 @@ def test_stdio_theme_switch_preserves_injected_console(
     assert "BareAgent REPL" in rendered
     assert "Theme switched to: dracula" in rendered
     assert "Exiting BareAgent." in rendered
+
+
+def test_run_stdio_session_passes_interaction_logger_when_debug_enabled(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config = make_test_config(tmp_path)
+    config.debug = DebugConfig(enabled=True, log_dir=".logs", pretty=True)
+    captured: dict[str, object] = {}
+    inputs = iter(["hello", "/exit"])
+
+    class _FakeSkillLoader:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def get_skill_list_prompt(self) -> str:
+            return ""
+
+    monkeypatch.setattr(main_module, "_read_stdio_input", lambda: next(inputs))
+    monkeypatch.setattr(main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1")
+    monkeypatch.setattr(main_module, "_load_task_manager", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None))
+    monkeypatch.setattr(main_module, "_initial_messages", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(main_module, "get_tools", lambda: [])
+    monkeypatch.setattr(main_module, "SkillLoader", _FakeSkillLoader)
+    monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
+    monkeypatch.setattr(main_module, "Compactor", lambda **_kwargs: object())
+    monkeypatch.setattr(
+        main_module,
+        "_build_loop_compact",
+        lambda *_args, **_kwargs: (lambda _messages, force=False: None),
+    )
+    monkeypatch.setattr(main_module, "_build_handlers", lambda **_kwargs: {})
+    monkeypatch.setattr(main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None)
+
+    def _fake_agent_loop(**kwargs):
+        captured["interaction_logger"] = kwargs.get("interaction_logger")
+        return "done"
+
+    monkeypatch.setattr(main_module, "agent_loop", _fake_agent_loop)
+
+    assert main_module._run_stdio_session(config, object(), workspace=tmp_path) == 0
+    assert captured["interaction_logger"] is not None
+    assert captured["interaction_logger"].session_id == "session-1"  # type: ignore[union-attr]
 
 
 def test_nag_reminder_skips_tool_result_messages() -> None:

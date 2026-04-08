@@ -172,3 +172,18 @@ async def test_render_chat_history_scopes_tool_result_names_to_prior_tool_uses(
             ("read_file", "old result"),
             ("shell_command", "new result"),
         ]
+
+
+@pytest.mark.anyio
+async def test_textual_app_initializes_interaction_logger_when_debug_enabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = make_test_config(tmp_path)
+    config.debug.enabled = True
+    monkeypatch.chdir(tmp_path)
+    app = BareAgentApp(config=config, provider=ReplayProvider())
+
+    async with app.run_test():
+        assert app._interaction_logger is not None
+        assert app._interaction_logger.session_id == app._session_id
