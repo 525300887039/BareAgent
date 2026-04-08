@@ -510,6 +510,87 @@ def test_openai_create_stream_via_responses_accumulates_text_and_tool_calls(monk
     assert response.output_tokens == 6
 
 
+def test_openai_create_stream_via_responses_preserves_streamed_tool_calls_when_completed_payload_omits_them(
+    monkeypatch,
+) -> None:
+    completed_response = SimpleNamespace(
+        to_dict=lambda: {
+            "status": "completed",
+            "usage": {"input_tokens": 13, "output_tokens": 6},
+            "output": [],
+        }
+    )
+    events_source = [
+        SimpleNamespace(type="response.output_text.delta", delta="Checking ", item_id="msg_1"),
+        SimpleNamespace(type="response.output_text.delta", delta="now.", item_id="msg_1"),
+        SimpleNamespace(
+            type="response.output_item.done",
+            item=SimpleNamespace(
+                type="function_call",
+                call_id="call_1",
+                id="fc_1",
+                name="grep",
+                arguments='{"pattern":"TODO"}',
+            ),
+        ),
+        SimpleNamespace(type="response.completed", response=completed_response),
+    ]
+
+    class FakeResponsesAPI:
+        def create(self, **kwargs):
+            _ = kwargs
+            return iter(events_source)
+
+    class FakeOpenAIClient:
+        def __init__(self, **kwargs) -> None:
+            _ = kwargs
+            self.responses = FakeResponsesAPI()
+            self.chat = SimpleNamespace(completions=SimpleNamespace())
+
+    monkeypatch.setattr("src.provider.openai.openai.OpenAI", FakeOpenAIClient)
+    provider = OpenAIProvider(api_key="test", model="gpt-test", wire_api="responses")
+
+    stream = provider.create_stream(
+        messages=[{"role": "user", "content": "Run grep."}],
+        tools=[],
+    )
+    events: list[StreamEvent] = []
+    while True:
+        try:
+            events.append(next(stream))
+        except StopIteration as stop:
+            response = stop.value
+            break
+
+    assert events == [
+        StreamEvent(type="text", text="Checking "),
+        StreamEvent(type="text", text="now."),
+        StreamEvent(
+            type="tool_call",
+            tool_call_id="call_1",
+            name="grep",
+            input={"pattern": "TODO"},
+        ),
+    ]
+    assert response.text == "Checking now."
+    assert response.tool_calls == [
+        ToolCall(id="call_1", name="grep", input={"pattern": "TODO"})
+    ]
+    assert response.stop_reason == "tool_calls"
+    assert response.to_message() == {
+        "role": "assistant",
+        "content": [
+            {"type": "text", "text": "Checking now."},
+            {
+                "type": "tool_use",
+                "id": "call_1",
+                "name": "grep",
+                "input": {"pattern": "TODO"},
+            },
+        ],
+    }
+
+
 def test_factory_builds_anthropic_provider_with_thinking(monkeypatch) -> None:
     captured: dict[str, object] = {}
 

@@ -163,6 +163,8 @@ class OpenAIProvider(BaseLLMProvider):
 
         final_payload: Any = None
         yielded_tool_calls: set[str] = set()
+        streamed_text_parts: list[str] = []
+        streamed_tool_calls: list[ToolCall] = []
 
         stream = self.client.responses.create(**params)
         for event in stream:
@@ -170,6 +172,7 @@ class OpenAIProvider(BaseLLMProvider):
             if event_type == "response.output_text.delta":
                 delta = getattr(event, "delta", "")
                 if delta:
+                    streamed_text_parts.append(delta)
                     yield StreamEvent(type="text", text=delta)
                 continue
 
@@ -178,16 +181,28 @@ class OpenAIProvider(BaseLLMProvider):
                 if getattr(item, "type", "") != "function_call":
                     continue
 
-                tool_call_id = getattr(item, "call_id", "") or getattr(item, "id", "")
-                if tool_call_id in yielded_tool_calls:
-                    continue
-                yielded_tool_calls.add(tool_call_id)
-                yield StreamEvent(
-                    type="tool_call",
-                    tool_call_id=tool_call_id,
+                tool_call = ToolCall(
+                    id=getattr(item, "call_id", "") or getattr(item, "id", ""),
                     name=getattr(item, "name", ""),
                     input=self._parse_tool_input(getattr(item, "arguments", "{}")),
                 )
+                for emitted_tool_call in self._iter_new_tool_calls(
+                    [tool_call],
+                    yielded_tool_calls,
+                ):
+                    streamed_tool_calls.append(
+                        ToolCall(
+                            id=emitted_tool_call.id,
+                            name=emitted_tool_call.name,
+                            input=dict(emitted_tool_call.input),
+                        )
+                    )
+                    yield StreamEvent(
+                        type="tool_call",
+                        tool_call_id=emitted_tool_call.id,
+                        name=emitted_tool_call.name,
+                        input=emitted_tool_call.input,
+                    )
                 continue
 
             if event_type == "response.completed":
@@ -207,7 +222,11 @@ class OpenAIProvider(BaseLLMProvider):
 
         if final_payload is None:
             raise RuntimeError("Responses stream ended without a completed response.")
-        return self._parse_responses_api_response(final_payload)
+        return self._merge_streamed_responses_result(
+            self._parse_responses_api_response(final_payload),
+            streamed_text_parts=streamed_text_parts,
+            streamed_tool_calls=streamed_tool_calls,
+        )
 
     def _build_chat_request_params(
         self,
@@ -517,6 +536,64 @@ class OpenAIProvider(BaseLLMProvider):
             content_blocks=content_blocks,
         )
 
+    def _merge_streamed_responses_result(
+        self,
+        response: LLMResponse,
+        *,
+        streamed_text_parts: list[str],
+        streamed_tool_calls: list[ToolCall],
+    ) -> LLMResponse:
+        if not streamed_text_parts and not streamed_tool_calls:
+            return response
+
+        merged_text = response.text or "".join(streamed_text_parts)
+        merged_tool_calls = list(response.tool_calls)
+        if not merged_tool_calls and streamed_tool_calls:
+            merged_tool_calls = [
+                ToolCall(
+                    id=tool_call.id,
+                    name=tool_call.name,
+                    input=dict(tool_call.input),
+                )
+                for tool_call in streamed_tool_calls
+            ]
+
+        merged_content_blocks = [dict(block) for block in response.content_blocks]
+        has_text_block = any(block.get("type") == "text" for block in merged_content_blocks)
+        if merged_text and not has_text_block:
+            merged_content_blocks.insert(0, {"type": "text", "text": merged_text})
+
+        existing_tool_ids = {
+            str(block.get("id", ""))
+            for block in merged_content_blocks
+            if block.get("type") == "tool_use"
+        }
+        for tool_call in merged_tool_calls:
+            if tool_call.id in existing_tool_ids:
+                continue
+            merged_content_blocks.append(
+                {
+                    "type": "tool_use",
+                    "id": tool_call.id,
+                    "name": tool_call.name,
+                    "input": dict(tool_call.input),
+                }
+            )
+
+        stop_reason = response.stop_reason
+        if merged_tool_calls and stop_reason != "tool_calls":
+            stop_reason = "tool_calls"
+
+        return LLMResponse(
+            text=merged_text,
+            tool_calls=merged_tool_calls,
+            stop_reason=stop_reason,
+            input_tokens=response.input_tokens,
+            output_tokens=response.output_tokens,
+            thinking=response.thinking,
+            content_blocks=merged_content_blocks,
+        )
+
     def _coerce_responses_payload(self, response: Any) -> dict[str, Any]:
         if isinstance(response, str):
             return self._parse_responses_sse(response)
@@ -593,4 +670,3 @@ class OpenAIProvider(BaseLLMProvider):
         if not isinstance(parsed_input, dict):
             parsed_input = {"value": parsed_input}
         return parsed_input
-
