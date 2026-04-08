@@ -48,7 +48,8 @@ export default defineConfig({
           { text: '消息压缩', link: '/guide/ch11-compaction' },
           { text: '任务与 TODO', link: '/guide/ch12-tasks-todo' },
           { text: '技能系统', link: '/guide/ch13-skills' },
-          { text: '后台执行', link: '/guide/ch14-background' }
+          { text: '后台执行', link: '/guide/ch14-background' },
+          { text: '调试与日志', link: '/guide/ch16-debug' }
         ]
       },
       {

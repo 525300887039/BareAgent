@@ -53,6 +53,7 @@
 | `src/planning/` | 子智能体、任务、TODO、技能 |
 | `src/team/` | 多智能体邮箱、协议、自治 agent |
 | `src/concurrency/` | 后台线程和通知注入 |
+| `src/debug/` | 调试日志引擎、Web Viewer 服务端和前端 |
 
 这部分决定了 BareAgent 是否能长时间工作、如何拆任务、如何和队友通信。
 
@@ -326,6 +327,7 @@ npm run docs:dev
 2. 工具和执行回路问题看 `src/core/`
 3. provider 与权限看 `src/provider/` 和 `src/permission/`
 4. 压缩、任务、技能、team、后台分别在 `src/memory/`、`src/planning/`、`src/team/`、`src/concurrency/`
-5. 测试、技能和文档都直接随仓库维护，不是外置资源
+5. 调试日志在 `src/debug/`，集成点在 `src/core/loop.py` 和 `src/main.py`
+6. 测试、技能和文档都直接随仓库维护，不是外置资源
 
 至此，BareAgent 从概览、配置、REPL、工具、权限、provider、执行回路、子智能体、多智能体，到压缩、任务、技能、后台和开发方式的整套结构就基本串起来了。

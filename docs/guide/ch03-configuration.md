@@ -227,6 +227,29 @@ budget_tokens = 10000
 
 换句话说，`[thinking]` 是全局配置项，但并不是所有 provider 都会以相同方式使用它。
 
+### 3.2.6 `[debug]`
+
+`[debug]` 控制调试日志系统的行为。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `enabled` | `bool` | 是否启用调试日志，默认 `false` |
+| `log_dir` | `string` | 日志存储目录，相对路径基于工作目录解析，默认 `".logs"` |
+| `viewer_port` | `int` | Web Viewer 监听端口，默认 `8321` |
+| `pretty` | `bool` | JSON 文件是否缩进格式化，默认 `true` |
+
+示例：
+
+```toml
+[debug]
+enabled = true
+log_dir = ".logs"
+viewer_port = 8321
+pretty = true
+```
+
+启用后，BareAgent 会在每轮 LLM 交互时自动记录完整的请求和响应到 `log_dir` 目录。通过 `/log` 命令可以查看状态、启动 Web Viewer 或查询具体交互。详见 [调试与日志系统](./ch16-debug.md)。
+
 ## 3.3 环境变量一览表
 
 下表汇总了当前代码中支持的主要环境变量。
@@ -247,6 +270,10 @@ budget_tokens = 10000
 | `BAREAGENT_SKILLS_DIR` | 覆盖技能目录 | 未设置时按内置候选路径解析 |
 | `BAREAGENT_SUBAGENT_MAX_DEPTH` | 覆盖子智能体最大深度 | 解析为整数 |
 | `BAREAGENT_SUBAGENT_DEFAULT_TYPE` | 覆盖默认子智能体类型 | 必须是内置类型之一 |
+| `BAREAGENT_DEBUG` | 覆盖是否启用调试日志 | 接受布尔字面量 |
+| `BAREAGENT_DEBUG_LOG_DIR` | 覆盖调试日志目录 | 字符串路径 |
+| `BAREAGENT_DEBUG_VIEWER_PORT` | 覆盖 Web Viewer 端口 | 解析为整数 |
+| `BAREAGENT_DEBUG_PRETTY` | 覆盖 JSON 格式化 | 接受布尔字面量 |
 
 另外，provider 自身的 API Key 通常放在下列环境变量中：
 
