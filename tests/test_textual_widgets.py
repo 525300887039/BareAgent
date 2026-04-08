@@ -188,6 +188,53 @@ async def test_slash_help_command(make_app) -> None:
 
 
 @pytest.mark.anyio
+async def test_slash_log_command_routes_to_shared_handler(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = make_test_config(tmp_path)
+    config.debug.enabled = True
+    monkeypatch.chdir(tmp_path)
+    app = BareAgentApp(config=config, provider=ReplayProvider())
+    captured: dict[str, Any] = {}
+
+    def _fake_handle_log_command(
+        text: str,
+        *,
+        config: Any,
+        interaction_logger: Any,
+        viewer_server: Any,
+        print_status: Any,
+    ) -> str:
+        captured["text"] = text
+        captured["config"] = config
+        captured["interaction_logger"] = interaction_logger
+        captured["viewer_server"] = viewer_server
+        print_status("debug status")
+        return "viewer-token"
+
+    monkeypatch.setattr(
+        "src.ui.app.main_module._handle_log_command",
+        _fake_handle_log_command,
+    )
+
+    async with app.run_test() as pilot:
+        input_bar = app.query_one("#input", InputBar)
+        chat = app.query_one("#chat", ChatView)
+        input_bar.value = "/log status"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        rendered = "\n".join(_widget_text(child) for child in chat.children)
+        assert captured["text"] == "/log status"
+        assert captured["config"] is config
+        assert captured["interaction_logger"] is app._interaction_logger
+        assert captured["viewer_server"] is None
+        assert app._viewer_server == "viewer-token"
+        assert "debug status" in rendered
+
+
+@pytest.mark.anyio
 async def test_slash_exit_command(
     make_app,
     monkeypatch: pytest.MonkeyPatch,
@@ -228,6 +275,36 @@ async def test_slash_mode_command_consumes_next_numeric_input(make_app) -> None:
         rendered = "\n".join(_widget_text(child) for child in chat.children)
         assert app._permission.mode is PermissionMode.AUTO
         assert "Permission mode: default → auto" in rendered
+
+
+@pytest.mark.anyio
+async def test_slash_new_and_resume_keep_logger_session_in_sync(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = make_test_config(tmp_path)
+    config.debug.enabled = True
+    monkeypatch.chdir(tmp_path)
+    app = BareAgentApp(config=config, provider=ReplayProvider())
+
+    async with app.run_test() as pilot:
+        input_bar = app.query_one("#input", InputBar)
+        original_session = app._session_id
+        app._transcript_mgr.save(app._messages, original_session)
+
+        input_bar.value = "/new"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert app._interaction_logger.session_id == app._session_id
+        assert app._session_id != original_session
+
+        input_bar.value = f"/resume {original_session}"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert app._session_id == original_session
+        assert app._interaction_logger.session_id == original_session
 
 
 @pytest.mark.anyio

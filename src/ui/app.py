@@ -112,6 +112,8 @@ class BareAgentApp(App):
         self._textual_ui: TextualUI | None = None
         self._pending_mode_select = False
         self._chat_console: _ChatViewAsConsole | None = None
+        self._interaction_logger: Any = None
+        self._viewer_server: Any = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -129,6 +131,11 @@ class BareAgentApp(App):
         self._workspace = Path.cwd().resolve()
         self._transcript_mgr = TranscriptManager(self._workspace / ".transcripts")
         self._session_id = main_module._generate_session_id(self._transcript_mgr)
+        self._interaction_logger = main_module._build_interaction_logger(
+            self.config,
+            self._workspace,
+            self._session_id,
+        )
         self._todo_manager = TodoManager()
         self._task_manager = main_module._load_task_manager(
             self._workspace,
@@ -214,6 +221,7 @@ class BareAgentApp(App):
                 bg_manager=self._bg_manager,
                 stream=self._stream_enabled(),
                 console=self._textual_ui,
+                interaction_logger=self._interaction_logger,
             )
             self._save_transcript_snapshot()
             self.call_from_thread(self._drain_team_messages)
@@ -274,6 +282,10 @@ class BareAgentApp(App):
             )
             main_module._set_compact_session_id(self._compact_fn, new_session_id)
             self._session_id = new_session_id
+            main_module._set_interaction_logger_session(
+                self._interaction_logger,
+                new_session_id,
+            )
             self._message_bus, self._mailbox_cursor = main_module._switch_session_mailbox(
                 self._workspace,
                 new_session_id,
@@ -320,6 +332,10 @@ class BareAgentApp(App):
             if resumed is not None:
                 self._session_id = resumed
                 main_module._set_compact_session_id(self._compact_fn, resumed)
+                main_module._set_interaction_logger_session(
+                    self._interaction_logger,
+                    resumed,
+                )
                 self._message_bus, self._mailbox_cursor = main_module._switch_session_mailbox(
                     self._workspace,
                     resumed,
@@ -331,6 +347,17 @@ class BareAgentApp(App):
             )
             self._render_chat_history()
             chat.append_status(f"Resumed session: {resumed}")
+            return
+
+        if text == "/log" or text.startswith("/log "):
+            self._pending_mode_select = False
+            self._viewer_server = main_module._handle_log_command(
+                text,
+                config=self.config,
+                interaction_logger=self._interaction_logger,
+                viewer_server=self._viewer_server,
+                print_status=chat.append_status,
+            )
             return
 
         if text in main_module._PERMISSION_SLASH:

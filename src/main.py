@@ -8,12 +8,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Callable
 
 from src.concurrency.background import BackgroundManager
 from src.core.fileutil import generate_random_id, is_tool_result_message, optional_string as _coerce_optional_string
 from src.core.context import assemble_system_prompt
 from src.core.loop import LLMCallError, agent_loop
 from src.core.tools import get_handlers, get_tools
+from src.debug.interaction_log import InteractionLogger
 from src.memory.compact import Compactor
 from src.memory.transcript import TranscriptManager
 from src.permission.guard import PermissionGuard, PermissionMode
@@ -72,12 +74,21 @@ class SubagentConfig:
 
 
 @dataclass(slots=True)
+class DebugConfig:
+    enabled: bool = False
+    log_dir: str = ".logs"
+    viewer_port: int = 8321
+    pretty: bool = True
+
+
+@dataclass(slots=True)
 class Config:
     provider: ProviderConfig
     permission: PermissionConfig
     ui: UIConfig
     subagent: SubagentConfig
     thinking: ThinkingConfig
+    debug: DebugConfig
     path: Path
 
 
@@ -192,6 +203,7 @@ def load_config(
     ui_raw = raw_config.get("ui", {})
     subagent_raw = raw_config.get("subagent", {})
     thinking_raw = raw_config.get("thinking", {})
+    debug_raw = raw_config.get("debug", {})
     allow_rules, deny_rules = parse_permission_rules(raw_config)
     configured_provider_name = str(provider_raw.get("name", "anthropic"))
     provider_name = _resolve_string(
@@ -271,6 +283,24 @@ def load_config(
             "BAREAGENT_THINKING_BUDGET_TOKENS",
         ),
     )
+    debug = DebugConfig(
+        enabled=_resolve_bool(
+            bool(debug_raw.get("enabled", False)),
+            "BAREAGENT_DEBUG",
+        ),
+        log_dir=_resolve_string(
+            str(debug_raw.get("log_dir", ".logs")),
+            "BAREAGENT_DEBUG_LOG_DIR",
+        ),
+        viewer_port=_resolve_int(
+            int(debug_raw.get("viewer_port", 8321)),
+            "BAREAGENT_DEBUG_VIEWER_PORT",
+        ),
+        pretty=_resolve_bool(
+            bool(debug_raw.get("pretty", True)),
+            "BAREAGENT_DEBUG_PRETTY",
+        ),
+    )
 
     return Config(
         provider=provider,
@@ -278,6 +308,7 @@ def load_config(
         ui=ui,
         subagent=subagent,
         thinking=thinking,
+        debug=debug,
         path=config_path.resolve(),
     )
 
@@ -363,7 +394,7 @@ _MODE_DESCRIPTIONS = {
 _SLASH_COMMANDS = [
     "/help", "/exit", "/clear", "/new", "/compact",
     *_PERMISSION_SLASH, "/mode", "/theme",
-    "/sessions", "/resume", "/team",
+    "/sessions", "/resume", "/log", "/team",
 ]
 _HELP_TEXT = (
     "Available commands:\n"
@@ -380,6 +411,7 @@ _HELP_TEXT = (
     "  /theme     Switch color theme (catppuccin-mocha, dracula, nord, tokyo-night, gruvbox)\n"
     "  /sessions  List saved sessions\n"
     "  /resume    Resume a previous session\n"
+    "  /log       Debug log viewer (status|serve|open|<seq>)\n"
     "  /team      Manage team agents (list | spawn | send)"
 )
 
@@ -446,6 +478,164 @@ def _save_transcript_snapshot(
     compact_fn: object,
 ) -> None:
     transcript_mgr.save(messages, _get_compact_session_id(compact_fn))
+
+
+def _resolve_debug_log_dir(workspace_path: Path, config: Config) -> Path:
+    log_dir = Path(config.debug.log_dir).expanduser()
+    if not log_dir.is_absolute():
+        log_dir = workspace_path / log_dir
+    return log_dir
+
+
+def _build_interaction_logger(
+    config: Config,
+    workspace_path: Path,
+    session_id: str,
+) -> InteractionLogger | None:
+    if not config.debug.enabled:
+        return None
+
+    return InteractionLogger(
+        log_dir=_resolve_debug_log_dir(workspace_path, config),
+        session_id=session_id,
+        pretty=config.debug.pretty,
+    )
+
+
+def _set_interaction_logger_session(
+    interaction_logger: InteractionLogger | None,
+    session_id: str,
+) -> None:
+    if interaction_logger is None:
+        return
+    interaction_logger.session_id = session_id
+
+
+def _debug_viewer_url(config: Config) -> str:
+    return f"http://127.0.0.1:{config.debug.viewer_port}"
+
+
+def _format_log_status(
+    config: Config,
+    interaction_logger: InteractionLogger,
+    viewer_server: object | None,
+) -> str:
+    interactions = interaction_logger.list_interactions(interaction_logger.session_id)
+    total_tokens = sum(
+        int(interaction.get("input_tokens", 0) or 0)
+        + int(interaction.get("output_tokens", 0) or 0)
+        for interaction in interactions
+    )
+    lines = [
+        "Debug logging: enabled",
+        f"Log dir: {config.debug.log_dir}",
+        f"Current session: {interaction_logger.session_id}",
+        f"Interactions: {len(interactions)}",
+        f"Total tokens: {total_tokens}",
+        f"Sessions: {len(interaction_logger.list_sessions())}",
+    ]
+    if viewer_server is None:
+        lines.append("Viewer: not running (use /log serve)")
+    else:
+        lines.append(f"Viewer: {_debug_viewer_url(config)}")
+    return "\n".join(lines)
+
+
+def _format_log_interaction_summary(
+    seq: int,
+    interaction: dict[str, object],
+) -> str:
+    request = interaction.get("request")
+    response = interaction.get("response")
+    if not request and not response:
+        return f"Interaction #{seq} not found."
+
+    response_data = response if isinstance(response, dict) else {}
+    tool_calls = response_data.get("tool_calls", [])
+    thinking = str(response_data.get("thinking", "") or "").strip()
+    lines = [
+        f"Interaction #{seq}:",
+        f"  Input tokens:  {response_data.get('input_tokens', '?')}",
+        f"  Output tokens: {response_data.get('output_tokens', '?')}",
+        f"  Duration:      {response_data.get('duration_ms', '?')}ms",
+        f"  Tool calls:    {len(tool_calls) if isinstance(tool_calls, list) else 0}",
+    ]
+    if response_data.get("error"):
+        lines.append(f"  Error: {response_data['error']}")
+    if thinking:
+        preview = thinking[:100]
+        if len(thinking) > 100:
+            preview += "..."
+        lines.append(f"  Thinking: {preview}")
+    return "\n".join(lines)
+
+
+def _start_debug_viewer(
+    interaction_logger: InteractionLogger,
+    config: Config,
+) -> object:
+    from src.debug.web_viewer import start_viewer
+
+    viewer_server, _ = start_viewer(
+        interaction_logger,
+        port=config.debug.viewer_port,
+    )
+    return viewer_server
+
+
+def _handle_log_command(
+    text: str,
+    *,
+    config: Config,
+    interaction_logger: InteractionLogger | None,
+    viewer_server: object | None,
+    print_status: Callable[[str], None],
+) -> object | None:
+    _, _, log_arg = text.partition(" ")
+    log_cmd = log_arg.strip()
+
+    if interaction_logger is None:
+        print_status(
+            "Debug logging is disabled. Set [debug] enabled = true in config.toml "
+            "or BAREAGENT_DEBUG=1"
+        )
+        return viewer_server
+
+    if not log_cmd or log_cmd == "status":
+        print_status(_format_log_status(config, interaction_logger, viewer_server))
+        return viewer_server
+
+    if log_cmd in {"serve", "open"}:
+        if viewer_server is None:
+            try:
+                viewer_server = _start_debug_viewer(interaction_logger, config)
+            except OSError as exc:
+                print_status(f"Failed to start debug viewer: {exc}")
+                return viewer_server
+            print_status(f"Debug viewer started at {_debug_viewer_url(config)}")
+        elif log_cmd == "serve":
+            print_status(f"Viewer already running at {_debug_viewer_url(config)}")
+
+        if log_cmd == "open":
+            import webbrowser
+
+            url = _debug_viewer_url(config)
+            webbrowser.open(url)
+            print_status(f"Opening {url} in browser...")
+        return viewer_server
+
+    try:
+        seq = int(log_cmd)
+    except ValueError:
+        print_status("Usage: /log [status|serve|open|<seq>]")
+        return viewer_server
+
+    interaction = interaction_logger.get_interaction(
+        interaction_logger.session_id,
+        seq,
+    )
+    print_status(_format_log_interaction_summary(seq, interaction))
+    return viewer_server
 
 
 def _build_handlers(
@@ -786,6 +976,12 @@ def _run_stdio_session(
     workspace_path = (workspace or Path.cwd()).resolve()
     transcript_mgr = TranscriptManager(workspace_path / ".transcripts")
     session_id = _generate_session_id(transcript_mgr)
+    interaction_logger = _build_interaction_logger(
+        config,
+        workspace_path,
+        session_id,
+    )
+    viewer_server = None
     todo_manager = TodoManager()
     task_manager = _load_task_manager(workspace_path, ui_console)
     bg_manager = BackgroundManager()
@@ -868,6 +1064,7 @@ def _run_stdio_session(
                 reserved_ids={_get_compact_session_id(compact_fn)},
             )
             _set_compact_session_id(compact_fn, new_session_id)
+            _set_interaction_logger_session(interaction_logger, new_session_id)
             message_bus, main_mailbox_cursor = _switch_session_mailbox(
                 workspace_path,
                 new_session_id,
@@ -935,6 +1132,10 @@ def _run_stdio_session(
             resumed_session = requested_session or transcript_mgr.get_latest_session()
             if resumed_session is not None:
                 _set_compact_session_id(compact_fn, resumed_session)
+                _set_interaction_logger_session(
+                    interaction_logger,
+                    resumed_session,
+                )
                 message_bus, main_mailbox_cursor = _switch_session_mailbox(
                     workspace_path,
                     resumed_session,
@@ -959,6 +1160,15 @@ def _run_stdio_session(
                 agent_name=MAIN_AGENT_NAME,
             )
             ui_console.print_status(f"Resumed session: {resumed_session}")
+            continue
+        if text == "/log" or text.startswith("/log "):
+            viewer_server = _handle_log_command(
+                text,
+                config=config,
+                interaction_logger=interaction_logger,
+                viewer_server=viewer_server,
+                print_status=ui_console.print_status,
+            )
             continue
         if text in _PERMISSION_SLASH:
             old = permission.mode
@@ -1005,6 +1215,7 @@ def _run_stdio_session(
                 bg_manager=bg_manager,
                 stream=config.ui.stream,
                 console=ui_console,
+                interaction_logger=interaction_logger,
             )
             _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
             main_mailbox_cursor = _drain_team_mailbox(
