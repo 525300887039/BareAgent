@@ -23,3 +23,11 @@ def test_config_toml_provider_fields():
     assert "name" in p
     assert "model" in p
     assert "api_key_env" in p
+
+
+def test_config_toml_keeps_debug_logging_opt_in():
+    """bundled config.toml 不应默认开启完整 debug 日志"""
+    with open(CONFIG_PATH, "rb") as f:
+        cfg = tomllib.load(f)
+
+    assert cfg["debug"]["enabled"] is False
