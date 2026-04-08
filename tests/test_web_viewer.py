@@ -93,7 +93,14 @@ def test_get_root_returns_html(viewer_server: SimpleNamespace) -> None:
     assert content_type == "text/html"
     html = body.decode("utf-8")
     assert "BareAgent Debug Viewer" in html
-    assert "Connecting to event stream" in html
+    assert "bareagent-debug-viewer-locale" in html
+    assert 'data-locale="en"' in html
+    assert 'data-locale="zh"' in html
+    assert "中文" in html
+    assert "切换语言" in html
+    assert "navigator.languages" in html
+    assert 'normalized.startsWith("en")' in html
+    assert "Failed to load session timeline" in html
 
 
 def test_get_sessions_returns_json_list(viewer_server: SimpleNamespace) -> None:
