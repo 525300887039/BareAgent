@@ -26,10 +26,7 @@ from src.team.manager import TeammateManager
 from src.ui.protocol import StreamProtocol
 from src.ui.widgets import ChatView, InputBar, PermissionModal
 
-_HELP_TEXT = (
-    main_module._HELP_TEXT + "\n"
-    "  Shift+Tab  Cycle through permission modes"
-)
+_HELP_TEXT = main_module._HELP_TEXT + "\n  Shift+Tab  Cycle through permission modes"
 
 
 def make_ask_via_modal(app: BareAgentApp) -> Callable[[Any], bool]:
@@ -136,6 +133,11 @@ class BareAgentApp(App):
             self._workspace,
             self._session_id,
         )
+        main_module._configure_tracing(
+            self.config,
+            session_id=self._session_id,
+            interaction_logger=self._interaction_logger,
+        )
         self._todo_manager = TodoManager()
         self._task_manager = main_module._load_task_manager(
             self._workspace,
@@ -177,8 +179,7 @@ class BareAgentApp(App):
             f"BareAgent REPL ({self.config.provider.name}/{self.config.provider.model})"
         )
         chat.append_status(
-            "Permission mode: "
-            f"{self._permission.mode.value}. Type /help for commands."
+            f"Permission mode: {self._permission.mode.value}. Type /help for commands."
         )
         self.query_one("#input", InputBar).focus()
 
@@ -286,10 +287,12 @@ class BareAgentApp(App):
                 self._interaction_logger,
                 new_session_id,
             )
-            self._message_bus, self._mailbox_cursor = main_module._switch_session_mailbox(
-                self._workspace,
-                new_session_id,
-                current_bus=self._message_bus,
+            self._message_bus, self._mailbox_cursor = (
+                main_module._switch_session_mailbox(
+                    self._workspace,
+                    new_session_id,
+                    current_bus=self._message_bus,
+                )
             )
             self._spawned_agents = {}
             self._rebuild_handlers(runtime_id=new_session_id)
@@ -336,10 +339,12 @@ class BareAgentApp(App):
                     self._interaction_logger,
                     resumed,
                 )
-                self._message_bus, self._mailbox_cursor = main_module._switch_session_mailbox(
-                    self._workspace,
-                    resumed,
-                    current_bus=self._message_bus,
+                self._message_bus, self._mailbox_cursor = (
+                    main_module._switch_session_mailbox(
+                        self._workspace,
+                        resumed,
+                        current_bus=self._message_bus,
+                    )
                 )
                 self._spawned_agents = {}
             self._rebuild_handlers(
@@ -418,8 +423,7 @@ class BareAgentApp(App):
     def _handle_mode_selection(self, text: str) -> None:
         chat = self.query_one("#chat", ChatView)
         choices = {
-            str(index): mode
-            for index, mode in enumerate(main_module._MODE_CYCLE, 1)
+            str(index): mode for index, mode in enumerate(main_module._MODE_CYCLE, 1)
         }
         selected = choices.get(text.strip())
         if selected is None:
@@ -540,7 +544,9 @@ class BareAgentApp(App):
                     tool_name_by_id[tool_id] = str(block.get("name", "unknown"))
 
                 if text_parts:
-                    chat.append_assistant_markdown("\n".join(part for part in text_parts if part))
+                    chat.append_assistant_markdown(
+                        "\n".join(part for part in text_parts if part)
+                    )
                     text_parts = []
                 chat.append_tool_call(
                     str(block.get("name", "unknown")),
@@ -548,7 +554,9 @@ class BareAgentApp(App):
                 )
 
             if text_parts:
-                chat.append_assistant_markdown("\n".join(part for part in text_parts if part))
+                chat.append_assistant_markdown(
+                    "\n".join(part for part in text_parts if part)
+                )
 
     def _app_call(self, fn: Callable[..., Any], *args: Any) -> None:
         self.call_from_thread(fn, *args)

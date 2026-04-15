@@ -6,6 +6,7 @@ from typing import Any, Callable
 from src.concurrency.notification import inject_notifications
 from src.core.fileutil import stringify
 from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
+from src.tracing import tracer as global_tracer
 from src.ui.protocol import StreamProtocol, UIProtocol
 from src.ui.stream import StreamPrinter
 
@@ -45,28 +46,35 @@ def agent_loop(
             console=console,
         )
 
-        try:
-            response, streamed_output, displayed_tool_calls = _invoke_provider(
-                provider=provider,
-                messages=messages,
-                tools=tools,
-                stream=stream,
-                console=console,
-            )
-        except BaseException as exc:
-            _safe_log_response(
-                interaction_logger=interaction_logger,
-                log_seq=log_seq,
-                console=console,
-                duration_ms=(time.monotonic() - log_started_at) * 1000,
-                error=str(exc) or type(exc).__name__,
-            )
-            if not isinstance(exc, Exception):
-                raise
-            msg = f"LLM call failed: {type(exc).__name__}: {exc}"
-            if console is not None:
-                console.print_error(msg)
-            raise LLMCallError(msg) from exc
+        model_name = getattr(provider, "model", "unknown")
+        with global_tracer.trace("llm_call", tags={"model": model_name}) as llm_span:
+            try:
+                response, streamed_output, displayed_tool_calls = _invoke_provider(
+                    provider=provider,
+                    messages=messages,
+                    tools=tools,
+                    stream=stream,
+                    console=console,
+                )
+            except BaseException as exc:
+                llm_span.set_error(str(exc) or type(exc).__name__)
+                _safe_log_response(
+                    interaction_logger=interaction_logger,
+                    log_seq=log_seq,
+                    console=console,
+                    duration_ms=(time.monotonic() - log_started_at) * 1000,
+                    error=str(exc) or type(exc).__name__,
+                )
+                if not isinstance(exc, Exception):
+                    raise
+                msg = f"LLM call failed: {type(exc).__name__}: {exc}"
+                if console is not None:
+                    console.print_error(msg)
+                raise LLMCallError(msg) from exc
+
+            llm_span.set_tag("input_tokens", response.input_tokens)
+            llm_span.set_tag("output_tokens", response.output_tokens)
+            llm_span.set_content_tag("output", response.text)
 
         _safe_log_response(
             interaction_logger=interaction_logger,
@@ -104,20 +112,21 @@ def agent_loop(
                 output = f"Unknown tool: {call.name}"
                 if console is not None:
                     console.print_tool_result(call.name, output)
-                results.append(
-                    _tool_result(call.id, output, is_error=True)
-                )
+                results.append(_tool_result(call.id, output, is_error=True))
                 continue
 
             try:
-                output = handler(**call.input)
+                with global_tracer.trace(
+                    "tool_execution", tags={"tool": call.name}
+                ) as tool_span:
+                    tool_span.set_content_tag("input", call.input)
+                    output = handler(**call.input)
+                    tool_span.set_content_tag("output", stringify(output))
             except Exception as exc:
                 output = f"Error: {type(exc).__name__}: {exc}"
                 if console is not None:
                     console.print_tool_result(call.name, output)
-                results.append(
-                    _tool_result(call.id, output, is_error=True)
-                )
+                results.append(_tool_result(call.id, output, is_error=True))
                 continue
 
             if console is not None:
@@ -208,7 +217,11 @@ def _consume_stream(
                 response = stop.value
                 if response is None:
                     raise RuntimeError("Streaming provider did not return a response.")
-                return response, streamed_any_text or bool(streamed_text), displayed_tool_calls
+                return (
+                    response,
+                    streamed_any_text or bool(streamed_text),
+                    displayed_tool_calls,
+                )
 
             saw_stream_event = True
             if event.type == "text" and bool(event.text):
@@ -260,7 +273,9 @@ def _get_stream_printer(console: UIProtocol | None) -> StreamProtocol:
     return StreamPrinter(getattr(console, "console", None))
 
 
-def _tool_result(tool_use_id: str, output: Any, *, is_error: bool = False) -> dict[str, Any]:
+def _tool_result(
+    tool_use_id: str, output: Any, *, is_error: bool = False
+) -> dict[str, Any]:
     result: dict[str, Any] = {
         "type": "tool_result",
         "tool_use_id": tool_use_id,

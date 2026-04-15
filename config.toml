@@ -23,3 +23,8 @@ enabled = false
 log_dir = ".logs"
 viewer_port = 8321
 pretty = true
+
+[tracing]
+# langfuse = false        # 或设 LANGFUSE_PUBLIC_KEY 环境变量自动启用
+# opentelemetry = false   # 或设 OTEL_EXPORTER_OTLP_ENDPOINT 自动启用
+# content_enabled = true  # 是否上报消息内容（PII 敏感场景可关闭）
