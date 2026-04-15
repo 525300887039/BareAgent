@@ -68,7 +68,9 @@ class TranscriptManager:
         return self.load(target_session)
 
     def _get_session_entry(self, session_id: str) -> _TranscriptEntry:
-        entries = [entry for entry in self._iter_entries() if entry.session_id == session_id]
+        entries = [
+            entry for entry in self._iter_entries() if entry.session_id == session_id
+        ]
         if not entries:
             raise FileNotFoundError(f"No transcript found for session: {session_id}")
         return max(entries, key=lambda entry: entry.timestamp)

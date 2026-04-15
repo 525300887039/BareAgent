@@ -18,8 +18,13 @@ from src.ui.theme import ThemeManager, get_theme
 
 
 _EntryKind = Literal[
-    "separator", "user", "tool_call", "tool_result",
-    "status", "error", "assistant_markdown",
+    "separator",
+    "user",
+    "tool_call",
+    "tool_result",
+    "status",
+    "error",
+    "assistant_markdown",
 ]
 
 
@@ -137,7 +142,9 @@ class ChatView(VerticalScroll):
         return Static(self._build_renderable(entry))
 
     def _build_renderable(
-        self, entry: _TranscriptEntry, tm: ThemeManager | None = None,
+        self,
+        entry: _TranscriptEntry,
+        tm: ThemeManager | None = None,
     ) -> Rule | Text | Panel:
         if tm is None:
             tm = get_theme()

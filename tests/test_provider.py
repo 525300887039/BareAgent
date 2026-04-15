@@ -66,7 +66,9 @@ def test_anthropic_parse_response_extracts_thinking_and_tool_calls(monkeypatch) 
             _ = kwargs
             self.messages = SimpleNamespace()
 
-    monkeypatch.setattr("src.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient)
+    monkeypatch.setattr(
+        "src.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
+    )
     provider = AnthropicProvider(api_key="test", model="claude-test")
 
     response = SimpleNamespace(
@@ -164,7 +166,9 @@ def test_anthropic_create_stream_yields_text_and_tool_events(monkeypatch) -> Non
             _ = kwargs
             self.messages = SimpleNamespace(stream=lambda **kwargs: FakeStream())
 
-    monkeypatch.setattr("src.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient)
+    monkeypatch.setattr(
+        "src.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
+    )
     provider = AnthropicProvider(api_key="test", model="claude-test")
 
     stream = provider.create_stream(
@@ -255,7 +259,9 @@ def test_openai_create_stream_accumulates_text_and_tool_calls(monkeypatch) -> No
                             SimpleNamespace(
                                 index=0,
                                 id="call_1",
-                                function=SimpleNamespace(name="grep", arguments='{"pattern":"TO'),
+                                function=SimpleNamespace(
+                                    name="grep", arguments='{"pattern":"TO'
+                                ),
                             )
                         ],
                     ),
@@ -325,7 +331,9 @@ def test_openai_create_stream_accumulates_text_and_tool_calls(monkeypatch) -> No
     assert response.output_tokens == 6
 
 
-def test_openai_create_stream_emits_tool_calls_even_without_tool_finish_reason(monkeypatch) -> None:
+def test_openai_create_stream_emits_tool_calls_even_without_tool_finish_reason(
+    monkeypatch,
+) -> None:
     chunks = [
         SimpleNamespace(
             choices=[
@@ -337,7 +345,9 @@ def test_openai_create_stream_emits_tool_calls_even_without_tool_finish_reason(m
                             SimpleNamespace(
                                 index=0,
                                 id="call_1",
-                                function=SimpleNamespace(name="echo", arguments='{"value":"STREAM'),
+                                function=SimpleNamespace(
+                                    name="echo", arguments='{"value":"STREAM'
+                                ),
                             )
                         ],
                     ),
@@ -355,7 +365,9 @@ def test_openai_create_stream_emits_tool_calls_even_without_tool_finish_reason(m
                             SimpleNamespace(
                                 index=0,
                                 id=None,
-                                function=SimpleNamespace(name=None, arguments='_TOOL"}'),
+                                function=SimpleNamespace(
+                                    name=None, arguments='_TOOL"}'
+                                ),
                             )
                         ],
                     ),
@@ -430,7 +442,9 @@ def test_openai_parse_responses_api_payload_extracts_tool_calls() -> None:
     assert parsed.output_tokens == 6
 
 
-def test_openai_create_stream_via_responses_accumulates_text_and_tool_calls(monkeypatch) -> None:
+def test_openai_create_stream_via_responses_accumulates_text_and_tool_calls(
+    monkeypatch,
+) -> None:
     completed_response = SimpleNamespace(
         to_dict=lambda: {
             "status": "completed",
@@ -451,8 +465,12 @@ def test_openai_create_stream_via_responses_accumulates_text_and_tool_calls(monk
         }
     )
     events_source = [
-        SimpleNamespace(type="response.output_text.delta", delta="Checking ", item_id="msg_1"),
-        SimpleNamespace(type="response.output_text.delta", delta="now.", item_id="msg_1"),
+        SimpleNamespace(
+            type="response.output_text.delta", delta="Checking ", item_id="msg_1"
+        ),
+        SimpleNamespace(
+            type="response.output_text.delta", delta="now.", item_id="msg_1"
+        ),
         SimpleNamespace(
             type="response.output_item.done",
             item=SimpleNamespace(
@@ -521,8 +539,12 @@ def test_openai_create_stream_via_responses_preserves_streamed_tool_calls_when_c
         }
     )
     events_source = [
-        SimpleNamespace(type="response.output_text.delta", delta="Checking ", item_id="msg_1"),
-        SimpleNamespace(type="response.output_text.delta", delta="now.", item_id="msg_1"),
+        SimpleNamespace(
+            type="response.output_text.delta", delta="Checking ", item_id="msg_1"
+        ),
+        SimpleNamespace(
+            type="response.output_text.delta", delta="now.", item_id="msg_1"
+        ),
         SimpleNamespace(
             type="response.output_item.done",
             item=SimpleNamespace(
@@ -623,6 +645,7 @@ def test_factory_builds_anthropic_provider_with_thinking(monkeypatch) -> None:
 
 def test_openai_convert_assistant_message_missing_id_and_name(monkeypatch) -> None:
     """BUG-03：tool_use 块缺少 id/name 时不应 KeyError。"""
+
     class FakeOpenAIClient:
         def __init__(self, **kwargs) -> None:
             _ = kwargs
@@ -638,12 +661,15 @@ def test_openai_convert_assistant_message_missing_id_and_name(monkeypatch) -> No
 
 def test_anthropic_convert_message_content_missing_id_and_name(monkeypatch) -> None:
     """BUG-10：tool_use 块缺少 id/name 时不应 KeyError。"""
+
     class FakeAnthropicClient:
         def __init__(self, **kwargs) -> None:
             _ = kwargs
             self.messages = SimpleNamespace()
 
-    monkeypatch.setattr("src.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient)
+    monkeypatch.setattr(
+        "src.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
+    )
     provider = AnthropicProvider(api_key="x", model="claude-3-5-sonnet-20241022")
     content = [{"type": "tool_use", "input": {}}]
     result = provider._convert_message_content(content)

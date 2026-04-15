@@ -2,6 +2,7 @@
 
 适配：构造函数接受 PermissionMode 枚举，方法是 requires_confirm()（True=需确认，语义与 check 相反）
 """
+
 from src.permission.guard import PermissionGuard, PermissionMode
 
 

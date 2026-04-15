@@ -18,7 +18,9 @@ def _validate_agent_name(name: str) -> str:
     if not normalized:
         raise ValueError("agent_name must not be empty")
     if not _VALID_AGENT_NAME.fullmatch(normalized):
-        raise ValueError(f"Invalid agent name (only alphanumeric, _, - allowed): {normalized!r}")
+        raise ValueError(
+            f"Invalid agent name (only alphanumeric, _, - allowed): {normalized!r}"
+        )
     return normalized
 
 
@@ -175,7 +177,10 @@ class MessageBus:
         cond = self._cond_for(agent_name)
         with cond:
             initial = self._signal_counts.get(agent_name, 0)
-            cond.wait_for(lambda: self._signal_counts.get(agent_name, 0) != initial, timeout=timeout)
+            cond.wait_for(
+                lambda: self._signal_counts.get(agent_name, 0) != initial,
+                timeout=timeout,
+            )
 
     def _mailbox_path(self, agent_name: str) -> Path:
         return self.mailbox_dir / f"{agent_name}.jsonl"
@@ -209,5 +214,3 @@ class MessageBus:
 
 def _generate_message_id(length: int = 12) -> str:
     return generate_random_id(length)
-
-

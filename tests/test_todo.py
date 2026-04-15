@@ -126,7 +126,10 @@ def test_skill_loader_scan_load_and_prompt(tmp_path: Path) -> None:
         ("test", "Testing guidance for unit and integration coverage."),
     ]
     assert "Available skills" in loader.get_skill_list_prompt()
-    assert "- git: Git workflow conventions for branches and commits." in loader.get_skill_list_prompt()
+    assert (
+        "- git: Git workflow conventions for branches and commits."
+        in loader.get_skill_list_prompt()
+    )
     assert loader.load("git").startswith("# Git")
 
     with pytest.raises(ValueError, match="Unknown skill: missing"):
@@ -163,7 +166,9 @@ def test_pyproject_packages_skills_for_distributions() -> None:
     pyproject = Path("pyproject.toml")
     config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
 
-    wheel_force_include = config["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    wheel_force_include = config["tool"]["hatch"]["build"]["targets"]["wheel"][
+        "force-include"
+    ]
     sdist_include = config["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
 
     assert wheel_force_include["skills"] == "skills"

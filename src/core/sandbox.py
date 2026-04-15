@@ -24,6 +24,4 @@ def _check_no_symlink_in_chain(workspace: Path, candidate: Path) -> None:
     for part in candidate.parts:
         current = current / part
         if current.is_symlink():
-            raise PermissionError(
-                f"Symlink detected in path chain: {current}"
-            )
+            raise PermissionError(f"Symlink detected in path chain: {current}")

@@ -196,7 +196,11 @@ class TaskManager:
 
             normalized_status = status.strip()
             self._validate_status(normalized_status)
-            return [self._copy_task(t) for t in self.tasks.values() if t.status == normalized_status]
+            return [
+                self._copy_task(t)
+                for t in self.tasks.values()
+                if t.status == normalized_status
+            ]
 
     def get_ready_tasks(self) -> list[Task]:
         with self._lock:
@@ -205,7 +209,8 @@ class TaskManager:
                 if task.status != "pending":
                     continue
                 if all(
-                    self.tasks.get(dep_id) is not None and self.tasks[dep_id].status == "done"
+                    self.tasks.get(dep_id) is not None
+                    and self.tasks[dep_id].status == "done"
                     for dep_id in task.depends_on
                 ):
                     ready_tasks.append(self._copy_task(task))
@@ -220,10 +225,7 @@ class TaskManager:
 
     def _save(self) -> None:
         payload = {
-            "tasks": {
-                task_id: task.to_dict()
-                for task_id, task in self.tasks.items()
-            }
+            "tasks": {task_id: task.to_dict() for task_id, task in self.tasks.items()}
         }
         atomic_write_json(self.task_file, payload)
 
@@ -331,11 +333,15 @@ def make_task_handlers(task_manager: TaskManager) -> dict[str, Any]:
     ) -> dict[str, Any]:
         if status is None and title is None:
             raise ValueError("status or title is required")
-        return task_manager.update(task_id=task_id, status=status, title=title).to_dict()
+        return task_manager.update(
+            task_id=task_id, status=status, title=title
+        ).to_dict()
 
     return {
         "task_create": _task_create,
         "task_update": _task_update,
         "task_get": lambda task_id: task_manager.get(task_id).to_dict(),
-        "task_list": lambda status=None: [task.to_dict() for task in task_manager.list(status=status)],
+        "task_list": lambda status=None: [
+            task.to_dict() for task in task_manager.list(status=status)
+        ],
     }

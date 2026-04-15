@@ -42,12 +42,16 @@ def _read_text_with_common_encodings(path: Path) -> str:
 def _make_handlers(workspace: Path, provider=None):
     tools = get_tools()
     permission = PermissionGuard(PermissionMode.BYPASS)
-    return get_handlers(
-        workspace=workspace,
-        provider=provider,
-        tools=tools,
-        permission=permission,
-    ), tools, permission
+    return (
+        get_handlers(
+            workspace=workspace,
+            provider=provider,
+            tools=tools,
+            permission=permission,
+        ),
+        tools,
+        permission,
+    )
 
 
 # ── 12.1 端到端对话测试 ──────────────────────────────────────────────
@@ -116,9 +120,7 @@ def test_e2e_file_operations(tmp_path: Path):
     messages: list[dict] = [
         {
             "role": "user",
-            "content": (
-                '请创建文件 smoke_test.txt 内容为 "test ok"，然后读取它'
-            ),
+            "content": ('请创建文件 smoke_test.txt 内容为 "test ok"，然后读取它'),
         }
     ]
 

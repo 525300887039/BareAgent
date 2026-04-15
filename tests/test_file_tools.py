@@ -3,6 +3,7 @@
 适配：run_read(file_path, workspace=...), run_write(file_path, content, workspace=...),
       run_edit(file_path, old_text, new_text, workspace=...)
 """
+
 from src.core.handlers.file_read import run_read
 from src.core.handlers.file_write import run_write
 from src.core.handlers.file_edit import run_edit
@@ -28,8 +29,12 @@ def test_edit_file_not_found(tmp_path):
     p = tmp_path / "test.txt"
     p.write_text("hello")
     try:
-        run_edit(file_path="test.txt", old_text="nonexistent",
-                 new_text="replacement", workspace=tmp_path)
+        run_edit(
+            file_path="test.txt",
+            old_text="nonexistent",
+            new_text="replacement",
+            workspace=tmp_path,
+        )
         assert False, "Should have raised ValueError"
     except ValueError as e:
         assert "not found" in str(e).lower()

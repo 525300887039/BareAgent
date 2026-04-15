@@ -107,10 +107,7 @@ class TeammateManager:
 
     def _save(self) -> None:
         payload = {
-            "teammates": {
-                teammate.name: teammate.to_dict()
-                for teammate in self.list()
-            }
+            "teammates": {teammate.name: teammate.to_dict() for teammate in self.list()}
         }
         atomic_write_json(self.config_file, payload)
 

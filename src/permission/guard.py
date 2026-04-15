@@ -131,7 +131,9 @@ class PermissionGuard:
                 return True
         return False
 
-    def clone(self, *, mode: PermissionMode | None = None, fail_closed: bool | None = None) -> PermissionGuard:
+    def clone(
+        self, *, mode: PermissionMode | None = None, fail_closed: bool | None = None
+    ) -> PermissionGuard:
         """Create a copy of this guard with optional overrides."""
         child = PermissionGuard(
             mode=mode if mode is not None else self.mode,
@@ -149,10 +151,16 @@ class PermissionGuard:
         background: bool = False,
     ) -> PermissionGuard:
         """Clone the guard for child-agent execution."""
-        resolved_mode = agent_type.permission_mode if agent_type.permission_mode is not None else self.mode
+        resolved_mode = (
+            agent_type.permission_mode
+            if agent_type.permission_mode is not None
+            else self.mode
+        )
         return self.clone(
             mode=resolved_mode,
-            fail_closed=self.fail_closed or background or resolved_mode == PermissionMode.PLAN,
+            fail_closed=self.fail_closed
+            or background
+            or resolved_mode == PermissionMode.PLAN,
         )
 
 

@@ -3,6 +3,7 @@
 适配：构造函数无 allow/deny 参数，需构造后赋值 .allow_rules / .deny_rules。
 AUTO 模式下 bash 命令默认放行（除非匹配 deny 或 dangerous）。
 """
+
 from src.permission.guard import PermissionGuard, PermissionMode
 
 

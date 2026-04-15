@@ -2,6 +2,7 @@
 
 适配：get_tools() 返回 schema list，DEFERRED_TOOLS 是 set。
 """
+
 from src.core.tools import get_tools, BASE_TOOLS, DEFERRED_TOOLS
 
 
@@ -22,10 +23,17 @@ def test_base_tools_have_parameters():
 
 def test_deferred_tools_exist():
     """延迟加载工具应包含 todo/task/subagent 等"""
-    expected_names = {"todo_read", "todo_write", "task_create",
-                      "task_list", "subagent", "load_skill"}
-    assert expected_names.issubset(DEFERRED_TOOLS), \
+    expected_names = {
+        "todo_read",
+        "todo_write",
+        "task_create",
+        "task_list",
+        "subagent",
+        "load_skill",
+    }
+    assert expected_names.issubset(DEFERRED_TOOLS), (
         f"Missing deferred tools: {expected_names - DEFERRED_TOOLS}"
+    )
 
 
 def test_all_tools_in_schema():

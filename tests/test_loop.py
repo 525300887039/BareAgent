@@ -17,7 +17,9 @@ class MockProvider(BaseLLMProvider):
         responses: list[LLMResponse],
         *,
         stream_payloads: list[
-            tuple[list[StreamEvent], LLMResponse] | Exception | Generator[StreamEvent, None, Any]
+            tuple[list[StreamEvent], LLMResponse]
+            | Exception
+            | Generator[StreamEvent, None, Any]
         ]
         | None = None,
     ) -> None:
@@ -33,7 +35,9 @@ class MockProvider(BaseLLMProvider):
 
     def create_stream(self, messages, tools, **kwargs):
         _ = kwargs
-        self.stream_calls.append({"messages": deepcopy(messages), "tools": deepcopy(tools)})
+        self.stream_calls.append(
+            {"messages": deepcopy(messages), "tools": deepcopy(tools)}
+        )
         payload = self._stream_payloads.pop(0)
         if isinstance(payload, Exception):
             raise payload
@@ -78,7 +82,9 @@ class FakeConsole:
 
 class LegacyConsole:
     def __init__(self) -> None:
-        self.console = type("ConsoleProxy", (), {"print": lambda *args, **kwargs: None})()
+        self.console = type(
+            "ConsoleProxy", (), {"print": lambda *args, **kwargs: None}
+        )()
         self.assistant: list[str] = []
         self.tool_calls: list[tuple[str, dict]] = []
         self.tool_results: list[tuple[str, str]] = []
@@ -260,7 +266,9 @@ def test_agent_loop_streams_and_formats_tool_activity(monkeypatch) -> None:
                 ],
                 LLMResponse(
                     text="Checking file.",
-                    tool_calls=[ToolCall(id="toolu_1", name="echo", input={"value": "hello"})],
+                    tool_calls=[
+                        ToolCall(id="toolu_1", name="echo", input={"value": "hello"})
+                    ],
                     stop_reason="tool_use",
                     input_tokens=10,
                     output_tokens=5,
@@ -321,7 +329,9 @@ def test_agent_loop_treats_pre_tool_stream_text_as_streamed_output() -> None:
                 ],
                 LLMResponse(
                     text="Checking file.",
-                    tool_calls=[ToolCall(id="toolu_1", name="echo", input={"value": "hello"})],
+                    tool_calls=[
+                        ToolCall(id="toolu_1", name="echo", input={"value": "hello"})
+                    ],
                     stop_reason="tool_use",
                     input_tokens=10,
                     output_tokens=5,
@@ -393,7 +403,9 @@ def test_agent_loop_falls_back_to_non_stream_mode(monkeypatch) -> None:
     assert len(provider.stream_calls) == 1
     assert len(provider.calls) == 1
     assert console.assistant == ["Done."]
-    assert any("falling back to non-stream mode" in status for status in console.statuses)
+    assert any(
+        "falling back to non-stream mode" in status for status in console.statuses
+    )
 
 
 def test_agent_loop_streams_with_legacy_console_shape(monkeypatch) -> None:
@@ -432,7 +444,9 @@ def test_agent_loop_streams_with_legacy_console_shape(monkeypatch) -> None:
     assert result == "Legacy stream."
     assert len(provider.stream_calls) == 1
     assert console.assistant == []
-    assert [instance.chunks for instance in FakeStreamPrinter.instances] == [["Legacy stream."]]
+    assert [instance.chunks for instance in FakeStreamPrinter.instances] == [
+        ["Legacy stream."]
+    ]
     assert FakeStreamPrinter.instances[0].args == (console.console,)
 
 
@@ -502,7 +516,9 @@ def test_agent_loop_does_not_retry_after_partial_stream_failure(monkeypatch) -> 
     assert len(provider.stream_calls) == 1
     assert len(provider.calls) == 0
     assert console.errors == ["LLM call failed: RuntimeError: stream reset"]
-    assert [instance.chunks for instance in FakeStreamPrinter.instances] == [["Partial reply"]]
+    assert [instance.chunks for instance in FakeStreamPrinter.instances] == [
+        ["Partial reply"]
+    ]
 
 
 def test_agent_loop_terminates_after_max_iterations() -> None:
@@ -514,7 +530,9 @@ def test_agent_loop_terminates_after_max_iterations() -> None:
         input_tokens=10,
         output_tokens=5,
     )
-    provider = MockProvider([tool_response, tool_response, tool_response, tool_response])
+    provider = MockProvider(
+        [tool_response, tool_response, tool_response, tool_response]
+    )
     console = FakeConsole()
 
     with pytest.raises(LLMCallError, match="exceeded 3 iterations"):

@@ -8,15 +8,15 @@ from src.core.fileutil import stringify
 
 _CJK_PATTERN = re.compile(
     "["
-    "\u3000-\u303F"
-    "\u3040-\u309F"
-    "\u30A0-\u30FF"
-    "\u3400-\u4DBF"
-    "\u4E00-\u9FFF"
-    "\uAC00-\uD7AF"
-    "\uF900-\uFAFF"
-    "\U00020000-\U0002A6DF"
-    "\U0002F800-\U0002FA1F"
+    "\u3000-\u303f"
+    "\u3040-\u309f"
+    "\u30a0-\u30ff"
+    "\u3400-\u4dbf"
+    "\u4e00-\u9fff"
+    "\uac00-\ud7af"
+    "\uf900-\ufaff"
+    "\U00020000-\U0002a6df"
+    "\U0002f800-\U0002fa1f"
     "]"
 )
 _ASCII_ALNUM_PATTERN = re.compile(r"[A-Za-z0-9]")
