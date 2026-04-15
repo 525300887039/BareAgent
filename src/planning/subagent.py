@@ -17,12 +17,16 @@ from src.planning.agent_types import (
     resolve_agent_type,
 )
 from src.provider.base import BaseLLMProvider
+from src.tracing import tracer as global_tracer
 
 _SUBAGENT_COMPACT_THRESHOLD = 50_000
 
 
 def _build_subagent_description() -> str:
-    lines = ["Delegate a self-contained task to a child agent with isolated messages.", "Available agent types:"]
+    lines = [
+        "Delegate a self-contained task to a child agent with isolated messages.",
+        "Available agent types:",
+    ]
     for name, at in BUILTIN_AGENT_TYPES.items():
         lines.append(f"- {name}: {at.description}")
     return "\n".join(lines)
@@ -165,16 +169,23 @@ def _run_subagent_sync(
     if resolved_system_prompt.strip():
         messages.append({"role": "system", "content": resolved_system_prompt})
     messages.append({"role": "user", "content": task})
-    return agent_loop(
-        provider=provider,
-        messages=messages,
-        tools=filtered_tools,
-        handlers=child_handlers,
-        permission=permission,
-        compact_fn=compact_fn,
-        bg_manager=None,
-        max_iterations=resolved_type.max_turns,
-    )
+    with global_tracer.trace(
+        "subagent",
+        tags={"agent_type": resolved_type.name, "depth": current_depth},
+    ) as span:
+        span.set_content_tag("task", task)
+        result = agent_loop(
+            provider=provider,
+            messages=messages,
+            tools=filtered_tools,
+            handlers=child_handlers,
+            permission=permission,
+            compact_fn=compact_fn,
+            bg_manager=None,
+            max_iterations=resolved_type.max_turns,
+        )
+        span.set_content_tag("result", result[:500])
+    return result
 
 
 def _compose_system_prompt(*, parent_prompt: str, agent_prompt: str) -> str:

@@ -8,6 +8,7 @@ from src.core.loop import agent_loop
 from src.planning.tasks import Task, TaskManager
 from src.team.mailbox import Message, MessageBus
 from src.team.protocols import Protocol, ProtocolFSM, decode_protocol_content
+from src.tracing import tracer as global_tracer
 
 
 class AutonomousAgent:
@@ -110,14 +111,15 @@ class AutonomousAgent:
         if self.system_prompt:
             messages.append({"role": "system", "content": self.system_prompt})
         messages.append({"role": "user", "content": prompt})
-        return agent_loop(
-            provider=self.provider,
-            messages=messages,
-            tools=self.tools,
-            handlers=self.handlers,
-            permission=self.permission,
-            compact_fn=lambda _messages: None,
-        )
+        with global_tracer.trace("teammate_run", tags={"agent": self.name}):
+            return agent_loop(
+                provider=self.provider,
+                messages=messages,
+                tools=self.tools,
+                handlers=self.handlers,
+                permission=self.permission,
+                compact_fn=lambda _messages: None,
+            )
 
     def _build_incoming_prompt(
         self,
@@ -126,10 +128,7 @@ class AutonomousAgent:
         protocol: Protocol | None,
     ) -> str:
         if protocol == Protocol.PLAN_APPROVAL:
-            return (
-                "请审阅下面的计划，判断是否应批准，并给出简洁理由。\n\n"
-                + content
-            )
+            return "请审阅下面的计划，判断是否应批准，并给出简洁理由。\n\n" + content
         return content
 
     def _build_task_prompt(self, task: Task) -> str:

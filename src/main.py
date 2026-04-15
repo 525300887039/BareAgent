@@ -11,7 +11,11 @@ from types import SimpleNamespace
 from typing import Callable
 
 from src.concurrency.background import BackgroundManager
-from src.core.fileutil import generate_random_id, is_tool_result_message, optional_string as _coerce_optional_string
+from src.core.fileutil import (
+    generate_random_id,
+    is_tool_result_message,
+    optional_string as _coerce_optional_string,
+)
 from src.core.context import assemble_system_prompt
 from src.core.loop import LLMCallError, agent_loop
 from src.core.tools import get_handlers, get_tools
@@ -82,6 +86,13 @@ class DebugConfig:
 
 
 @dataclass(slots=True)
+class TracingConfig:
+    langfuse: bool = False
+    opentelemetry: bool = False
+    content_enabled: bool = True
+
+
+@dataclass(slots=True)
 class Config:
     provider: ProviderConfig
     permission: PermissionConfig
@@ -89,6 +100,7 @@ class Config:
     subagent: SubagentConfig
     thinking: ThinkingConfig
     debug: DebugConfig
+    tracing: TracingConfig
     path: Path
 
 
@@ -177,7 +189,9 @@ def _validate_mode(name: str, value: str, allowed: set[str]) -> str:
 
 
 def _default_api_key_env(provider_name: str) -> str:
-    return DEFAULT_API_KEY_ENV_BY_PROVIDER.get(provider_name.lower(), "ANTHROPIC_API_KEY")
+    return DEFAULT_API_KEY_ENV_BY_PROVIDER.get(
+        provider_name.lower(), "ANTHROPIC_API_KEY"
+    )
 
 
 def resolve_config_path(config_path: Path | None) -> Path:
@@ -204,6 +218,7 @@ def load_config(
     subagent_raw = raw_config.get("subagent", {})
     thinking_raw = raw_config.get("thinking", {})
     debug_raw = raw_config.get("debug", {})
+    tracing_raw = raw_config.get("tracing", {})
     allow_rules, deny_rules = parse_permission_rules(raw_config)
     configured_provider_name = str(provider_raw.get("name", "anthropic"))
     provider_name = _resolve_string(
@@ -301,6 +316,20 @@ def load_config(
             "BAREAGENT_DEBUG_PRETTY",
         ),
     )
+    tracing = TracingConfig(
+        langfuse=_resolve_bool(
+            bool(tracing_raw.get("langfuse", False)),
+            "BAREAGENT_TRACING_LANGFUSE",
+        ),
+        opentelemetry=_resolve_bool(
+            bool(tracing_raw.get("opentelemetry", False)),
+            "BAREAGENT_TRACING_OPENTELEMETRY",
+        ),
+        content_enabled=_resolve_bool(
+            bool(tracing_raw.get("content_enabled", True)),
+            "BAREAGENT_CONTENT_TRACING_ENABLED",
+        ),
+    )
 
     return Config(
         provider=provider,
@@ -309,6 +338,7 @@ def load_config(
         subagent=subagent,
         thinking=thinking,
         debug=debug,
+        tracing=tracing,
         path=config_path.resolve(),
     )
 
@@ -392,9 +422,18 @@ _MODE_DESCRIPTIONS = {
     PermissionMode.BYPASS: "No confirmation required",
 }
 _SLASH_COMMANDS = [
-    "/help", "/exit", "/clear", "/new", "/compact",
-    *_PERMISSION_SLASH, "/mode", "/theme",
-    "/sessions", "/resume", "/log", "/team",
+    "/help",
+    "/exit",
+    "/clear",
+    "/new",
+    "/compact",
+    *_PERMISSION_SLASH,
+    "/mode",
+    "/theme",
+    "/sessions",
+    "/resume",
+    "/log",
+    "/team",
 ]
 _HELP_TEXT = (
     "Available commands:\n"
@@ -431,9 +470,7 @@ def _generate_session_id(
     known_session_ids = set(transcript_mgr.list_sessions())
     if reserved_ids:
         known_session_ids.update(
-            session_id
-            for session_id in reserved_ids
-            if session_id
+            session_id for session_id in reserved_ids if session_id
         )
 
     while True:
@@ -509,6 +546,21 @@ def _set_interaction_logger_session(
     if interaction_logger is None:
         return
     interaction_logger.session_id = session_id
+
+
+def _configure_tracing(
+    config: Config,
+    *,
+    session_id: str = "default",
+    interaction_logger: InteractionLogger | None = None,
+) -> None:
+    from src.tracing.setup import configure_tracing
+
+    configure_tracing(
+        config.tracing,
+        session_id=session_id,
+        interaction_logger=interaction_logger,
+    )
 
 
 def _debug_viewer_url(config: Config) -> str:
@@ -802,7 +854,9 @@ def _make_team_handlers(
             poll_interval=1.0,
         )
         try:
-            bg_manager.submit(f"team:{runtime_id}:{teammate_name}", autonomous_agent.run)
+            bg_manager.submit(
+                f"team:{runtime_id}:{teammate_name}", autonomous_agent.run
+            )
         except ValueError:
             return f"Teammate {teammate_name} is already running."
         spawned_agents[teammate_name] = autonomous_agent
@@ -817,19 +871,24 @@ def _make_team_handlers(
 
 def _make_teammate_provider_factory(config: Config):
     def _factory(provider_overrides: dict[str, object]) -> BaseLLMProvider:
-        provider_name = str(provider_overrides.get("name", config.provider.name)).strip()
+        provider_name = str(
+            provider_overrides.get("name", config.provider.name)
+        ).strip()
         resolved_provider_name = provider_name or config.provider.name
         inherited_api_key_env = (
             config.provider.api_key_env
             if resolved_provider_name == config.provider.name
             else _default_api_key_env(resolved_provider_name)
         )
-        api_key_env = str(
-            provider_overrides.get(
-                "api_key_env",
-                inherited_api_key_env,
-            )
-        ).strip() or inherited_api_key_env
+        api_key_env = (
+            str(
+                provider_overrides.get(
+                    "api_key_env",
+                    inherited_api_key_env,
+                )
+            ).strip()
+            or inherited_api_key_env
+        )
         provider_config = ProviderConfig(
             name=resolved_provider_name,
             model=str(provider_overrides.get("model", config.provider.model)).strip()
@@ -896,7 +955,9 @@ def _handle_team_command(
         ui_console.print_error(str(exc))
         return
 
-    ui_console.print_status("Usage: /team list | /team spawn <name> | /team send <name> <message>")
+    ui_console.print_status(
+        "Usage: /team list | /team spawn <name> | /team send <name> <message>"
+    )
 
 
 def _drain_team_mailbox(
@@ -955,7 +1016,9 @@ def _handle_mode_selection_stdio(
     if choice in valid_choices:
         old = permission.mode
         permission.mode = _MODE_CYCLE[int(choice) - 1]
-        ui_console.print_status(f"Permission mode: {old.value} → {permission.mode.value}")
+        ui_console.print_status(
+            f"Permission mode: {old.value} → {permission.mode.value}"
+        )
         return
 
     ui_console.print_status("Invalid choice, mode unchanged.")
@@ -980,6 +1043,11 @@ def _run_stdio_session(
         config,
         workspace_path,
         session_id,
+    )
+    _configure_tracing(
+        config,
+        session_id=session_id,
+        interaction_logger=interaction_logger,
     )
     viewer_server = None
     todo_manager = TodoManager()
@@ -1173,7 +1241,9 @@ def _run_stdio_session(
         if text in _PERMISSION_SLASH:
             old = permission.mode
             permission.mode = _PERMISSION_SLASH[text]
-            ui_console.print_status(f"Permission mode: {old.value} → {permission.mode.value}")
+            ui_console.print_status(
+                f"Permission mode: {old.value} → {permission.mode.value}"
+            )
             continue
         if text == "/mode":
             _handle_mode_selection_stdio(permission, ui_console)

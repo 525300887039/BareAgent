@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.main import Config, DebugConfig, PermissionConfig, ProviderConfig, SubagentConfig, UIConfig
+from src.main import (
+    Config,
+    DebugConfig,
+    PermissionConfig,
+    ProviderConfig,
+    SubagentConfig,
+    TracingConfig,
+    UIConfig,
+)
 from src.provider.base import ThinkingConfig
 
 
@@ -22,4 +30,5 @@ def make_test_config(tmp_path: Path) -> Config:
         thinking=ThinkingConfig(),
         path=tmp_path / "config.toml",
         debug=DebugConfig(),
+        tracing=TracingConfig(),
     )
