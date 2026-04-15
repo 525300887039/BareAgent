@@ -74,11 +74,15 @@ def resolve_agent_type(
 ) -> AgentType:
     """Resolve a child-agent type, falling back to the configured default."""
 
-    resolved_default = BUILTIN_AGENT_TYPES.get(default_name, BUILTIN_AGENT_TYPES[DEFAULT_AGENT_TYPE])
+    resolved_default = BUILTIN_AGENT_TYPES.get(
+        default_name, BUILTIN_AGENT_TYPES[DEFAULT_AGENT_TYPE]
+    )
     if name is None:
         return resolved_default
     if name not in BUILTIN_AGENT_TYPES:
-        _log.warning("Unknown agent type %r, falling back to %r", name, resolved_default.name)
+        _log.warning(
+            "Unknown agent type %r, falling back to %r", name, resolved_default.name
+        )
         return resolved_default
     return BUILTIN_AGENT_TYPES[name]
 
@@ -90,7 +94,11 @@ def filter_tools(
     """Apply whitelist, blacklist, and nesting controls to a tool schema list."""
 
     allowed = set(agent_type.tools) if agent_type.tools is not None else None
-    denied = set(agent_type.disallowed_tools) if agent_type.disallowed_tools is not None else None
+    denied = (
+        set(agent_type.disallowed_tools)
+        if agent_type.disallowed_tools is not None
+        else None
+    )
     strip_nesting = not agent_type.allow_nesting
 
     def _keep(tool: dict[str, Any]) -> bool:
@@ -114,7 +122,5 @@ def filter_handlers(
 
     allowed_names = {str(tool.get("name")) for tool in filtered_tools}
     return {
-        name: handler
-        for name, handler in all_handlers.items()
-        if name in allowed_names
+        name: handler for name, handler in all_handlers.items() if name in allowed_names
     }

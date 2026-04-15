@@ -41,7 +41,9 @@ def iter_search_files(search_root: Path) -> Iterator[Path]:
 
 def matches_glob_pattern(candidate: Path, search_root: Path, pattern: str) -> bool:
     pattern_norm = pattern.replace("\\", "/")
-    relative = candidate.resolve(strict=False).relative_to(search_root.resolve(strict=False))
+    relative = candidate.resolve(strict=False).relative_to(
+        search_root.resolve(strict=False)
+    )
     relative_posix = relative.as_posix()
 
     if "/" in pattern_norm or "**" in pattern_norm:

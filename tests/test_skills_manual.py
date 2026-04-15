@@ -2,6 +2,7 @@
 
 适配：scan() 返回 list[SkillMeta]，load() 返回字符串，不存在的技能抛 ValueError。
 """
+
 from pathlib import Path
 
 from src.planning.skills import SkillLoader

@@ -4,7 +4,9 @@ import subprocess
 from src.core import context
 
 
-def test_get_system_context_uses_requested_workspace(monkeypatch, tmp_path: Path) -> None:
+def test_get_system_context_uses_requested_workspace(
+    monkeypatch, tmp_path: Path
+) -> None:
     calls: list[tuple[Path, tuple[str, ...]]] = []
 
     def fake_run_git_command(workspace: Path, *args: str) -> str:

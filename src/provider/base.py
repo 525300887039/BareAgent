@@ -103,6 +103,8 @@ class BaseLLMProvider(ABC):
                 if isinstance(block, dict) and block.get("type") == "text":
                     text_parts.append(str(block.get("text", "")))
                 else:
-                    text_parts.append(json.dumps(block, ensure_ascii=False, default=str))
+                    text_parts.append(
+                        json.dumps(block, ensure_ascii=False, default=str)
+                    )
             return "\n".join(part for part in text_parts if part)
         return stringify(content)

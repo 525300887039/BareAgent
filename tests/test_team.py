@@ -141,14 +141,19 @@ def test_protocol_fsm_waits_for_response_and_broadcasts(tmp_path: Path) -> None:
     tester_messages = bus.receive("tester")
 
     assert len(message_ids) == 2
-    assert decode_protocol_content(tester_messages[0].content) == (Protocol.SHUTDOWN, "停止")
+    assert decode_protocol_content(tester_messages[0].content) == (
+        Protocol.SHUTDOWN,
+        "停止",
+    )
 
 
 def test_autonomous_agent_replies_and_claims_ready_tasks(tmp_path: Path) -> None:
     bus = MessageBus(tmp_path / ".mailbox")
     bus.ensure_mailbox("main")
     task_manager = TaskManager(tmp_path / ".tasks.json")
-    task = task_manager.create("Review module", description="Inspect the new manager module")
+    task = task_manager.create(
+        "Review module", description="Inspect the new manager module"
+    )
     provider = ReplayProvider(["Message handled.", "Task completed."])
     agent = AutonomousAgent(
         name="code-reviewer",
@@ -194,7 +199,9 @@ def test_autonomous_agent_replies_and_claims_ready_tasks(tmp_path: Path) -> None
 def test_autonomous_agent_ignores_stale_shutdown_messages(tmp_path: Path) -> None:
     bus = MessageBus(tmp_path / ".mailbox")
     task_manager = TaskManager(tmp_path / ".tasks.json")
-    task = task_manager.create("Review module", description="Inspect the new manager module")
+    task = task_manager.create(
+        "Review module", description="Inspect the new manager module"
+    )
     bus.send(
         Message(
             id="",
@@ -230,7 +237,9 @@ def test_autonomous_agent_ignores_stale_shutdown_messages(tmp_path: Path) -> Non
     assert len(provider.calls) == 1
 
 
-def test_autonomous_agent_respects_permission_guard_for_received_work(tmp_path: Path) -> None:
+def test_autonomous_agent_respects_permission_guard_for_received_work(
+    tmp_path: Path,
+) -> None:
     bus = MessageBus(tmp_path / ".mailbox")
     bus.ensure_mailbox("main")
     provider = SequenceProvider(
@@ -263,7 +272,9 @@ def test_autonomous_agent_respects_permission_guard_for_received_work(tmp_path: 
         provider=provider,
         tools=[],
         handlers={
-            "write_file": lambda file_path, content: handler_calls.append((file_path, content))
+            "write_file": lambda file_path, content: handler_calls.append(
+                (file_path, content)
+            )
         },
         bus=bus,
         task_manager=None,
@@ -339,20 +350,34 @@ def _wait_for(predicate, timeout: float = 2) -> None:
     raise AssertionError("Timed out waiting for condition")
 
 
-def test_message_bus_receive_does_not_lose_same_timestamp_messages(tmp_path: Path) -> None:
+def test_message_bus_receive_does_not_lose_same_timestamp_messages(
+    tmp_path: Path,
+) -> None:
     """Bug #15: messages with identical timestamps should not be skipped."""
     bus = MessageBus(tmp_path / ".mailbox")
     bus.ensure_mailbox("agent")
 
     fixed_ts = "2025-01-01T00:00:00+00:00"
-    msg1_id = bus.send(Message(
-        id="", from_agent="a", to_agent="agent",
-        content="first", msg_type="request", timestamp=fixed_ts,
-    ))
-    msg2_id = bus.send(Message(
-        id="", from_agent="b", to_agent="agent",
-        content="second", msg_type="request", timestamp=fixed_ts,
-    ))
+    msg1_id = bus.send(
+        Message(
+            id="",
+            from_agent="a",
+            to_agent="agent",
+            content="first",
+            msg_type="request",
+            timestamp=fixed_ts,
+        )
+    )
+    msg2_id = bus.send(
+        Message(
+            id="",
+            from_agent="b",
+            to_agent="agent",
+            content="second",
+            msg_type="request",
+            timestamp=fixed_ts,
+        )
+    )
 
     # Read using msg1 as cursor — should still get msg2
     messages = bus.receive("agent", since_id=msg1_id)

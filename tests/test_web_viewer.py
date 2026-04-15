@@ -112,7 +112,9 @@ def test_get_sessions_returns_json_list(viewer_server: SimpleNamespace) -> None:
     assert payload == viewer_server.logger.list_sessions()
 
 
-def test_get_session_interactions_returns_summary(viewer_server: SimpleNamespace) -> None:
+def test_get_session_interactions_returns_summary(
+    viewer_server: SimpleNamespace,
+) -> None:
     payload = _read_json(f"{viewer_server.base_url}/api/sessions/alpha")
 
     assert payload == viewer_server.logger.list_interactions("alpha")

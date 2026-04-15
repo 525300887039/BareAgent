@@ -14,7 +14,9 @@ from src.planning.agent_types import (
 def test_resolve_agent_type_uses_configured_default_and_fallback() -> None:
     assert resolve_agent_type(None, default_name="plan").name == "plan"
     assert resolve_agent_type("missing", default_name="plan").name == "plan"
-    assert resolve_agent_type("missing", default_name="unknown").name == DEFAULT_AGENT_TYPE
+    assert (
+        resolve_agent_type("missing", default_name="unknown").name == DEFAULT_AGENT_TYPE
+    )
 
 
 def test_filter_tools_applies_blacklist_and_nesting_rules() -> None:
@@ -41,7 +43,12 @@ def test_filter_tools_applies_whitelist_before_blacklist() -> None:
     )
 
     filtered = filter_tools(
-        [{"name": "read_file"}, {"name": "bash"}, {"name": "subagent"}, {"name": "write_file"}],
+        [
+            {"name": "read_file"},
+            {"name": "bash"},
+            {"name": "subagent"},
+            {"name": "write_file"},
+        ],
         custom,
     )
 

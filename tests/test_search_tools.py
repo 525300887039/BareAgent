@@ -3,6 +3,7 @@
 适配：run_glob(pattern, workspace=...) 返回 list[str]，
       run_grep(pattern, path=..., workspace=...) 返回 list[str]
 """
+
 from pathlib import Path
 
 from src.core.handlers.glob_search import run_glob
@@ -33,6 +34,7 @@ def test_grep_find_function():
 
 def test_grep_no_match():
     """grep 无匹配应返回空列表"""
-    result = run_grep("THIS_STRING_DOES_NOT_EXIST_ANYWHERE_XYZ",
-                      path="src/", workspace=WORKSPACE)
+    result = run_grep(
+        "THIS_STRING_DOES_NOT_EXIST_ANYWHERE_XYZ", path="src/", workspace=WORKSPACE
+    )
     assert result == []

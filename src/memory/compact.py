@@ -27,7 +27,9 @@ def _micro_compact(
     if tool_name_by_id is None:
         tool_name_by_id = collect_tool_names(messages)
     tool_result_indices = [
-        index for index, message in enumerate(messages) if is_tool_result_message(message)
+        index
+        for index, message in enumerate(messages)
+        if is_tool_result_message(message)
     ]
     if keep_recent > 0:
         compact_indices = set(tool_result_indices[:-keep_recent])
@@ -126,14 +128,19 @@ class Compactor:
             return
 
         system_messages = [
-            _clone_message(message) for message in messages if message.get("role") == "system"
+            _clone_message(message)
+            for message in messages
+            if message.get("role") == "system"
         ]
         messages.clear()
         messages.extend(system_messages)
         messages.extend(
             [
                 {"role": "user", "content": f"[Context Compressed]\n{summary.text}"},
-                {"role": "assistant", "content": "收到，我已理解之前的上下文，继续工作。"},
+                {
+                    "role": "assistant",
+                    "content": "收到，我已理解之前的上下文，继续工作。",
+                },
             ]
         )
         if pending_user_message is not None:

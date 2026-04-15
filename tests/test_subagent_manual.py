@@ -97,7 +97,9 @@ def test_run_subagent_applies_agent_type_filters_and_max_turns(monkeypatch) -> N
     assert "Parent instructions" in str(captured["messages"])
 
 
-def test_run_subagent_unknown_type_falls_back_to_configured_default(monkeypatch) -> None:
+def test_run_subagent_unknown_type_falls_back_to_configured_default(
+    monkeypatch,
+) -> None:
     captured: dict[str, object] = {}
 
     def _fake_agent_loop(*, tools, max_iterations, **kwargs) -> str:
@@ -163,7 +165,9 @@ def test_run_subagent_background_submission() -> None:
     ]
 
 
-def test_run_subagent_background_worker_does_not_drain_shared_notifications(monkeypatch) -> None:
+def test_run_subagent_background_worker_does_not_drain_shared_notifications(
+    monkeypatch,
+) -> None:
     captured: dict[str, object] = {}
 
     def _fake_agent_loop(

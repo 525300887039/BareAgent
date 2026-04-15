@@ -116,7 +116,9 @@ def test_inject_notifications_appends_user_message() -> None:
 def test_background_run_marks_failed_shell_commands_as_failed(tmp_path: Path) -> None:
     manager = BackgroundManager()
     handlers = get_handlers(tmp_path, bg_manager=manager)
-    command = 'Write-Error "boom"; exit 1' if os.name == "nt" else 'echo boom >&2; exit 1'
+    command = (
+        'Write-Error "boom"; exit 1' if os.name == "nt" else "echo boom >&2; exit 1"
+    )
 
     submission = handlers["background_run"](command=command, task_id="job-fail")
     notifications = _wait_for_notifications(manager)

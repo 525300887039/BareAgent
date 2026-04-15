@@ -213,12 +213,16 @@ def _make_lazy_task_handlers(task_file: Path) -> dict[str, Callable[..., Any]]:
         return handlers
 
     return {
-        "task_create": lambda title, description="", depends_on=None: _get_handlers()["task_create"](
+        "task_create": lambda title, description="", depends_on=None: _get_handlers()[
+            "task_create"
+        ](
             title=title,
             description=description,
             depends_on=depends_on,
         ),
-        "task_update": lambda task_id, status=None, title=None: _get_handlers()["task_update"](
+        "task_update": lambda task_id, status=None, title=None: _get_handlers()[
+            "task_update"
+        ](
             task_id=task_id,
             status=status,
             title=title,
@@ -250,16 +254,21 @@ def _get_default_skill_loader() -> SkillLoader:
                 _DEFAULT_SKILL_LOADER = SkillLoader(resolve_skills_dir())
     return _DEFAULT_SKILL_LOADER
 
+
 def _unbound_stub(tool_name: str) -> Callable[..., Any]:
     """Raise when a file/bash handler is called without workspace binding."""
+
     def _stub(**_: Any) -> str:
         raise RuntimeError(f"{tool_name}: use get_handlers() with a workspace binding")
+
     return _stub
 
 
 _TEAM_FALLBACK_HANDLERS: dict[str, Callable[..., Any]] = {
     "team_spawn": lambda name: f"Team spawning unavailable for {name}.",
-    "team_send": lambda to_agent, content: f"Team messaging unavailable for {to_agent}.",
+    "team_send": lambda to_agent, content: (
+        f"Team messaging unavailable for {to_agent}."
+    ),
     "team_list": lambda: [],
 }
 
@@ -272,7 +281,9 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     "glob": _unbound_stub("glob"),
     "grep": _unbound_stub("grep"),
     "todo_read": lambda: _get_default_todo_manager().list(),
-    "todo_write": lambda **kw: make_todo_handlers(_get_default_todo_manager())["todo_write"](**kw),
+    "todo_write": lambda **kw: make_todo_handlers(_get_default_todo_manager())[
+        "todo_write"
+    ](**kw),
     **_make_lazy_task_handlers(Path(".tasks.json")),
     "load_skill": lambda skill_name: _get_default_skill_loader().load(skill_name),
     "background_run": lambda **_: "Background manager unavailable.",
@@ -331,25 +342,25 @@ def get_handlers(
 
     available_tools = tools or get_tools()
     if provider is None:
-        handlers["subagent"] = (
-            lambda task, agent_type=None, run_in_background=False: (
-                "Subagent unavailable: provider is not configured."
-            )
+        handlers["subagent"] = lambda task, agent_type=None, run_in_background=False: (
+            "Subagent unavailable: provider is not configured."
         )
     else:
-        handlers["subagent"] = lambda task, agent_type=None, run_in_background=False: run_subagent(
-            provider=provider,
-            task=task,
-            tools=available_tools,
-            handlers=handlers,
-            permission=permission,
-            system_prompt=subagent_system_prompt,
-            max_depth=subagent_max_depth,
-            current_depth=subagent_depth + 1,
-            agent_type=agent_type,
-            bg_manager=bg_manager,
-            run_in_background=run_in_background,
-            default_agent_type=subagent_default_type,
+        handlers["subagent"] = lambda task, agent_type=None, run_in_background=False: (
+            run_subagent(
+                provider=provider,
+                task=task,
+                tools=available_tools,
+                handlers=handlers,
+                permission=permission,
+                system_prompt=subagent_system_prompt,
+                max_depth=subagent_max_depth,
+                current_depth=subagent_depth + 1,
+                agent_type=agent_type,
+                bg_manager=bg_manager,
+                run_in_background=run_in_background,
+                default_agent_type=subagent_default_type,
+            )
         )
 
     return handlers

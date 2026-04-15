@@ -398,7 +398,9 @@ async def test_slash_theme_rejects_unknown_theme(make_app) -> None:
 
 
 @pytest.mark.anyio
-async def test_shift_tab_cycles_permission_mode_without_touching_input(make_app) -> None:
+async def test_shift_tab_cycles_permission_mode_without_touching_input(
+    make_app,
+) -> None:
     app = make_app()
 
     async with app.run_test() as pilot:

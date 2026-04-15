@@ -9,7 +9,7 @@ import pytest
 from src.core.loop import LLMCallError, agent_loop
 from src.debug.interaction_log import InteractionLogger
 from src.permission.guard import PermissionGuard, PermissionMode
-from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
+from src.provider.base import BaseLLMProvider, LLMResponse, ToolCall
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -117,12 +117,12 @@ def test_response_write_failure_still_advances_sequence(
     next_seq = logger.log_request([{"role": "user", "content": "second"}], [])
 
     assert next_seq == 1
-    assert _load_json(tmp_path / ".logs" / "sess-1" / "000_request.json")["messages"] == [
-        {"role": "user", "content": "first"}
-    ]
-    assert _load_json(tmp_path / ".logs" / "sess-1" / "001_request.json")["messages"] == [
-        {"role": "user", "content": "second"}
-    ]
+    assert _load_json(tmp_path / ".logs" / "sess-1" / "000_request.json")[
+        "messages"
+    ] == [{"role": "user", "content": "first"}]
+    assert _load_json(tmp_path / ".logs" / "sess-1" / "001_request.json")[
+        "messages"
+    ] == [{"role": "user", "content": "second"}]
 
 
 def test_list_sessions_returns_sorted_session_directories(
@@ -415,7 +415,9 @@ class _BrokenRequestLogger:
 
     def log_response(self, seq, **kwargs) -> None:
         _ = seq, kwargs
-        raise AssertionError("log_response should not be called after request logging fails")
+        raise AssertionError(
+            "log_response should not be called after request logging fails"
+        )
 
 
 class _BrokenResponseLogger:
@@ -452,8 +454,12 @@ def test_agent_loop_logs_request_and_response(
 
     assert result == "Done."
     request_payload = _load_json(tmp_path / ".logs" / "loop" / "000_request.json")
-    first_response_payload = _load_json(tmp_path / ".logs" / "loop" / "000_response.json")
-    second_response_payload = _load_json(tmp_path / ".logs" / "loop" / "001_response.json")
+    first_response_payload = _load_json(
+        tmp_path / ".logs" / "loop" / "000_response.json"
+    )
+    second_response_payload = _load_json(
+        tmp_path / ".logs" / "loop" / "001_response.json"
+    )
     assert request_payload["provider"] == {
         "provider_type": "_SuccessfulProvider",
         "model": "test-model",

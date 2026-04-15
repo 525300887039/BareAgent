@@ -12,7 +12,9 @@ from src.provider.base import (
     ToolCall,
 )
 
-_PROTECTED_KEYS = frozenset({"model", "messages", "tools", "system", "thinking", "max_tokens"})
+_PROTECTED_KEYS = frozenset(
+    {"model", "messages", "tools", "system", "thinking", "max_tokens"}
+)
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -45,7 +47,10 @@ class AnthropicProvider(BaseLLMProvider):
         params = self._build_request_params(messages, tools, **kwargs)
         with self.client.messages.stream(**params) as stream:
             for event in stream:
-                if event.type == "content_block_delta" and event.delta.type == "text_delta":
+                if (
+                    event.type == "content_block_delta"
+                    and event.delta.type == "text_delta"
+                ):
                     yield StreamEvent(type="text", text=event.delta.text)
                     continue
 
@@ -146,7 +151,9 @@ class AnthropicProvider(BaseLLMProvider):
                 result_block: dict[str, Any] = {
                     "type": "tool_result",
                     "tool_use_id": block.get("tool_use_id", ""),
-                    "content": self._convert_tool_result_content(block.get("content", "")),
+                    "content": self._convert_tool_result_content(
+                        block.get("content", "")
+                    ),
                 }
                 if block.get("is_error"):
                     result_block["is_error"] = True
@@ -181,7 +188,9 @@ class AnthropicProvider(BaseLLMProvider):
                 if isinstance(item, dict) and item.get("type") == "text":
                     blocks.append({"type": "text", "text": item.get("text", "")})
                 else:
-                    blocks.append({"type": "text", "text": self._stringify_content(item)})
+                    blocks.append(
+                        {"type": "text", "text": self._stringify_content(item)}
+                    )
             return blocks
         return self._stringify_content(content)
 
@@ -190,7 +199,9 @@ class AnthropicProvider(BaseLLMProvider):
             {
                 "name": tool["name"],
                 "description": tool.get("description", ""),
-                "input_schema": tool.get("parameters", {"type": "object", "properties": {}}),
+                "input_schema": tool.get(
+                    "parameters", {"type": "object", "properties": {}}
+                ),
             }
             for tool in tools
         ]

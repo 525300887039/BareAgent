@@ -1,4 +1,5 @@
 """二、配置系统验证 — 2.1 config.toml 解析"""
+
 import tomllib
 from pathlib import Path
 
