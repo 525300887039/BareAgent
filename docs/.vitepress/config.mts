@@ -49,7 +49,8 @@ export default defineConfig({
           { text: '任务与 TODO', link: '/guide/ch12-tasks-todo' },
           { text: '技能系统', link: '/guide/ch13-skills' },
           { text: '后台执行', link: '/guide/ch14-background' },
-          { text: '调试与日志', link: '/guide/ch16-debug' }
+          { text: '调试与日志', link: '/guide/ch16-debug' },
+          { text: 'Tracing 可观测性', link: '/guide/ch17-tracing' }
         ]
       },
       {

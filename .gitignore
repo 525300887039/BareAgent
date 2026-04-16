@@ -22,6 +22,9 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+tmp-dist/
+tmp-review/
+tmp_review_build_uv/
 config.local.toml
 docs/subagent-refactor-plan.md
 docs/outline.md
