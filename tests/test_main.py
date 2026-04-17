@@ -1,8 +1,9 @@
+import builtins
 import json
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import src.main as main_module
 from rich.console import Console
@@ -22,6 +23,7 @@ from src.main import (
 from src.core.fileutil import is_tool_result_message
 from src.debug.interaction_log import InteractionLogger
 from src.memory.transcript import TranscriptManager
+from src.permission.guard import PermissionGuard, PermissionMode
 from src.provider.base import ThinkingConfig
 from src.ui.console import AgentConsole
 from tests.conftest import make_test_config
@@ -488,7 +490,7 @@ def test_handle_log_command_serves_and_opens_viewer(
     ]
 
 
-def test_main_falls_back_to_stdio_when_textual_ui_is_unavailable(
+def test_main_runs_stdio_session(
     monkeypatch,
 ) -> None:
     config = SimpleNamespace()
@@ -509,7 +511,6 @@ def test_main_falls_back_to_stdio_when_textual_ui_is_unavailable(
     )
     monkeypatch.setattr(main_module, "load_config", lambda *args, **kwargs: config)
     monkeypatch.setattr(main_module, "create_provider", lambda loaded: provider)
-    monkeypatch.setattr(main_module, "_supports_textual_ui", lambda: False)
 
     def _fake_stdio(config_arg, provider_arg):
         captured["config"] = config_arg
@@ -520,6 +521,96 @@ def test_main_falls_back_to_stdio_when_textual_ui_is_unavailable(
 
     assert main_module.main([]) == 7
     assert captured == {"config": config, "provider": provider}
+
+
+def test_build_stdio_read_fn_uses_agent_prompt_when_available(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    permission = PermissionGuard(PermissionMode.DEFAULT)
+    captured: dict[str, object] = {}
+
+    class _FakeAgentPrompt:
+        def __init__(
+            self,
+            *,
+            commands: list[str],
+            history_file: Path,
+            get_mode_label,
+            cycle_mode,
+        ) -> None:
+            captured["commands"] = commands
+            captured["history_file"] = history_file
+            captured["get_mode_label"] = get_mode_label
+            captured["cycle_mode"] = cycle_mode
+
+        def read_input(self) -> str:
+            get_mode_label = captured["get_mode_label"]
+            return f"[{get_mode_label()}] bareagent> "  # type: ignore[operator]
+
+    fake_module = ModuleType("src.ui.prompt")
+    fake_module.AgentPrompt = _FakeAgentPrompt  # type: ignore[attr-defined]
+
+    monkeypatch.setitem(main_module.sys.modules, "src.ui.prompt", fake_module)
+    monkeypatch.setattr(main_module.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(main_module.sys.stdout, "isatty", lambda: True)
+
+    read_fn = main_module._build_stdio_read_fn(tmp_path, permission)
+
+    assert captured["commands"] == list(main_module._SLASH_COMMANDS)
+    assert captured["history_file"] == tmp_path / ".bareagent_history"
+    assert read_fn() == "[DEFAULT] bareagent> "
+
+    permission.mode = PermissionMode.AUTO
+    assert read_fn() == "[AUTO] bareagent> "
+    assert captured["cycle_mode"]() == "PLAN"  # type: ignore[operator]
+    assert permission.mode == PermissionMode.PLAN
+
+
+def test_build_stdio_read_fn_falls_back_to_input_on_import_error(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    permission = PermissionGuard(PermissionMode.DEFAULT)
+    prompts: list[str] = []
+    real_import = builtins.__import__
+
+    def _fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "src.ui.prompt":
+            raise ImportError("prompt_toolkit unavailable")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.delitem(main_module.sys.modules, "src.ui.prompt", raising=False)
+    monkeypatch.setattr(main_module.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(main_module.sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(builtins, "__import__", _fake_import)
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda prompt="": prompts.append(prompt) or "/exit",
+    )
+
+    read_fn = main_module._build_stdio_read_fn(tmp_path, permission)
+
+    assert read_fn() == "/exit"
+    assert prompts == ["[DEFAULT] bareagent> "]
+
+
+def test_build_permission_allow_rule_uses_json_prefix_for_multiline_subject() -> None:
+    rule = main_module._build_permission_allow_rule(
+        "bash",
+        {"command": "git status\npython -m pytest"},
+    )
+
+    assert rule == 'bash(prefix_json:"git status\\npython -m pytest")'
+
+
+def test_cycle_permission_mode_advances_and_wraps() -> None:
+    permission = PermissionGuard(PermissionMode.DEFAULT)
+
+    assert main_module._cycle_permission_mode(permission) == PermissionMode.AUTO
+    assert main_module._cycle_permission_mode(permission) == PermissionMode.PLAN
+    assert main_module._cycle_permission_mode(permission) == PermissionMode.BYPASS
+    assert main_module._cycle_permission_mode(permission) == PermissionMode.DEFAULT
 
 
 def test_stdio_theme_switch_preserves_injected_console(
@@ -545,7 +636,11 @@ def test_stdio_theme_switch_preserves_injected_console(
         def get_skill_list_prompt(self) -> str:
             return ""
 
-    monkeypatch.setattr(main_module, "_read_stdio_input", lambda: next(inputs))
+    monkeypatch.setattr(
+        main_module,
+        "_build_stdio_read_fn",
+        lambda *_args, **_kwargs: lambda: next(inputs),
+    )
     monkeypatch.setattr(
         main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1"
     )
@@ -590,6 +685,402 @@ def test_stdio_theme_switch_preserves_injected_console(
     assert "Exiting BareAgent." in rendered
 
 
+def test_run_stdio_session_installs_permission_prompt_adapter(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config = make_test_config(tmp_path)
+    guard = PermissionGuard(PermissionMode.DEFAULT)
+    captured: dict[str, object] = {}
+    inputs = iter(["/exit"])
+    output_buffer = StringIO()
+    agent_console = AgentConsole(
+        Console(
+            file=output_buffer,
+            force_terminal=False,
+            color_system=None,
+            width=100,
+        )
+    )
+
+    class _FakeSkillLoader:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def get_skill_list_prompt(self) -> str:
+            return ""
+
+    def _fake_ask_permission(name: str, input_data: object) -> bool:
+        captured["name"] = name
+        captured["input_data"] = input_data
+        return True
+
+    agent_console.ask_permission = _fake_ask_permission  # type: ignore[method-assign]
+    agent_console.consume_permission_choice = lambda: "allow"  # type: ignore[method-assign]
+
+    monkeypatch.setattr(
+        main_module,
+        "_build_stdio_read_fn",
+        lambda *_args, **_kwargs: lambda: next(inputs),
+    )
+    monkeypatch.setattr(main_module.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(
+        main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1"
+    )
+    monkeypatch.setattr(
+        main_module, "_load_task_manager", lambda *_args, **_kwargs: object()
+    )
+    monkeypatch.setattr(
+        main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object()
+    )
+    monkeypatch.setattr(
+        main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
+    )
+    monkeypatch.setattr(main_module, "_initial_messages", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(main_module, "get_tools", lambda: [])
+    monkeypatch.setattr(main_module, "SkillLoader", _FakeSkillLoader)
+    monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
+    monkeypatch.setattr(main_module, "_build_permission_guard", lambda *_args: guard)
+    monkeypatch.setattr(main_module, "Compactor", lambda **_kwargs: object())
+    monkeypatch.setattr(
+        main_module,
+        "_build_loop_compact",
+        lambda *_args, **_kwargs: lambda _messages, force=False: None,
+    )
+    monkeypatch.setattr(main_module, "_build_handlers", lambda **_kwargs: {})
+    monkeypatch.setattr(
+        main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None
+    )
+
+    assert (
+        main_module._run_stdio_session(
+            config,
+            object(),
+            workspace=tmp_path,
+            agent_console=agent_console,
+        )
+        == 0
+    )
+
+    assert guard._ask_user_fn is not None
+    assert (
+        guard._ask_user_fn(
+            SimpleNamespace(name="bash", input={"command": "pwd"}),
+        )
+        is True
+    )
+    assert captured == {
+        "name": "bash",
+        "input_data": {"command": "pwd"},
+    }
+
+
+def test_run_stdio_session_skips_permission_prompt_adapter_without_tty(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config = make_test_config(tmp_path)
+    guard = PermissionGuard(PermissionMode.DEFAULT)
+    inputs = iter(["/exit"])
+
+    class _FakeSkillLoader:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def get_skill_list_prompt(self) -> str:
+            return ""
+
+    monkeypatch.setattr(
+        main_module,
+        "_build_stdio_read_fn",
+        lambda *_args, **_kwargs: lambda: next(inputs),
+    )
+    monkeypatch.setattr(main_module.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(
+        main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1"
+    )
+    monkeypatch.setattr(
+        main_module, "_load_task_manager", lambda *_args, **_kwargs: object()
+    )
+    monkeypatch.setattr(
+        main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object()
+    )
+    monkeypatch.setattr(
+        main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
+    )
+    monkeypatch.setattr(main_module, "_initial_messages", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(main_module, "get_tools", lambda: [])
+    monkeypatch.setattr(main_module, "SkillLoader", _FakeSkillLoader)
+    monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
+    monkeypatch.setattr(main_module, "_build_permission_guard", lambda *_args: guard)
+    monkeypatch.setattr(main_module, "Compactor", lambda **_kwargs: object())
+    monkeypatch.setattr(
+        main_module,
+        "_build_loop_compact",
+        lambda *_args, **_kwargs: lambda _messages, force=False: None,
+    )
+    monkeypatch.setattr(main_module, "_build_handlers", lambda **_kwargs: {})
+    monkeypatch.setattr(
+        main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None
+    )
+
+    assert main_module._run_stdio_session(config, object(), workspace=tmp_path) == 0
+    assert guard._ask_user_fn is None
+
+
+def test_install_stdio_permission_prompt_persists_always_allow_rule(
+    monkeypatch,
+) -> None:
+    guard = PermissionGuard(PermissionMode.DEFAULT)
+    output_buffer = StringIO()
+    agent_console = AgentConsole(
+        Console(
+            file=output_buffer,
+            force_terminal=False,
+            color_system=None,
+            width=100,
+        )
+    )
+
+    monkeypatch.setattr(main_module.sys.stdin, "isatty", lambda: True)
+    agent_console.ask_permission = lambda name, input_data: True  # type: ignore[method-assign]
+    agent_console.consume_permission_choice = lambda: "always"  # type: ignore[method-assign]
+
+    main_module._install_stdio_permission_prompt(guard, agent_console)
+
+    assert guard._ask_user_fn is not None
+    assert (
+        guard._ask_user_fn(
+            SimpleNamespace(name="bash", input={"command": "git commit -m test"}),
+        )
+        is True
+    )
+    assert "bash(prefix:git commit -m test*)" in guard.allow_rules
+
+
+def test_resume_replays_transcript_to_stdio_console(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config = make_test_config(tmp_path)
+    transcript_dir = tmp_path / ".transcripts"
+    transcript_dir.mkdir()
+    session_id = "session-2026-04-17"
+    transcript_path = transcript_dir / f"{session_id}_2026-04-17T12-00-00.jsonl"
+    transcript_messages = [
+        {"role": "system", "content": "system prompt"},
+        {"role": "user", "content": "[red]hello[/red] [foo]"},
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "checking workspace"},
+                {
+                    "type": "tool_use",
+                    "id": "toolu_1",
+                    "name": "bash",
+                    "input": {"command": "pwd"},
+                },
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_1",
+                    "content": "D:/code/BareAgent",
+                }
+            ],
+        },
+        {"role": "assistant", "content": "Done."},
+    ]
+    transcript_path.write_text(
+        "\n".join(json.dumps(message) for message in transcript_messages) + "\n",
+        encoding="utf-8",
+    )
+
+    output_buffer = StringIO()
+    agent_console = AgentConsole(
+        Console(
+            file=output_buffer,
+            force_terminal=False,
+            color_system=None,
+            width=100,
+        )
+    )
+    inputs = iter([f"/resume {session_id}", "/exit"])
+
+    class _FakeSkillLoader:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def get_skill_list_prompt(self) -> str:
+            return ""
+
+    class _FakeCompactor:
+        def __init__(self, *, session_id: str, **_kwargs) -> None:
+            self._session_id = session_id
+
+        def __call__(self, _messages, force: bool = False) -> None:
+            _ = force
+
+        def get_session_id(self) -> str:
+            return self._session_id
+
+        def set_session_id(self, session_id: str) -> None:
+            self._session_id = session_id
+
+    monkeypatch.setattr(
+        main_module,
+        "_build_stdio_read_fn",
+        lambda *_args, **_kwargs: lambda: next(inputs),
+    )
+    monkeypatch.setattr(
+        main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1"
+    )
+    monkeypatch.setattr(
+        main_module, "_load_task_manager", lambda *_args, **_kwargs: object()
+    )
+    monkeypatch.setattr(
+        main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object()
+    )
+    monkeypatch.setattr(
+        main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
+    )
+    monkeypatch.setattr(main_module, "_initial_messages", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(main_module, "get_tools", lambda: [])
+    monkeypatch.setattr(main_module, "SkillLoader", _FakeSkillLoader)
+    monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
+    monkeypatch.setattr(main_module, "Compactor", _FakeCompactor)
+    monkeypatch.setattr(main_module, "_build_handlers", lambda **_kwargs: {})
+    monkeypatch.setattr(
+        main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None
+    )
+
+    assert (
+        main_module._run_stdio_session(
+            config,
+            object(),
+            workspace=tmp_path,
+            agent_console=agent_console,
+        )
+        == 0
+    )
+
+    rendered = output_buffer.getvalue()
+    assert "> [red]hello[/red] [foo]" in rendered
+    assert "checking workspace" in rendered
+    assert "Tool Call" in rendered
+    assert "pwd" in rendered
+    assert "Result" in rendered
+    assert "D:/code/BareAgent" in rendered
+    assert "Done." in rendered
+    assert f"Resumed session: {session_id}" in rendered
+
+
+def test_clear_command_clears_terminal_before_starting_new_session(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config = make_test_config(tmp_path)
+    output_buffer = StringIO()
+    agent_console = AgentConsole(
+        Console(
+            file=output_buffer,
+            force_terminal=False,
+            color_system=None,
+            width=100,
+        )
+    )
+    inputs = iter(["/clear", "/exit"])
+    cleared: list[AgentConsole] = []
+
+    class _FakeSkillLoader:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def get_skill_list_prompt(self) -> str:
+            return ""
+
+    class _FakeCompactor:
+        def __init__(self, *, session_id: str, **_kwargs) -> None:
+            self._session_id = session_id
+
+        def __call__(self, _messages, force: bool = False) -> None:
+            _ = force
+
+        def get_session_id(self) -> str:
+            return self._session_id
+
+        def set_session_id(self, session_id: str) -> None:
+            self._session_id = session_id
+
+    monkeypatch.setattr(main_module, "_clear_stdio_screen", cleared.append)
+    monkeypatch.setattr(
+        main_module,
+        "_build_stdio_read_fn",
+        lambda *_args, **_kwargs: lambda: next(inputs),
+    )
+    monkeypatch.setattr(
+        main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1"
+    )
+    monkeypatch.setattr(
+        main_module, "_load_task_manager", lambda *_args, **_kwargs: object()
+    )
+    monkeypatch.setattr(
+        main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object()
+    )
+    monkeypatch.setattr(
+        main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
+    )
+    monkeypatch.setattr(main_module, "_initial_messages", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(main_module, "get_tools", lambda: [])
+    monkeypatch.setattr(main_module, "SkillLoader", _FakeSkillLoader)
+    monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
+    monkeypatch.setattr(main_module, "Compactor", _FakeCompactor)
+    monkeypatch.setattr(main_module, "_build_handlers", lambda **_kwargs: {})
+    monkeypatch.setattr(
+        main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None
+    )
+
+    assert (
+        main_module._run_stdio_session(
+            config,
+            object(),
+            workspace=tmp_path,
+            agent_console=agent_console,
+        )
+        == 0
+    )
+
+    assert cleared == [agent_console]
+    assert "New conversation started." in output_buffer.getvalue()
+
+
 def test_run_stdio_session_passes_interaction_logger_when_debug_enabled(
     monkeypatch,
     tmp_path: Path,
@@ -606,7 +1097,11 @@ def test_run_stdio_session_passes_interaction_logger_when_debug_enabled(
         def get_skill_list_prompt(self) -> str:
             return ""
 
-    monkeypatch.setattr(main_module, "_read_stdio_input", lambda: next(inputs))
+    monkeypatch.setattr(
+        main_module,
+        "_build_stdio_read_fn",
+        lambda *_args, **_kwargs: lambda: next(inputs),
+    )
     monkeypatch.setattr(
         main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1"
     )

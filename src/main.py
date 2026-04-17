@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import tomllib
@@ -8,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable
+from typing import Any, Callable
 
 from src.concurrency.background import BackgroundManager
 from src.core.fileutil import (
@@ -22,7 +23,11 @@ from src.core.tools import get_handlers, get_tools
 from src.debug.interaction_log import InteractionLogger
 from src.memory.compact import Compactor
 from src.memory.transcript import TranscriptManager
-from src.permission.guard import PermissionGuard, PermissionMode
+from src.permission.guard import (
+    PermissionGuard,
+    PermissionMode,
+    permission_rule_subject,
+)
 from src.planning.agent_types import BUILTIN_AGENT_TYPES, DEFAULT_AGENT_TYPE
 from src.planning.skills import SkillLoader, resolve_skills_dir
 from src.planning.tasks import TaskManager
@@ -460,6 +465,48 @@ def _build_permission_guard(config: Config) -> PermissionGuard:
     guard.allow_rules = list(config.permission.allow)
     guard.deny_rules = list(config.permission.deny)
     return guard
+
+
+def _build_permission_allow_rule(
+    tool_name: str,
+    tool_input: dict[str, Any],
+) -> str | None:
+    normalized_tool = tool_name.strip().lower()
+    subject = permission_rule_subject(normalized_tool, tool_input)
+    if not subject:
+        return None
+    if "\n" in subject or "\r" in subject:
+        encoded_subject = json.dumps(subject, ensure_ascii=False)
+        return f"{normalized_tool}(prefix_json:{encoded_subject})"
+    return f"{normalized_tool}(prefix:{subject}*)"
+
+
+def _persist_permission_allow_rule(
+    permission: PermissionGuard,
+    tool_name: str,
+    tool_input: dict[str, Any],
+) -> None:
+    rule = _build_permission_allow_rule(tool_name, tool_input)
+    if rule is None or rule in permission.allow_rules:
+        return
+    permission.allow_rules.append(rule)
+
+
+def _install_stdio_permission_prompt(
+    permission: PermissionGuard,
+    ui_console: AgentConsole,
+) -> None:
+    if not sys.stdin.isatty():
+        return
+
+    def _ask(call: Any) -> bool:
+        allowed = ui_console.ask_permission(call.name, call.input)
+        choice = ui_console.consume_permission_choice()
+        if allowed and choice == "always":
+            _persist_permission_allow_rule(permission, call.name, call.input)
+        return allowed
+
+    permission._ask_user_fn = _ask
 
 
 def _generate_session_id(
@@ -987,13 +1034,120 @@ def _broadcast_team_shutdown(message_bus: MessageBus) -> None:
     )
 
 
-def _supports_textual_ui() -> bool:
-    return sys.stdin.isatty() and sys.stdout.isatty()
-
-
 def _read_stdio_input() -> str:
     prompt = "bareagent> " if sys.stdin.isatty() and sys.stdout.isatty() else ""
     return input(prompt)
+
+
+def _cycle_permission_mode(permission: PermissionGuard) -> PermissionMode:
+    current_index = _MODE_CYCLE.index(permission.mode)
+    next_mode = _MODE_CYCLE[(current_index + 1) % len(_MODE_CYCLE)]
+    permission.mode = next_mode
+    return next_mode
+
+
+def _build_stdio_read_fn(
+    workspace_path: Path,
+    permission: PermissionGuard,
+) -> Callable[[], str]:
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return _read_stdio_input
+
+    try:
+        from src.ui.prompt import AgentPrompt
+
+        agent_prompt = AgentPrompt(
+            commands=list(_SLASH_COMMANDS),
+            history_file=workspace_path / ".bareagent_history",
+            get_mode_label=lambda: permission.mode.value.upper(),
+            cycle_mode=lambda: _cycle_permission_mode(permission).value.upper(),
+        )
+        return agent_prompt.read_input
+    except Exception:
+        return lambda: input(f"[{permission.mode.value.upper()}] bareagent> ")
+
+
+def _clear_stdio_screen(ui_console: AgentConsole) -> None:
+    if getattr(ui_console.console, "is_terminal", False):
+        ui_console.console.clear(home=True)
+
+
+def _print_stdio_user_message(ui_console: AgentConsole, text: str) -> None:
+    if not text.strip():
+        return
+
+    from src.ui.theme import get_theme
+
+    ui_console.console.print(
+        f"> {text}",
+        style=f"bold {get_theme().palette.accent}",
+        markup=False,
+    )
+
+
+def _replay_stdio_transcript(
+    messages: list[dict[str, Any]],
+    ui_console: AgentConsole,
+) -> None:
+    tool_name_by_id: dict[str, str] = {}
+
+    for message in messages:
+        role = message.get("role")
+        content = message.get("content")
+
+        if role == "system":
+            continue
+
+        if role == "user":
+            if isinstance(content, str):
+                _print_stdio_user_message(ui_console, content)
+                continue
+            if isinstance(content, list):
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    if block.get("type") != "tool_result":
+                        continue
+                    tool_name = tool_name_by_id.get(
+                        str(block.get("tool_use_id", "")),
+                        "unknown",
+                    )
+                    ui_console.print_tool_result(tool_name, block.get("content", ""))
+                continue
+
+        if role != "assistant":
+            continue
+
+        if isinstance(content, str):
+            ui_console.print_assistant(content)
+            continue
+        if not isinstance(content, list):
+            continue
+
+        text_parts: list[str] = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "text":
+                text_value = str(block.get("text", ""))
+                if text_value:
+                    text_parts.append(text_value)
+                continue
+            if block.get("type") != "tool_use":
+                continue
+
+            tool_name = str(block.get("name", "unknown"))
+            tool_id = str(block.get("id", ""))
+            if tool_id:
+                tool_name_by_id[tool_id] = tool_name
+
+            if text_parts:
+                ui_console.print_assistant("\n".join(text_parts))
+                text_parts = []
+            ui_console.print_tool_call(tool_name, block.get("input", {}))
+
+        if text_parts:
+            ui_console.print_assistant("\n".join(text_parts))
 
 
 def _handle_mode_selection_stdio(
@@ -1066,6 +1220,8 @@ def _run_stdio_session(
     )
     tools = get_tools()
     permission = _build_permission_guard(config)
+    _install_stdio_permission_prompt(permission, ui_console)
+    read_fn = _build_stdio_read_fn(workspace_path, permission)
     base_compact_fn = Compactor(
         provider=provider,
         transcript_mgr=transcript_mgr,
@@ -1105,7 +1261,7 @@ def _run_stdio_session(
             since=main_mailbox_cursor,
         )
         try:
-            user_input = _read_stdio_input()
+            user_input = read_fn()
         except (KeyboardInterrupt, EOFError):
             _broadcast_team_shutdown(message_bus)
             ui_console.print_status("\nExiting BareAgent.")
@@ -1122,6 +1278,8 @@ def _run_stdio_session(
             ui_console.print_status(_HELP_TEXT)
             continue
         if text in ("/clear", "/new"):
+            if text == "/clear":
+                _clear_stdio_screen(ui_console)
             messages[:] = _initial_messages(
                 workspace_path,
                 skill_summary=skill_loader.get_skill_list_prompt(),
@@ -1227,6 +1385,7 @@ def _run_stdio_session(
                 spawned_agents=spawned_agents,
                 agent_name=MAIN_AGENT_NAME,
             )
+            _replay_stdio_transcript(messages, ui_console)
             ui_console.print_status(f"Resumed session: {resumed_session}")
             continue
         if text == "/log" or text.startswith("/log "):
@@ -1324,18 +1483,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Failed to initialize provider: {exc}")
         return 1
 
-    if not _supports_textual_ui():
-        print(
-            "Interactive terminal not detected; falling back to stdio mode.",
-            file=sys.stderr,
-        )
-        return _run_stdio_session(config, provider)
-
-    from src.ui.app import BareAgentApp
-
-    app = BareAgentApp(config=config, provider=provider)
-    app.run()
-    return 0
+    return _run_stdio_session(config, provider)
 
 
 if __name__ == "__main__":
