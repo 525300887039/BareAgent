@@ -22,11 +22,17 @@ def create_provider(config: Any) -> BaseLLMProvider:
     if not api_key_env:
         raise ValueError(
             "Provider config is missing 'api_key_env'. "
-            "Please specify the environment variable name that holds the API key."
+            "Please specify the environment variable name that holds the API key, "
+            "or provide the API key directly (starting with 'sk-')."
         )
-    api_key = os.getenv(api_key_env)
-    if not api_key:
-        raise ValueError(f"Missing API key in environment variable: {api_key_env}")
+    if api_key_env.startswith("sk-"):
+        api_key = api_key_env
+    else:
+        api_key = os.getenv(api_key_env)
+        if not api_key:
+            raise ValueError(
+                f"Missing API key in environment variable: {api_key_env}"
+            )
 
     if provider_name == "anthropic":
         return AnthropicProvider(
