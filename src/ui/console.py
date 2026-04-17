@@ -8,12 +8,14 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
+from rich.text import Text
 from src.ui.theme import ThemeManager, get_theme
 
 if TYPE_CHECKING:
     from src.ui.stream import StreamPrinter
 
 MAX_TOOL_OUTPUT_CHARS = 2000
+MAX_PERMISSION_PREVIEW_CHARS = 500
 
 
 class AgentConsole:
@@ -26,6 +28,7 @@ class AgentConsole:
         self.console = console or Console(
             no_color=tm.no_color,
         )
+        self._permission_choice: str | None = None
         self._theme_pushed = False
         self.set_theme(tm)
 
@@ -67,6 +70,50 @@ class AgentConsole:
             )
         )
 
+    def ask_permission(self, name: str, input_data: Any) -> bool:
+        theme = get_theme()
+        self._permission_choice = None
+        self.console.print(
+            Panel(
+                Syntax(
+                    _render_permission_payload(input_data),
+                    "json",
+                    word_wrap=True,
+                ),
+                title=(
+                    f"[warning]{theme.icons.warning} Permission Required: {name}[/]"
+                ),
+                subtitle=Text("[y] Allow  [n] Deny  [a] Always allow"),
+                border_style=theme.palette.warning,
+                box=box.ROUNDED,
+                padding=(0, 1),
+            )
+        )
+
+        while True:
+            try:
+                choice = input("> ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                self._permission_choice = "deny"
+                return False
+
+            if choice == "y":
+                self._permission_choice = "allow"
+                return True
+            if choice == "n":
+                self._permission_choice = "deny"
+                return False
+            if choice == "a":
+                self._permission_choice = "always"
+                return True
+
+            self.console.print("Press y/n/a", style="permission.ask")
+
+    def consume_permission_choice(self) -> str | None:
+        choice = self._permission_choice
+        self._permission_choice = None
+        return choice
+
     def print_error(self, msg: str) -> None:
         icons = get_theme().icons
         self.console.print(f"{icons.error} {msg}", style="error")
@@ -95,6 +142,11 @@ def _render_payload(payload: Any, *, max_chars: int | None = None) -> tuple[str,
         formatted = json.dumps(parsed, ensure_ascii=False, indent=2, default=str)
         return _truncate(formatted, max_chars), "json"
     return _truncate(text, max_chars), "text"
+
+
+def _render_permission_payload(payload: Any) -> str:
+    text, _ = _render_payload(payload, max_chars=MAX_PERMISSION_PREVIEW_CHARS)
+    return text
 
 
 def _truncate(text: str, max_chars: int | None) -> str:

@@ -4,6 +4,7 @@
 AUTO 模式下 bash 命令默认放行（除非匹配 deny 或 dangerous）。
 """
 
+import src.main as main_module
 from src.permission.guard import PermissionGuard, PermissionMode
 
 
@@ -21,3 +22,21 @@ def test_deny_rule_prefix():
     guard.deny_rules = ["bash(prefix:git push)"]
     result = guard.requires_confirm("bash", {"command": "git push origin main"})
     assert result is True
+
+
+def test_multiline_allow_rule_matches_tool_input() -> None:
+    guard = PermissionGuard(mode=PermissionMode.DEFAULT)
+    rule = main_module._build_permission_allow_rule(
+        "bash",
+        {"command": "git status\npython -m pytest"},
+    )
+
+    assert rule is not None
+    guard.allow_rules = [rule]
+    assert (
+        guard.requires_confirm(
+            "bash",
+            {"command": "git status\npython -m pytest"},
+        )
+        is False
+    )
