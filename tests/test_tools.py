@@ -166,6 +166,26 @@ def test_permission_rules_prefix_matching() -> None:
     assert guard.requires_confirm("bash", {"command": "npm publish"}) is True
 
 
+def test_permission_guard_write_file_honors_allow_rules() -> None:
+    guard = PermissionGuard(PermissionMode.DEFAULT)
+    guard.allow_rules = ["write_file(prefix:notes/today.txt*)"]
+
+    assert (
+        guard.requires_confirm(
+            "write_file",
+            {"file_path": "notes/today.txt", "content": "hello"},
+        )
+        is False
+    )
+    assert (
+        guard.requires_confirm(
+            "write_file",
+            {"file_path": "notes/tomorrow.txt", "content": "hello"},
+        )
+        is True
+    )
+
+
 def test_permission_guard_requires_confirmation_for_unknown_non_safe_tools() -> None:
     guard = PermissionGuard(PermissionMode.DEFAULT)
 

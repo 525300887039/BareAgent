@@ -76,30 +76,44 @@ class PermissionGuard:
     def requires_confirm(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
         if self.mode == PermissionMode.BYPASS:
             return False
+        normalized_tool = tool_name.strip().lower()
+        rule_subject = permission_rule_subject(normalized_tool, tool_input)
         if self.mode == PermissionMode.PLAN:
-            return tool_name not in self.SAFE_TOOLS
-        if tool_name in self.SAFE_TOOLS:
+            return normalized_tool not in self.SAFE_TOOLS
+        if normalized_tool == "bash":
+            cmd = rule_subject or ""
+            if self._match_rules(self.deny_rules, normalized_tool, cmd):
+                return True
+            if any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS):
+                return True
+            if self._match_rules(self.allow_rules, normalized_tool, cmd):
+                return False
+            if any(pattern.search(cmd) for pattern in self.AUTO_SAFE_PATTERNS):
+                return False
+            if self.mode == PermissionMode.DEFAULT:
+                return True
+            # AUTO mode: not matching any dangerous pattern, allow
             return False
-        if tool_name in {"edit_file", "task_create", "task_update"}:
-            return False
-        if tool_name == "write_file":
-            return self.mode == PermissionMode.DEFAULT
-        if tool_name != "bash":
-            return True
 
-        cmd = str(tool_input.get("command", "")).strip()
-        if self._match_rules(self.deny_rules, tool_name, cmd):
+        if rule_subject and self._match_rules(
+            self.deny_rules,
+            normalized_tool,
+            rule_subject,
+        ):
             return True
-        if any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS):
-            return True
-        if self._match_rules(self.allow_rules, tool_name, cmd):
+        if normalized_tool in self.SAFE_TOOLS:
             return False
-        if any(pattern.search(cmd) for pattern in self.AUTO_SAFE_PATTERNS):
+        if normalized_tool in {"edit_file", "task_create", "task_update"}:
             return False
-        if self.mode == PermissionMode.DEFAULT:
-            return True
-        # AUTO mode: not matching any dangerous pattern, allow
-        return False
+        if rule_subject and self._match_rules(
+            self.allow_rules,
+            normalized_tool,
+            rule_subject,
+        ):
+            return False
+        if normalized_tool == "write_file":
+            return self.mode == PermissionMode.DEFAULT
+        return True
 
     def ask_user(self, call: Any) -> bool:
         if self.fail_closed:
@@ -165,9 +179,56 @@ class PermissionGuard:
 
 
 def _parse_prefix_rule(rule: str) -> tuple[str, str] | None:
-    match = re.fullmatch(r"\s*([A-Za-z_][A-Za-z0-9_]*)\(prefix:(.+)\)\s*", rule)
+    match = re.fullmatch(
+        r"\s*([A-Za-z_][A-Za-z0-9_]*)\((prefix|prefix_json):([\s\S]+)\)\s*",
+        rule,
+    )
     if match is None:
         return None
     tool_name = match.group(1).strip().lower()
-    prefix = match.group(2).rstrip("*").strip()
+    rule_kind = match.group(2)
+    raw_prefix = match.group(3)
+    if rule_kind == "prefix_json":
+        try:
+            parsed_prefix = json.loads(raw_prefix)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(parsed_prefix, str):
+            return None
+        return tool_name, parsed_prefix
+    prefix = raw_prefix.rstrip("*").strip()
     return tool_name, prefix
+
+
+def permission_rule_subject(tool_name: str, tool_input: dict[str, Any]) -> str | None:
+    normalized_tool = tool_name.strip().lower()
+    if normalized_tool == "bash":
+        command = str(tool_input.get("command", "")).strip()
+        return command or None
+
+    for key in ("file_path", "path", "name", "to_agent", "task_id", "skill_name"):
+        value = tool_input.get(key)
+        if not isinstance(value, str):
+            continue
+        subject = value.strip()
+        if subject:
+            return subject
+
+    if "task" in tool_input:
+        task = str(tool_input.get("task", "")).strip()
+        if task:
+            return task
+
+    if not tool_input:
+        return None
+
+    try:
+        serialized = json.dumps(
+            tool_input,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
+    except (TypeError, ValueError):
+        serialized = str(tool_input).strip()
+    return serialized or None
