@@ -5,6 +5,7 @@ specs/
 config/
 .mailbox/
 .transcripts/
+.bareagent_history
 .logs/
 steps/
 code-agent-design.md
