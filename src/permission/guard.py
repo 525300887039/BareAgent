@@ -31,6 +31,8 @@ class PermissionGuard:
         "task_list",
         "task_get",
         "team_list",
+        "web_fetch",
+        "web_search",
     }
     AUTO_SAFE_PATTERNS = [
         re.compile(r"^(ls|cat|head|tail|wc|echo|pwd|date|which|type)\b"),

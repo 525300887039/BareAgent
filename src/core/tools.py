@@ -13,6 +13,8 @@ from src.core.handlers.file_read import run_read
 from src.core.handlers.file_write import run_write
 from src.core.handlers.glob_search import run_glob
 from src.core.handlers.grep_search import run_grep
+from src.core.handlers.web_fetch import run_web_fetch
+from src.core.handlers.web_search import run_web_search
 from src.core.schema import tool_schema as _schema
 from src.planning.skills import (
     LOAD_SKILL_TOOL_SCHEMAS,
@@ -24,7 +26,7 @@ from src.planning.subagent import SUBAGENT_TOOL_SCHEMAS, run_subagent
 from src.planning.tasks import TASK_TOOL_SCHEMAS, TaskManager, make_task_handlers
 from src.planning.todo import TODO_TOOL_SCHEMAS, TodoManager, make_todo_handlers
 
-BASE_TOOLS = {"bash", "read_file", "write_file", "edit_file", "glob", "grep"}
+BASE_TOOLS = {"bash", "read_file", "write_file", "edit_file", "glob", "grep", "web_fetch", "web_search"}
 DEFERRED_TOOLS = {
     "todo_write",
     "todo_read",
@@ -198,6 +200,47 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
         ["pattern"],
     ),
+    _schema(
+        "web_fetch",
+        "Fetch content from a URL. Automatically converts HTML to readable text.",
+        {
+            "url": {"type": "string", "description": "URL to fetch (http:// or https://)."},
+            "max_length": {
+                "type": "integer",
+                "description": "Maximum characters to return.",
+                "default": 10000,
+                "minimum": 100,
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "Request timeout in seconds.",
+                "default": 15,
+                "minimum": 1,
+            },
+        },
+        ["url"],
+    ),
+    _schema(
+        "web_search",
+        "Search the web and return structured results.",
+        {
+            "query": {"type": "string", "description": "Search query."},
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum number of results to return.",
+                "default": 5,
+                "minimum": 1,
+                "maximum": 10,
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "Request timeout in seconds.",
+                "default": 15,
+                "minimum": 1,
+            },
+        },
+        ["query"],
+    ),
     *DEFERRED_TOOL_SCHEMAS,
 ]
 
@@ -280,6 +323,8 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     "edit_file": _unbound_stub("edit_file"),
     "glob": _unbound_stub("glob"),
     "grep": _unbound_stub("grep"),
+    "web_fetch": run_web_fetch,
+    "web_search": run_web_search,
     "todo_read": lambda: _get_default_todo_manager().list(),
     "todo_write": lambda **kw: make_todo_handlers(_get_default_todo_manager())[
         "todo_write"
@@ -323,6 +368,8 @@ def get_handlers(
         "edit_file": partial(run_edit, workspace=workspace),
         "glob": partial(run_glob, workspace=workspace),
         "grep": partial(run_grep, workspace=workspace),
+        "web_fetch": run_web_fetch,
+        "web_search": run_web_search,
     }
 
     active_todo_manager = todo_manager or TodoManager()
