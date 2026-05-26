@@ -1,0 +1,33 @@
+{
+  "id": "mcp",
+  "name": "mcp",
+  "title": "MCP 客户端",
+  "description": "",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "ducat",
+  "assignee": "ducat",
+  "createdAt": "2026-05-27",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "05-27-mcp-transport",
+    "05-27-mcp-client-tools",
+    "05-27-mcp-resources-prompts",
+    "05-27-mcp-permission-repl",
+    "05-27-mcp-multimodal",
+    "05-27-mcp-hardening"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
