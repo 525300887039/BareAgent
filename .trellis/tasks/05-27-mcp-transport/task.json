@@ -3,7 +3,7 @@
   "name": "mcp-transport",
   "title": "MCP Transport + Protocol 脚手架",
   "description": "PR1: Transport ABC + stdio + http_sse + JSON-RPC protocol + config 解析",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

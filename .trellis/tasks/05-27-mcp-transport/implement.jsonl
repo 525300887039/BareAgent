@@ -1,1 +1,9 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "确定 src/mcp/ 子包的内部组织遵循项目分层约定"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "MCP transport reader 线程的 warn 输出渠道 + 禁用 print() 约定"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "自定义 MCPError 层次、边界处校验、process death 错误回报模式"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Python 3.12+ 特性、ruff 规范、类型注解、from __future__ import annotations 惯例"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "MCPConfig dataclass 设计参照（运行时配置不持久化）"}
+{"file": ".trellis/tasks/05-27-mcp/prd.md", "reason": "父任务 PRD：完整 MCP 客户端规划与决策上下文"}
+{"file": ".trellis/tasks/05-27-mcp/research/json-rpc-edge-cases.md", "reason": "stdio framing = newline-delimited JSON、并发 dict[int, Future] 路由、batch 已移除、进程死亡三路侦测"}
+{"file": ".trellis/tasks/05-27-mcp/research/sse-parsing-minimal.md", "reason": "SSE 解析器实现细节 + MCP HTTP 双版本（legacy 2024-11-05 vs Streamable 2025-03-26）的握手差异"}
+{"file": ".trellis/tasks/05-27-mcp/research/mcp-protocol-spec.md", "reason": "Request/Response/Notification 消息结构 + 标准错误码"}

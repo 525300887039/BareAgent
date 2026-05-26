@@ -1,1 +1,6 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "ruff / pytest / 类型注解 / 注释规范的审查标准"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "异常层次设计、边界校验、不写防御性代码的审查标准"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "确认无 print() / 正确使用 logging.getLogger 模式"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "src/mcp/ 内部组织是否符合分层约定"}
+{"file": ".trellis/tasks/05-27-mcp/research/json-rpc-edge-cases.md", "reason": "验证并发 routing / 进程死亡侦测 / framing 实现符合研究结论"}
+{"file": ".trellis/tasks/05-27-mcp/research/sse-parsing-minimal.md", "reason": "验证 SSE 解析符合 WHATWG + MCP 双版本要求"}
