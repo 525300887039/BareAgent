@@ -16,6 +16,8 @@ from src.core.handlers.grep_search import run_grep
 from src.core.handlers.web_fetch import run_web_fetch
 from src.core.handlers.web_search import run_web_search
 from src.core.schema import tool_schema as _schema
+from src.mcp.manager import MCPManager
+from src.mcp.registry import build_mcp_handlers, build_mcp_tool_schemas
 from src.planning.skills import (
     LOAD_SKILL_TOOL_SCHEMAS,
     SkillLoader,
@@ -26,7 +28,16 @@ from src.planning.subagent import SUBAGENT_TOOL_SCHEMAS, run_subagent
 from src.planning.tasks import TASK_TOOL_SCHEMAS, TaskManager, make_task_handlers
 from src.planning.todo import TODO_TOOL_SCHEMAS, TodoManager, make_todo_handlers
 
-BASE_TOOLS = {"bash", "read_file", "write_file", "edit_file", "glob", "grep", "web_fetch", "web_search"}
+BASE_TOOLS = {
+    "bash",
+    "read_file",
+    "write_file",
+    "edit_file",
+    "glob",
+    "grep",
+    "web_fetch",
+    "web_search",
+}
 DEFERRED_TOOLS = {
     "todo_write",
     "todo_read",
@@ -204,7 +215,10 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "web_fetch",
         "Fetch content from a URL. Automatically converts HTML to readable text.",
         {
-            "url": {"type": "string", "description": "URL to fetch (http:// or https://)."},
+            "url": {
+                "type": "string",
+                "description": "URL to fetch (http:// or https://).",
+            },
             "max_length": {
                 "type": "integer",
                 "description": "Maximum characters to return.",
@@ -341,8 +355,11 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
 }
 
 
-def get_tools() -> list[dict[str, Any]]:
-    return list(TOOL_SCHEMAS)
+def get_tools(mcp_manager: MCPManager | None = None) -> list[dict[str, Any]]:
+    schemas = list(TOOL_SCHEMAS)
+    if mcp_manager is not None:
+        schemas.extend(build_mcp_tool_schemas(mcp_manager))
+    return schemas
 
 
 def get_handlers(
@@ -360,6 +377,7 @@ def get_handlers(
     subagent_default_type: str = "general-purpose",
     team_handlers: dict[str, Callable[..., Any]] | None = None,
     subagent_depth: int = 0,
+    mcp_manager: MCPManager | None = None,
 ) -> dict[str, Callable[..., Any]]:
     handlers: dict[str, Callable[..., Any]] = {
         "bash": partial(run_bash, cwd=workspace),
@@ -387,7 +405,10 @@ def get_handlers(
 
     handlers.update(team_handlers or _TEAM_FALLBACK_HANDLERS)
 
-    available_tools = tools or get_tools()
+    if mcp_manager is not None:
+        handlers.update(build_mcp_handlers(mcp_manager))
+
+    available_tools = tools or get_tools(mcp_manager)
     if provider is None:
         handlers["subagent"] = lambda task, agent_type=None, run_in_background=False: (
             "Subagent unavailable: provider is not configured."

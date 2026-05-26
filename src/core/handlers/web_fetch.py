@@ -20,10 +20,25 @@ class _HTMLToText(html.parser.HTMLParser):
     """
 
     _SKIP_TAGS = frozenset({"script", "style", "nav", "footer", "header", "noscript"})
-    _BLOCK_TAGS = frozenset({
-        "p", "div", "h1", "h2", "h3", "h4", "h5", "h6",
-        "li", "br", "tr", "blockquote", "pre", "section", "article",
-    })
+    _BLOCK_TAGS = frozenset(
+        {
+            "p",
+            "div",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+            "li",
+            "br",
+            "tr",
+            "blockquote",
+            "pre",
+            "section",
+            "article",
+        }
+    )
 
     def __init__(self) -> None:
         super().__init__()

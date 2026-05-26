@@ -47,11 +47,13 @@ def _search_brave(
 
     results: list[dict[str, str]] = []
     for item in data.get("web", {}).get("results", [])[:max_results]:
-        results.append({
-            "title": item.get("title", ""),
-            "url": item.get("url", ""),
-            "snippet": item.get("description", ""),
-        })
+        results.append(
+            {
+                "title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "snippet": item.get("description", ""),
+            }
+        )
     return results
 
 
@@ -80,11 +82,13 @@ def _search_ddg_html(
             match = _RE_DDG_UDDG.search(href)
             if match:
                 actual_url = unquote(match.group(1))
-        results.append({
-            "title": title,
-            "url": actual_url,
-            "snippet": snippet,
-        })
+        results.append(
+            {
+                "title": title,
+                "url": actual_url,
+                "snippet": snippet,
+            }
+        )
     return results
 
 

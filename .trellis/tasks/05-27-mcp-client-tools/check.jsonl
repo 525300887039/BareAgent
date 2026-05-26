@@ -1,1 +1,6 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/05-27-mcp/prd.md", "reason": "验收范围：tools/list 注入到 get_tools()、tools/call 透明转发；启动超时单 server 跳过；JSON-RPC error 转 MCP Error 字串；名称冲突 fail-fast；resources/prompts/multimodal/atexit/REPL 命令明确 Out of Scope，本 PR 不要做"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "校验 src/mcp/ 新增模块位置 + 集成路径；不要在 src/core/handlers/ 加 MCP 专用 handler，注入路径走 get_tools/get_handlers"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "校验 MCPHandshakeError/MCPCallError 命名与边界；isError:true 降级路径；启动失败 warn+跳过不阻塞 boot"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "校验启动/失败消息走 AgentConsole，不混入 print；reader 后台异常走 logger 而非控制台"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "ruff check / ruff format / pytest 全绿；类型注解齐全；新增模块控制在合理 LOC"}
+{"file": ".trellis/tasks/05-27-mcp/research/popular-mcp-servers.md", "reason": "registry schema 转换需对 Zod/Pydantic 两派兼容；测试需 fixture 覆盖 $ref+$defs 与 anyOf:[T,null]"}

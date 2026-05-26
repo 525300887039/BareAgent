@@ -22,6 +22,7 @@ from src.main import (
 )
 from src.core.fileutil import is_tool_result_message
 from src.debug.interaction_log import InteractionLogger
+from src.mcp import MCPConfig
 from src.memory.transcript import TranscriptManager
 from src.permission.guard import PermissionGuard, PermissionMode
 from src.provider.base import ThinkingConfig
@@ -295,6 +296,7 @@ def test_make_teammate_provider_factory_inherits_custom_api_key_env(
         path=Path("config.toml"),
         debug=DebugConfig(),
         tracing=TracingConfig(),
+        mcp=MCPConfig(),
     )
 
     factory = main_module._make_teammate_provider_factory(config)
@@ -654,7 +656,7 @@ def test_stdio_theme_switch_preserves_injected_console(
         main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
     )
     monkeypatch.setattr(main_module, "_initial_messages", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(main_module, "get_tools", lambda: [])
+    monkeypatch.setattr(main_module, "get_tools", lambda *_a, **_kw: [])
     monkeypatch.setattr(main_module, "SkillLoader", _FakeSkillLoader)
     monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
     monkeypatch.setattr(main_module, "Compactor", lambda **_kwargs: object())
@@ -737,7 +739,7 @@ def test_run_stdio_session_installs_permission_prompt_adapter(
         main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
     )
     monkeypatch.setattr(main_module, "_initial_messages", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(main_module, "get_tools", lambda: [])
+    monkeypatch.setattr(main_module, "get_tools", lambda *_a, **_kw: [])
     monkeypatch.setattr(main_module, "SkillLoader", _FakeSkillLoader)
     monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
     monkeypatch.setattr(main_module, "_build_permission_guard", lambda *_args: guard)
@@ -815,7 +817,7 @@ def test_run_stdio_session_skips_permission_prompt_adapter_without_tty(
         main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
     )
     monkeypatch.setattr(main_module, "_initial_messages", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(main_module, "get_tools", lambda: [])
+    monkeypatch.setattr(main_module, "get_tools", lambda *_a, **_kw: [])
     monkeypatch.setattr(main_module, "SkillLoader", _FakeSkillLoader)
     monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
     monkeypatch.setattr(main_module, "_build_permission_guard", lambda *_args: guard)
@@ -960,7 +962,7 @@ def test_resume_replays_transcript_to_stdio_console(
         main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
     )
     monkeypatch.setattr(main_module, "_initial_messages", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(main_module, "get_tools", lambda: [])
+    monkeypatch.setattr(main_module, "get_tools", lambda *_a, **_kw: [])
     monkeypatch.setattr(main_module, "SkillLoader", _FakeSkillLoader)
     monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
     monkeypatch.setattr(main_module, "Compactor", _FakeCompactor)
@@ -1052,7 +1054,7 @@ def test_clear_command_clears_terminal_before_starting_new_session(
         main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
     )
     monkeypatch.setattr(main_module, "_initial_messages", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(main_module, "get_tools", lambda: [])
+    monkeypatch.setattr(main_module, "get_tools", lambda *_a, **_kw: [])
     monkeypatch.setattr(main_module, "SkillLoader", _FakeSkillLoader)
     monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
     monkeypatch.setattr(main_module, "Compactor", _FakeCompactor)
@@ -1115,7 +1117,7 @@ def test_run_stdio_session_passes_interaction_logger_when_debug_enabled(
         main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
     )
     monkeypatch.setattr(main_module, "_initial_messages", lambda *_args, **_kwargs: [])
-    monkeypatch.setattr(main_module, "get_tools", lambda: [])
+    monkeypatch.setattr(main_module, "get_tools", lambda *_a, **_kw: [])
     monkeypatch.setattr(main_module, "SkillLoader", _FakeSkillLoader)
     monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
     monkeypatch.setattr(main_module, "Compactor", lambda **_kwargs: object())

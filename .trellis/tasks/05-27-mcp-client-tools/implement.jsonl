@@ -1,1 +1,9 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/05-27-mcp/prd.md", "reason": "父任务完整 PRD：PR2 实现范围 = Client/Manager/Registry/集成；命名空间 mcp__<server>__<tool>；启动并发 + 单个 server 启动超时跳过；DEFAULT 模式 ask_user 走现有 PermissionGuard（无危险模式检测）；Out of Scope（resources/prompts/multimodal/atexit/REPL 命令）留给后续 PR"}
+{"file": ".trellis/tasks/05-27-mcp/research/mcp-protocol-spec.md", "reason": "initialize 握手字段（protocolVersion / capabilities / clientInfo）；tools/list 与 tools/call 的 request/response schema；双层错误模型（JSON-RPC error vs result.isError）；content array 五种内容块"}
+{"file": ".trellis/tasks/05-27-mcp/research/json-rpc-edge-cases.md", "reason": "并发 response 路由用 dict[int, Future]（PR1 base.Transport 已实现，PR2 直接复用）；reader 退出全部 future set_exception；progressToken 与 notifications/cancelled v1 不实现"}
+{"file": ".trellis/tasks/05-27-mcp/research/popular-mcp-servers.md", "reason": "schema 双方言（Zod $ref+$defs / Pydantic Optional→anyOf:[T,null]）；registry 注入需要兼容；高级 JSON Schema 关键字（oneOf/allOf/not/patternProperties）零出现，可忽略"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新增 client.py/manager.py/registry.py 都落在 src/mcp/；与 src/core/tools.py::get_tools/get_handlers 的集成模式参考其他 DEFERRED_TOOLS（subagent/skills）注入路径"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "新增 MCPHandshakeError/MCPCallError 加到 errors.py；isError:true 必须降级为带 Error: 前缀的文本，不上抛；JSON-RPC error 转 MCP Error: <code> <message>"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "MCP 启动/失败/重启走 AgentConsole 通知，不要 print；后台 reader 异常走 logger.warning"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Python 3.12+；from __future__ import annotations；ruff/pytest 全绿；每个新模块都需要 pytest 覆盖（握手/超时/调用/错误/名称冲突）"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "MCPManager 是运行时状态（不持久化）；server 状态枚举（starting/running/unhealthy/stopped）只在内存里追踪"}

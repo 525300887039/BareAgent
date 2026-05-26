@@ -13,6 +13,7 @@ from src.main import (
     TracingConfig,
     UIConfig,
 )
+from src.mcp import MCPConfig
 from src.provider.base import ThinkingConfig
 
 
@@ -31,4 +32,5 @@ def make_test_config(tmp_path: Path) -> Config:
         path=tmp_path / "config.toml",
         debug=DebugConfig(),
         tracing=TracingConfig(),
+        mcp=MCPConfig(),
     )

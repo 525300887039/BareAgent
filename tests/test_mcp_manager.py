@@ -1,0 +1,179 @@
+"""Tests for src.mcp.manager — concurrent startup, status tracking."""
+
+from __future__ import annotations
+
+import threading
+import time
+
+from src.mcp.config import MCPConfig, MCPServerConfig
+from src.mcp.errors import MCPHandshakeError
+from src.mcp.manager import MCPManager, ServerStatus
+from src.mcp.protocol import Response, decode_message
+from src.mcp.transport.base import Transport
+
+
+class _ControllableTransport(Transport):
+    """Transport that fakes handshake with a configurable delay before reply."""
+
+    def __init__(
+        self,
+        *,
+        reply_delay: float = 0.0,
+        fail: bool = False,
+    ) -> None:
+        super().__init__()
+        self._reply_delay = reply_delay
+        self._fail = fail
+        self._started = False
+        self._closed = False
+
+    def start(self) -> None:
+        self._started = True
+
+    def send(self, message: str) -> None:
+        msg = decode_message(message)
+        from src.mcp.protocol import Request
+
+        if not isinstance(msg, Request):
+            return
+
+        def _reply() -> None:
+            if self._reply_delay:
+                time.sleep(self._reply_delay)
+            if self._closed:
+                return
+            response = Response(
+                id=msg.id,
+                result={
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "fake", "version": "1.0"},
+                },
+            )
+            self._route_response(response)
+
+        if msg.method == "initialize" and self._fail:
+            self._route_response(
+                Response(
+                    id=msg.id,
+                    result=None,
+                    error=__import__(
+                        "src.mcp.protocol", fromlist=["ErrorObject"]
+                    ).ErrorObject(code=-32603, message="nope"),
+                )
+            )
+            return
+
+        if msg.method == "initialize":
+            threading.Thread(target=_reply, daemon=True).start()
+
+    def close(self) -> None:
+        self._closed = True
+        self._fail_all_pending("controllable transport closed")
+
+    def is_alive(self) -> bool:
+        return self._started and not self._closed
+
+
+def _patch_construct_transport(
+    manager: MCPManager, transports: dict[str, Transport]
+) -> None:
+    def _factory(server: MCPServerConfig) -> Transport:
+        return transports[server.name]
+
+    manager._construct_transport = _factory  # type: ignore[assignment]
+
+
+def test_start_all_parallel_with_one_slow_server_marks_it_unhealthy() -> None:
+    fast_cfg = MCPServerConfig(
+        name="fast", transport="stdio", command=["echo"], start_timeout=2.0
+    )
+    slow_cfg = MCPServerConfig(
+        name="slow", transport="stdio", command=["echo"], start_timeout=0.2
+    )
+    transports = {
+        "fast": _ControllableTransport(reply_delay=0.0),
+        "slow": _ControllableTransport(reply_delay=1.0),  # > timeout
+    }
+    manager = MCPManager(MCPConfig(servers=[fast_cfg, slow_cfg]))
+    _patch_construct_transport(manager, transports)
+
+    start = time.monotonic()
+    manager.start_all()
+    elapsed = time.monotonic() - start
+
+    # Boot was parallel: the slow timeout (0.2) caps the runtime, not blocking.
+    assert elapsed < 2.0
+
+    assert manager.get_status("fast") == ServerStatus.RUNNING
+    assert manager.get_status("slow") == ServerStatus.UNHEALTHY
+
+    fast_client = manager.get_client("fast")
+    slow_client = manager.get_client("slow")
+    assert fast_client is not None
+    assert slow_client is None  # unhealthy → no client
+
+    manager.close_all()
+
+
+def test_get_client_returns_none_for_unhealthy_or_missing() -> None:
+    fail_cfg = MCPServerConfig(name="fail", transport="stdio", command=["x"])
+    manager = MCPManager(MCPConfig(servers=[fail_cfg]))
+    _patch_construct_transport(manager, {"fail": _ControllableTransport(fail=True)})
+
+    manager.start_all()
+
+    assert manager.get_status("fail") == ServerStatus.UNHEALTHY
+    assert manager.get_client("fail") is None
+    assert manager.get_client("never-configured") is None
+
+    manager.close_all()
+
+
+def test_iter_running_clients_only_yields_running_servers() -> None:
+    ok = MCPServerConfig(name="ok", transport="stdio", command=["echo"])
+    bad = MCPServerConfig(name="bad", transport="stdio", command=["echo"])
+    transports = {
+        "ok": _ControllableTransport(),
+        "bad": _ControllableTransport(fail=True),
+    }
+    manager = MCPManager(MCPConfig(servers=[ok, bad]))
+    _patch_construct_transport(manager, transports)
+    manager.start_all()
+
+    running = list(manager.iter_running_clients())
+    assert [name for name, _ in running] == ["ok"]
+    manager.close_all()
+
+
+def test_close_all_marks_all_servers_stopped() -> None:
+    ok = MCPServerConfig(name="ok", transport="stdio", command=["echo"])
+    manager = MCPManager(MCPConfig(servers=[ok]))
+    _patch_construct_transport(manager, {"ok": _ControllableTransport()})
+    manager.start_all()
+    assert manager.get_status("ok") == ServerStatus.RUNNING
+
+    manager.close_all()
+    assert manager.get_status("ok") == ServerStatus.STOPPED
+
+
+def test_handshake_handshake_error_is_caught_and_warned(monkeypatch) -> None:
+    """Even MCPHandshakeError surfaced from client.start is caught."""
+    cfg = MCPServerConfig(name="boom", transport="stdio", command=["echo"])
+    manager = MCPManager(MCPConfig(servers=[cfg]))
+
+    def _bad_transport(server: MCPServerConfig) -> Transport:  # noqa: ARG001
+        class _Broken(Transport):
+            def start(self) -> None:
+                raise MCPHandshakeError("transport refused")
+
+            def send(self, message: str) -> None: ...
+            def close(self) -> None: ...
+            def is_alive(self) -> bool:
+                return False
+
+        return _Broken()
+
+    manager._construct_transport = _bad_transport  # type: ignore[assignment]
+    manager.start_all()
+    assert manager.get_status("boom") == ServerStatus.UNHEALTHY
