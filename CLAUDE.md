@@ -94,3 +94,5 @@ CLI 参数：`--provider`、`--model`、`--config`。
 - 提交信息遵循 Conventional Commits：`Fix:`、`Feat:`、`Refactor:`、`Test:`、`Docs:`
 - 新增行为需在 `tests/` 中补充 pytest 测试
 - 保持实现简洁，避免过度设计
+
+详细工程约定见 `.trellis/spec/backend/`（trellis 自动注入到所有 sub-agent 上下文）。
