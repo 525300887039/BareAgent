@@ -13,9 +13,12 @@
 
 ### 传输层
 - 抽象出 `Transport` ABC，含 `send_request` / `receive_response` / `close` 接口
-- `StdioTransport`：subprocess + stdin/stdout pipe + 后台读取线程
-- `HttpSseTransport`：httpx Client + Server-Sent Events 解析（请求走 POST，订阅走 SSE）
-- 配置 `transport = "stdio"` 或 `"http"` 切换；HTTP 模式额外读取 `url`、`headers`
+- `StdioTransport`：subprocess + stdin/stdout pipe + 后台读取线程；framing = newline-delimited JSON
+- `HttpLegacyTransport`：MCP 2024-11-05 双端点（GET stream + POST）；首个 SSE event `endpoint` 携带 POST URI
+- `HttpStreamableTransport`：MCP 2025-03-26 单端点；POST 响应可能是 JSON 也可能是 SSE（`event: message`）
+- HTTP transport 协议版本通过 `initialize` 握手协商；客户端宣告 `2025-06-18` 但能 fallback 到 server 返回的版本
+- HTTP 必带 `MCP-Protocol-Version` header；支持 `Authorization` header（v1 仅 Bearer token，OAuth flow 待 v2）
+- 配置 `transport = "stdio" | "http_legacy" | "http_streamable"` 三选一；HTTP 模式额外读取 `url`、`headers`
 
 ### 命名空间
 - 所有 MCP 工具按 `mcp__<server>__<tool>` 命名注入 BareAgent 工具列表
@@ -165,9 +168,29 @@ src/mcp/
 
 ## Research References
 
-_v1 实施前应通过 trellis-research（或在本会话无 sub-agent 时改为 general-purpose / inline）拉取以下主题，写入 research/：_
+✅ 已完成（2026-05-27）：
 
-- `research/mcp-protocol-spec.md` — MCP 最新规范要点（initialize / tools / resources / prompts 各方法 schema）
-- `research/json-rpc-edge-cases.md` — JSON-RPC 2.0 错误码、批处理、id 路由的最佳实践
-- `research/popular-mcp-servers.md` — 主流 MCP server 的工具/资源/提示词模式抽样，验证 schema 转换的假设
-- `research/sse-parsing-minimal.md` — SSE 协议的最小可用解析实现
+- [`research/mcp-protocol-spec.md`](research/mcp-protocol-spec.md) — `inputSchema` 是标准 JSON Schema；双层错误模型（JSON-RPC error vs `result.isError`）；content array 5 种内容块
+- [`research/json-rpc-edge-cases.md`](research/json-rpc-edge-cases.md) — stdio = newline-delimited JSON；并发用 `dict[int, Future]`；2025-06-18 移除 batch；进程死亡 EOF + `proc.wait()` + `BrokenPipeError` 三路
+- [`research/popular-mcp-servers.md`](research/popular-mcp-servers.md) — Schema 两派系（Zod / Pydantic）；`$ref`/`anyOf`/`enum`/`default` 必撑，其它高级关键字零出现；Resource URI 自定义 scheme
+- [`research/sse-parsing-minimal.md`](research/sse-parsing-minimal.md) — SSE 解析 ~30 行 stdlib；MCP HTTP 实际有两个 transport 版本（legacy 2024-11-05 + Streamable 2025-03-26）
+
+## Research-driven Refinements
+
+研究后对原 Requirements / Out of Scope 的调整：
+
+### 新增 Requirements
+- **Schema 转换器双方言兼容**：处理 Zod 派的 `$ref`+`$defs`、Pydantic 派的 `Optional → anyOf:[T,null]`；正确识别两种 Optional 表达
+- **stdio framing**：newline-delimited JSON（不是 LSP 的 Content-Length）
+- **并发 response 路由**：`dict[int, Future]` 模式；reader 退出时所有 pending future `set_exception`
+- **`isError: true` 必须降级**：不上抛 exception，保留 content 文本回 LLM（让 LLM 自我重试）
+- **process death 检测**：EOF + `proc.wait()` + `BrokenPipeError` 三路侦测
+- **stdout 容忍 banner**：server 启动时输出的非 JSON 行（如 npm install warning）warn 并跳过、不断连
+- **content block 拍扁策略**：text 串联、image 转 provider 原生块、audio / embedded_resource / resource_link 序列化为带 URI/size 的文本占位（v1 不全保真）
+
+### 新增 Out of Scope
+- **JSON-RPC batch 请求**：MCP 2025-06-18 已移除
+- **高级 JSON Schema 关键字**：`oneOf` / `allOf` / `not` / `if-then-else` / `patternProperties`（主流 server 零出现）
+- **Client-side server-callable capabilities**：sampling / elicitation / roots——client capability 声明为空
+- ~~HTTP legacy transport (2024-11-05)~~ → **已撤回**：v1 同时支持 legacy 2024-11-05 (GET stream + POST) 和 Streamable HTTP 2025-03-26 (单端点)，确保能连所有现存公网 server。HTTP transport 内部按 server 协商的协议版本分派
+- **Audio / embedded_resource / resource_link 的原生回传**：v1 降级为占位文本
