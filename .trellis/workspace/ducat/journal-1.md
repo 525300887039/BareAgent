@@ -176,3 +176,36 @@ PR4 落地 MCP 权限治理三件套：PermissionGuard MCP 工具四模式分支
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: PR5: MCP 多模态结果回传 + provider 适配
+
+**Date**: 2026-05-27
+**Task**: PR5: MCP 多模态结果回传 + provider 适配
+**Branch**: `main`
+
+### Summary
+
+PR5 落地 MCP image 端到端通路：_tool_result 双签名（str | list[dict]）向后兼容；registry 新增 _to_content_blocks 规范化 5 种 MCP content type（image mime 白名单 png/jpeg/gif/webp + 缺字段降级占位文本不抛）；handler 双契约成功 list[dict] / 错误 string；Anthropic provider image 透传零转换（内部格式 = Anthropic 原生格式）；OpenAI provider image 提升为紧跟 user message with image_url data URL（OpenAI tool role 不接受 image_url 的 workaround）。删除冗余 _flatten_result（PR2/3 内联后无引用，git archaeology 确认安全）。33 个新测试，pytest 445 passed / 3 skipped / ruff 全绿。Spec 沉淀 2 项结构性约定：error-handling.md 多模态 handler 双契约 + directory-structure.md 跨 provider 数据抽象选最严格原生格式（解释为何内部 image 选 Anthropic 格式而非中性格式）。父任务 mcp 进度 [4/6 done]，仅剩 PR6（hardening / E2E / docs / atexit / payload 截断 / /mcp reload 增强）。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b8da7b7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

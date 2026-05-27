@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
+- **Total Sessions**: 6
 - **Last Active**: 2026-05-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~178 | Active |
+| `journal-1.md` | ~211 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-05-27 | PR5: MCP 多模态结果回传 + provider 适配 | `b8da7b7` | `main` |
 | 5 | 2026-05-27 | PR4: MCP 权限 + 子代理隔离 + REPL 命令 | `ba7d0f5` | `main` |
 | 4 | 2026-05-27 | PR3: MCP Resources + Prompts 支持 | `6ea295e` | `main` |
 | 3 | 2026-05-27 | PR2: MCP Client + Manager + tools 注入 | `1c84fa8` | `main` |
