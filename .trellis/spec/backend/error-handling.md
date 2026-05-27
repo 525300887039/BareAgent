@@ -136,6 +136,49 @@ Hard validation failures (programmer error, not user/LLM error) still raise — 
 
 ---
 
+## Multimodal handlers: success returns `list[dict]`, errors return `str`
+
+`_tool_result` in `src/core/loop.py` accepts both shapes:
+
+```python
+def _tool_result(
+    tool_use_id: str,
+    output: str | list[dict[str, Any]],
+    *,
+    is_error: bool = False,
+) -> dict[str, Any]:
+    if isinstance(output, list):
+        content: Any = output                    # list of content blocks, passed through
+    else:
+        content = stringify(output)              # legacy text path
+    ...
+```
+
+A handler that wants to emit multimodal output (image, etc.) returns a `list[dict]` of provider-neutral content blocks on the **success** path. Any error — unhealthy server, JSON-RPC error, `isError: true`, missing argument — still returns a `str` starting with `Error:`. The two shapes are not interchangeable:
+
+```python
+# Correct — multimodal handler in src/mcp/registry.py
+def _make_handler(...):
+    def handler(**kwargs) -> str | list[dict[str, Any]]:
+        try:
+            result = client.call_tool(tool_name, kwargs)
+        except MCPCallError as exc:
+            return str(exc)                       # error → string
+        if result.get("isError"):
+            return f"Error: {_flatten_content(result.get('content', []))}"  # isError → string
+        return _to_content_blocks(result.get("content", []))   # success → list[dict]
+    return handler
+```
+
+**Why the split**: providers serialize the two cases differently. Anthropic puts a `list[dict]` straight into `tool_result.content`; OpenAI lifts image blocks out into a follow-up `user` message (`role: "tool"` cannot carry `image_url`). Errors don't need that machinery — they're plain text the LLM reads and reacts to. Returning `list[dict]` for an error would force every provider's error path through the multimodal lift logic for no reason, and it would also defeat the `_tool_result(..., is_error=True)` flag that downstream consumers use to filter error noise.
+
+**When adding a new multimodal handler** (audio, embedded resource passthrough, image generation, etc.):
+- Success path: return `list[dict]`; normalize foreign formats (e.g. MCP image → Anthropic-native shape) at the registry boundary, not in the provider.
+- Error path: catch the predictable failures and return `Error: <message>` string. Let the loop's blanket `except Exception` cover the unpredictable ones.
+- Do not mix shapes inside one path (no half-text half-list returns).
+
+---
+
 ## Provider failures surface as `LLMCallError` with the original cause attached
 
 `src/core/loop.py`:

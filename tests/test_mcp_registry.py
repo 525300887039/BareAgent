@@ -84,6 +84,7 @@ def test_build_schemas_injects_namespaced_tools() -> None:
 
 
 def test_build_handlers_forwards_text_content() -> None:
+    """PR5: success path returns ``list[dict]`` of content blocks (text-only here)."""
     client = MagicMock()
     client.list_tools.return_value = [
         {"name": "echo", "description": "", "inputSchema": {"type": "object"}}
@@ -100,7 +101,10 @@ def test_build_handlers_forwards_text_content() -> None:
     handlers = build_mcp_handlers(manager)
     assert "mcp__srv__echo" in handlers
     result = handlers["mcp__srv__echo"](anything="x")
-    assert result == "hello \nworld"
+    assert result == [
+        {"type": "text", "text": "hello "},
+        {"type": "text", "text": "world"},
+    ]
     client.call_tool.assert_called_once_with("echo", {"anything": "x"})
 
 
@@ -120,7 +124,12 @@ def test_handler_returns_error_string_when_server_unhealthy() -> None:
     assert "srv" in out
 
 
-def test_handler_translates_non_text_blocks_to_placeholder() -> None:
+def test_handler_returns_multimodal_blocks_on_success() -> None:
+    """PR5: tools/call success path returns the multimodal ``list[dict]`` shape.
+
+    The legacy ``[<type> omitted: PR5]`` string degradation only kicks in on
+    error / ``isError`` paths now; success keeps the structured content.
+    """
     client = MagicMock()
     client.list_tools.return_value = [
         {"name": "art", "description": "", "inputSchema": {"type": "object"}}
@@ -137,9 +146,16 @@ def test_handler_translates_non_text_blocks_to_placeholder() -> None:
     handler = build_mcp_handlers(manager)["mcp__s__art"]
 
     out = handler()
-    assert "label:" in out
-    assert "[image omitted: PR5]" in out
-    assert "[audio omitted: PR5]" in out
+    assert isinstance(out, list)
+    assert out[0] == {"type": "text", "text": "label:"}
+    assert out[1] == {
+        "type": "image",
+        "source": {"type": "base64", "media_type": "image/png", "data": "ZmFrZQ=="},
+    }
+    assert out[2] == {
+        "type": "text",
+        "text": "[Audio omitted: not supported by current providers]",
+    }
 
 
 def test_handler_adds_error_prefix_on_is_error_true() -> None:
@@ -334,7 +350,8 @@ def test_resource_list_handler_returns_error_when_server_unhealthy() -> None:
     assert "fs" in out
 
 
-def test_resource_read_handler_success_flattens_text_content() -> None:
+def test_resource_read_handler_success_returns_content_blocks() -> None:
+    """PR5: resources/read success path returns ``list[dict]`` content blocks."""
     capable = _resource_capable_client()
     capable.read_resource.return_value = {
         "contents": [
@@ -347,11 +364,15 @@ def test_resource_read_handler_success_flattens_text_content() -> None:
     handler = build_mcp_handlers(manager)["mcp__fs__resource_read"]
 
     out = handler(uri="file:///a.txt")
-    assert out == "line one\nline two"
+    assert out == [
+        {"type": "text", "text": "line one"},
+        {"type": "text", "text": "line two"},
+    ]
     capable.read_resource.assert_called_once_with("file:///a.txt")
 
 
-def test_resource_read_handler_translates_blob_to_placeholder() -> None:
+def test_resource_read_handler_translates_unknown_kind_to_placeholder() -> None:
+    """Unknown block kinds (e.g. legacy ``blob``) degrade to a text placeholder."""
     capable = _resource_capable_client()
     capable.read_resource.return_value = {
         "contents": [
@@ -368,8 +389,9 @@ def test_resource_read_handler_translates_blob_to_placeholder() -> None:
     handler = build_mcp_handlers(manager)["mcp__fs__resource_read"]
 
     out = handler(uri="file:///a.bin")
-    assert "preamble" in out
-    assert "[blob omitted: PR5]" in out
+    assert isinstance(out, list)
+    assert out[0] == {"type": "text", "text": "preamble"}
+    assert out[1] == {"type": "text", "text": "[Unknown content block: blob]"}
 
 
 def test_resource_read_handler_prefixes_is_error_payload() -> None:

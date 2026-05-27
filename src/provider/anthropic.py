@@ -185,12 +185,39 @@ class AnthropicProvider(BaseLLMProvider):
         if isinstance(content, list):
             blocks: list[dict[str, Any]] = []
             for item in content:
-                if isinstance(item, dict) and item.get("type") == "text":
-                    blocks.append({"type": "text", "text": item.get("text", "")})
-                else:
+                if not isinstance(item, dict):
                     blocks.append(
                         {"type": "text", "text": self._stringify_content(item)}
                     )
+                    continue
+                item_type = item.get("type")
+                if item_type == "text":
+                    blocks.append({"type": "text", "text": item.get("text", "")})
+                    continue
+                if item_type == "image":
+                    # BareAgent's internal image shape is already Anthropic-native.
+                    source = item.get("source")
+                    if (
+                        isinstance(source, dict)
+                        and source.get("type") == "base64"
+                        and source.get("data")
+                    ):
+                        blocks.append(
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": source.get("media_type", "image/png"),
+                                    "data": source.get("data", ""),
+                                },
+                            }
+                        )
+                        continue
+                    blocks.append(
+                        {"type": "text", "text": self._stringify_content(item)}
+                    )
+                    continue
+                blocks.append({"type": "text", "text": self._stringify_content(item)})
             return blocks
         return self._stringify_content(content)
 

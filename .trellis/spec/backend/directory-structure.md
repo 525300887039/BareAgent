@@ -66,6 +66,35 @@ If a change touches more than one of the above, decompose it. A handler that nee
 
 ---
 
+## Cross-provider data abstractions: use the most restrictive provider's native shape
+
+When a piece of data needs to flow through `core/loop.py` and end up in *every* provider's wire format, the internal representation is **the most restrictive provider's native shape**, not a synthesized neutral format.
+
+Concrete example — multimodal `image` content blocks (introduced in the MCP PR5 work):
+
+```python
+# Internal BareAgent image block — Anthropic-native shape:
+{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "<b64>"}}
+```
+
+This is what `src/mcp/registry.py::_to_content_blocks` emits, what `src/core/loop.py::_tool_result` stores, and what `src/provider/anthropic.py` passes through verbatim. The OpenAI adapter maps it forward (`source.media_type` + `source.data` → `data:<mime>;base64,<data>`); a future Gemini adapter would do the same.
+
+**Why not a neutral shape like `{type:"image", mime, data}`?** Because Anthropic accepts the narrowest set of image attributes (`base64` source with `media_type` in a tight whitelist). A neutral internal shape would force *bidirectional* translation — every provider has to map both into and out of it. Choosing the strictest provider's native format means:
+
+- **Anthropic path**: zero conversion. Bytes go straight through.
+- **All other providers**: one direction only — internal → provider native.
+- **Reverse direction never needed**: providers don't synthesize new content blocks back into the message stream; that comes from MCP servers via `registry.py`.
+
+**Rule when adding a new modality** (audio, video, structured documents, etc.):
+1. Survey all current providers' native shapes for the modality.
+2. Pick the **most restrictive** as the internal format. "Restrictive" means: smallest field set, narrowest type unions, strictest mime/encoding whitelist.
+3. Normalize at the data-source boundary (e.g. MCP `registry.py`, file readers). Never put translation logic inside `provider/*`.
+4. Each provider adapter maps internal → provider-native one-way.
+
+**Anti-pattern**: introducing a neutral `{type, mime, data}` abstraction and writing `from_internal()` / `to_internal()` on every provider. That doubles the surface area and creates round-trip ambiguity when fields don't line up (e.g. Anthropic's `media_type` vs OpenAI's MIME-in-URL).
+
+---
+
 ## Naming conventions
 
 - Files are `snake_case.py`; classes are `PascalCase`; functions are `snake_case`. Single-underscore prefix marks intra-module helpers (e.g. `_validate_agent_name` in `src/team/mailbox.py`).

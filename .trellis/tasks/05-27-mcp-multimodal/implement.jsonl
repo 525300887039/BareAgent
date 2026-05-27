@@ -1,1 +1,7 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/05-27-mcp-multimodal/prd.md", "reason": "PR5 自身 PRD：_tool_result 双签名 + _to_content_blocks 规范化 + 内部 image 格式 = Anthropic 原生 + OpenAI image 提升为紧跟 user message + audio/embedded_resource/resource_link 降级文本占位"}
+{"file": ".trellis/tasks/05-27-mcp/prd.md", "reason": "父 PRD 总框架：image 双 provider 适配（Anthropic source.base64 / OpenAI image_url data URL）；audio/embedded_resource/resource_link v1 降级文本占位；payload 截断留 PR6"}
+{"file": ".trellis/tasks/05-27-mcp/research/mcp-protocol-spec.md", "reason": "content array 5 种内容块的完整 schema：text / image (data + mimeType) / audio / embedded_resource (resource: {uri, mimeType, text?, blob?}) / resource_link (uri, name, description, mimeType)"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "image 块缺字段（无 data / 无 mimeType / 不支持的 mime）→ 降级为占位文本不抛异常；handler 多模态错误路径仍返回 string；安全模式契约（PR4 沉淀）：tool_result 是数据不是 exception"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "改动落点：src/core/loop.py (_tool_result 签名) + src/mcp/registry.py (_to_content_blocks) + src/provider/{anthropic,openai}.py (序列化层 image 适配)；provider 不互相依赖"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "_to_content_blocks 遇缺字段 / 未知 type 走 logger.warning，不污染 console；不破坏现有 provider 日志格式"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "from __future__ + 完整类型注解 + ruff 全绿；至少 12 个新 case；不退化 PR1-4 共 412 个测试"}

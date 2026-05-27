@@ -402,13 +402,7 @@ class OpenAIProvider(BaseLLMProvider):
         for block in content:
             if block.get("type") == "tool_result":
                 _flush_text()
-                converted.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": block.get("tool_use_id", ""),
-                        "content": self._stringify_content(block.get("content", "")),
-                    }
-                )
+                converted.extend(self._convert_tool_result_for_openai(block))
                 continue
             if block.get("type") == "text":
                 pending_text.append(str(block.get("text", "")))
@@ -417,6 +411,85 @@ class OpenAIProvider(BaseLLMProvider):
 
         _flush_text()
         return converted
+
+    def _convert_tool_result_for_openai(
+        self,
+        block: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Convert one tool_result block into one or more chat-completion messages.
+
+        - ``str`` content keeps the legacy single ``tool`` message shape.
+        - ``list`` content (multimodal MCP path) puts text into the ``tool``
+          message and lifts image blocks into a follow-up ``user`` message,
+          because OpenAI's ``tool`` role does not accept ``image_url`` parts.
+        """
+        tool_use_id = block.get("tool_use_id", "")
+        raw_content = block.get("content", "")
+        if not isinstance(raw_content, list):
+            return [
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_use_id,
+                    "content": self._stringify_content(raw_content),
+                }
+            ]
+
+        text_parts: list[str] = []
+        image_blocks: list[dict[str, Any]] = []
+        for item in raw_content:
+            if not isinstance(item, dict):
+                text_parts.append(self._stringify_content(item))
+                continue
+            item_type = item.get("type")
+            if item_type == "text":
+                text = item.get("text", "")
+                if isinstance(text, str):
+                    text_parts.append(text)
+                continue
+            if item_type == "image":
+                source = item.get("source")
+                if not isinstance(source, dict) or source.get("type") != "base64":
+                    text_parts.append(self._stringify_content(item))
+                    continue
+                data = source.get("data", "")
+                if not isinstance(data, str) or not data:
+                    text_parts.append(self._stringify_content(item))
+                    continue
+                mime = source.get("media_type", "image/png")
+                image_blocks.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime};base64,{data}"},
+                    }
+                )
+                continue
+            text_parts.append(self._stringify_content(item))
+
+        tool_text = "\n".join(part for part in text_parts if part)
+        if not tool_text and image_blocks:
+            tool_text = "[Tool returned image(s); see next message]"
+        messages: list[dict[str, Any]] = [
+            {
+                "role": "tool",
+                "tool_call_id": tool_use_id,
+                "content": tool_text,
+            }
+        ]
+        if image_blocks:
+            count = len(image_blocks)
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"[Tool returned {count} image(s)]",
+                        },
+                        *image_blocks,
+                    ],
+                }
+            )
+        return messages
 
     def _convert_assistant_message(self, content: Any) -> dict[str, Any]:
         if isinstance(content, str):

@@ -274,12 +274,27 @@ def _get_stream_printer(console: UIProtocol | None) -> StreamProtocol:
 
 
 def _tool_result(
-    tool_use_id: str, output: Any, *, is_error: bool = False
+    tool_use_id: str,
+    output: str | list[dict[str, Any]] | Any,
+    *,
+    is_error: bool = False,
 ) -> dict[str, Any]:
+    """Wrap a handler output into a tool_result block.
+
+    The ``output`` may be:
+    - ``str`` — used as-is.
+    - ``list[dict]`` — passed through verbatim (multimodal MCP path: text + image blocks).
+    - anything else — coerced via :func:`stringify`.
+    """
+    content: Any
+    if isinstance(output, list):
+        content = output
+    else:
+        content = stringify(output)
     result: dict[str, Any] = {
         "type": "tool_result",
         "tool_use_id": tool_use_id,
-        "content": stringify(output),
+        "content": content,
     }
     if is_error:
         result["is_error"] = True

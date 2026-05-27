@@ -1,1 +1,6 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/05-27-mcp-multimodal/prd.md", "reason": "验收：_tool_result 双签名向后兼容 + _to_content_blocks 5 种 type 处理 + Anthropic 原生格式透传 + OpenAI image 提升 + 占位降级；payload 截断/能力检测/Gemini/atexit/E2E 严格 Out of Scope"}
+{"file": ".trellis/tasks/05-27-mcp/prd.md", "reason": "父 PRD 总方针：image 双 provider 适配 + audio 等降级文本；内部抽象选 Anthropic 原生格式作 BareAgent 标准"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "校验 image 块缺字段降级为占位文本不抛；handler 错误路径仍返回 string；PR4 沉淀的 safe modes 约定不被破坏"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "校验改动只落在 core/loop + mcp/registry + provider/{anthropic,openai}；不动 mcp/{client,manager,transport,protocol,_sse,config,errors}.py / permission/* / planning/agent_types.py / main.py"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "校验缺字段/未知 type 走 logger.warning；没有 print() 污染 console"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "ruff/pytest 全绿；类型注解齐全；至少 12 个新 case"}
