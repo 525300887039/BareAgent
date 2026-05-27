@@ -110,3 +110,36 @@ PR2 落地 BareAgent MCP 客户端 tools 链路：src/mcp/client.py (握手 + to
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: PR3: MCP Resources + Prompts 支持
+
+**Date**: 2026-05-27
+**Task**: PR3: MCP Resources + Prompts 支持
+**Branch**: `main`
+
+### Summary
+
+PR3 落地 MCP resources/prompts：MCPClient 解析 server_capabilities + 按 capability 主动跳过 prompts/list（不靠 method_not_found 降级），新增 has_capability/list_prompts/get_prompt/list_resources/read_resource；prompt name 走 [a-zA-Z0-9_-]+ regex 过滤防 REPL 分隔符冲突。registry 抽公共 _flatten_content；按 resources capability 门控注入 mcp__<server>__resource_list + resource_read。main.py REPL 加 /mcp:<server>:<prompt> key=value 路由，prompts/get messages 注入 transcript，末位 user 触发下一轮 agent_loop / 末位 assistant 仅状态反馈。38 个新 case，pytest 380 passed / 3 skipped / ruff 全绿。禁动文件 (loop/provider/permission/agent_types/transport/protocol/_sse/config/errors) git diff 为空。父任务 mcp 进度 [2/6 done]，PR4-6（权限+REPL+子代理隔离 / multimodal / hardening）留后续。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6ea295e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

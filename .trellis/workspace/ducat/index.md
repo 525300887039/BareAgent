@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 3
+- **Total Sessions**: 4
 - **Last Active**: 2026-05-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~112 | Active |
+| `journal-1.md` | ~145 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 4 | 2026-05-27 | PR3: MCP Resources + Prompts 支持 | `6ea295e` | `main` |
 | 3 | 2026-05-27 | PR2: MCP Client + Manager + tools 注入 | `1c84fa8` | `main` |
 | 2 | 2026-05-27 | MCP 客户端规划 + PR1 transport/protocol 落地 | `b9f64ff`, `2c57281`, `96fc962`, `deb27bb` | `main` |
 | 1 | 2026-05-27 | 接入 trellis 并完成 bootstrap 规范填充 | `7b15cb5`, `2e9e6e4`, `1aa668c`, `3fa5e52` | `main` |
