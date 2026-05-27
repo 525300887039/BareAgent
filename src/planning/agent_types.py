@@ -21,6 +21,11 @@ class AgentType:
     max_turns: int = 200
     allow_nesting: bool = True
     permission_mode: PermissionMode | None = None
+    # When False, ``filter_tools`` strips every ``mcp__*`` tool. Used by
+    # read-only agent types (explore / plan / code-review) to keep MCP side
+    # effects out of subagent contexts. Defaults to True for backwards
+    # compatibility with custom user-defined agent types.
+    mcp_tools_enabled: bool = True
 
 
 _READ_ONLY_DEFAULTS: dict[str, Any] = {
@@ -28,6 +33,7 @@ _READ_ONLY_DEFAULTS: dict[str, Any] = {
     "max_turns": 50,
     "allow_nesting": False,
     "permission_mode": PermissionMode.PLAN,
+    "mcp_tools_enabled": False,
 }
 
 BUILTIN_AGENT_TYPES: dict[str, AgentType] = {
@@ -108,6 +114,8 @@ def filter_tools(
         if denied is not None and name in denied:
             return False
         if strip_nesting and name == "subagent":
+            return False
+        if not agent_type.mcp_tools_enabled and name.startswith("mcp__"):
             return False
         return True
 

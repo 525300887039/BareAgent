@@ -19,6 +19,17 @@ class PermissionMode(Enum):
 
 _SHELLS = "bash|sh|zsh|dash|ksh|fish"
 
+_MCP_TOOL_PREFIX = "mcp__"
+# Preview limits for MCP ask prompts. MCP args are JSON, not shell text, and
+# servers can produce arbitrarily large strings (file blobs, long URLs). Cap
+# top-level string values so a single field can't flood the terminal.
+_MCP_PREVIEW_FIELD_LIMIT = 256
+
+
+def _is_mcp_tool(tool_name: str) -> bool:
+    """Return True if ``tool_name`` follows the ``mcp__<server>__<tool>`` namespace."""
+    return tool_name.startswith(_MCP_TOOL_PREFIX)
+
 
 class PermissionGuard:
     SAFE_TOOLS = {
@@ -80,6 +91,32 @@ class PermissionGuard:
             return False
         normalized_tool = tool_name.strip().lower()
         rule_subject = permission_rule_subject(normalized_tool, tool_input)
+        # MCP tools carry JSON args (not shell text), so DANGEROUS_PATTERNS
+        # are not applicable. Branch early on mode but still honour the
+        # generic allow/deny prefix rules (handled below via rule_subject).
+        if _is_mcp_tool(normalized_tool):
+            # PLAN mode rejects every MCP tool by policy — MCP servers have
+            # unknown side effects and are not in SAFE_TOOLS. This check runs
+            # before allow_rules so an allowlist in config.toml cannot punch
+            # holes through PLAN.
+            if self.mode == PermissionMode.PLAN:
+                return True
+            if rule_subject and self._match_rules(
+                self.deny_rules,
+                normalized_tool,
+                rule_subject,
+            ):
+                return True
+            if rule_subject and self._match_rules(
+                self.allow_rules,
+                normalized_tool,
+                rule_subject,
+            ):
+                return False
+            if self.mode == PermissionMode.AUTO:
+                return False
+            # DEFAULT: always ask for MCP tools.
+            return True
         if self.mode == PermissionMode.PLAN:
             return normalized_tool not in self.SAFE_TOOLS
         if normalized_tool == "bash":
@@ -116,6 +153,44 @@ class PermissionGuard:
         if normalized_tool == "write_file":
             return self.mode == PermissionMode.DEFAULT
         return True
+
+    def is_dangerous(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
+        """Return True if ``tool_name`` + ``tool_input`` match a known dangerous shell pattern.
+
+        DANGEROUS_PATTERNS encode shell-text heuristics (``rm -rf``,
+        ``git push --force``, ``DROP TABLE``...). They are intentionally
+        skipped for MCP tools, whose ``tool_input`` is JSON rather than a
+        shell command — applying shell regexes against JSON would produce
+        false positives without catching anything real.
+        """
+        normalized_tool = tool_name.strip().lower()
+        if _is_mcp_tool(normalized_tool):
+            return False
+        if normalized_tool == "bash":
+            cmd = str(tool_input.get("command", ""))
+            return any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS)
+        return False
+
+    def format_preview(self, tool_name: str, tool_input: dict[str, Any]) -> str:
+        """Return a human-readable JSON preview of ``tool_input`` for ask prompts.
+
+        Top-level string values longer than ``_MCP_PREVIEW_FIELD_LIMIT`` are
+        truncated with a ``... [truncated, N chars]`` suffix so a single huge
+        argument (file blob, long URL) cannot drown the terminal. Nested
+        structures are not recursively truncated — v1 keeps the rule simple.
+        """
+        if not isinstance(tool_input, dict) or not tool_input:
+            return json.dumps(tool_input, ensure_ascii=False, indent=2)
+        prepared: dict[str, Any] = {}
+        for key, value in tool_input.items():
+            if isinstance(value, str) and len(value) > _MCP_PREVIEW_FIELD_LIMIT:
+                prepared[key] = (
+                    value[:_MCP_PREVIEW_FIELD_LIMIT]
+                    + f"... [truncated, {len(value)} chars]"
+                )
+            else:
+                prepared[key] = value
+        return json.dumps(prepared, ensure_ascii=False, indent=2, default=str)
 
     def ask_user(self, call: Any) -> bool:
         if self.fail_closed:

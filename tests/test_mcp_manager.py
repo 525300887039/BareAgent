@@ -157,6 +157,99 @@ def test_close_all_marks_all_servers_stopped() -> None:
     assert manager.get_status("ok") == ServerStatus.STOPPED
 
 
+def test_summarize_returns_rows_in_config_order() -> None:
+    a = MCPServerConfig(name="alpha", transport="stdio", command=["echo"])
+    b = MCPServerConfig(name="beta", transport="stdio", command=["echo"])
+    transports = {
+        "alpha": _ControllableTransport(),
+        "beta": _ControllableTransport(fail=True),
+    }
+    manager = MCPManager(MCPConfig(servers=[a, b]))
+    _patch_construct_transport(manager, transports)
+    manager.start_all()
+
+    rows = manager.summarize()
+    assert [row["name"] for row in rows] == ["alpha", "beta"]
+    assert rows[0]["status"] == ServerStatus.RUNNING.value
+    assert rows[1]["status"] == ServerStatus.UNHEALTHY.value
+    # beta is unhealthy so its counts must be zero.
+    assert rows[1]["tool_count"] == 0
+    assert rows[1]["prompt_count"] == 0
+    assert rows[1]["has_resources"] is False
+
+    manager.close_all()
+
+
+def test_reload_replaces_running_client_with_fresh_instance() -> None:
+    cfg = MCPServerConfig(name="srv", transport="stdio", command=["echo"])
+    first = _ControllableTransport()
+    second = _ControllableTransport()
+    transports = {"srv": first}
+    manager = MCPManager(MCPConfig(servers=[cfg]))
+    _patch_construct_transport(manager, transports)
+    manager.start_all()
+    assert manager.get_status("srv") == ServerStatus.RUNNING
+    original_client = manager.get_client("srv")
+    assert original_client is not None
+
+    # Swap the transport so reload constructs a new client backed by it.
+    transports["srv"] = second
+    manager.reload("srv")
+
+    assert manager.get_status("srv") == ServerStatus.RUNNING
+    new_client = manager.get_client("srv")
+    assert new_client is not None
+    assert new_client is not original_client
+    # Old transport was closed; new one is alive.
+    assert first.is_alive() is False
+    assert second.is_alive() is True
+
+    manager.close_all()
+
+
+def test_reload_marks_server_unhealthy_when_handshake_fails() -> None:
+    cfg = MCPServerConfig(name="srv", transport="stdio", command=["echo"])
+    ok_transport = _ControllableTransport()
+    bad_transport = _ControllableTransport(fail=True)
+    transports = {"srv": ok_transport}
+    manager = MCPManager(MCPConfig(servers=[cfg]))
+    _patch_construct_transport(manager, transports)
+    manager.start_all()
+    assert manager.get_status("srv") == ServerStatus.RUNNING
+
+    transports["srv"] = bad_transport
+    try:
+        manager.reload("srv")
+    except Exception:
+        pass  # noqa: S110 — exception is expected; assert side-effects below
+    else:
+        raise AssertionError("reload should re-raise the handshake failure")
+
+    assert manager.get_status("srv") == ServerStatus.UNHEALTHY
+    assert manager.get_client("srv") is None
+
+    manager.close_all()
+
+
+def test_reload_unknown_server_raises_mcp_error() -> None:
+    cfg = MCPServerConfig(name="known", transport="stdio", command=["echo"])
+    manager = MCPManager(MCPConfig(servers=[cfg]))
+    _patch_construct_transport(manager, {"known": _ControllableTransport()})
+    manager.start_all()
+
+    from src.mcp.errors import MCPError
+
+    raised = False
+    try:
+        manager.reload("missing")
+    except MCPError as exc:
+        raised = True
+        assert "missing" in str(exc)
+    assert raised, "reload of unknown server must raise MCPError"
+
+    manager.close_all()
+
+
 def test_handshake_handshake_error_is_caught_and_warned(monkeypatch) -> None:
     """Even MCPHandshakeError surfaced from client.start is caught."""
     cfg = MCPServerConfig(name="boom", transport="stdio", command=["echo"])

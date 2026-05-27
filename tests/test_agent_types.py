@@ -90,3 +90,40 @@ def test_permission_guard_for_background_subagent_fails_closed() -> None:
 
     assert child.mode == PermissionMode.DEFAULT
     assert child.fail_closed is True
+
+
+def test_custom_agent_type_defaults_to_mcp_enabled() -> None:
+    """Backwards compatibility: user-defined types without the field stay True."""
+    custom = AgentType(name="custom", description="test")
+    assert custom.mcp_tools_enabled is True
+
+
+def test_read_only_builtins_disable_mcp_tools() -> None:
+    for type_name in ("explore", "plan", "code-review"):
+        assert BUILTIN_AGENT_TYPES[type_name].mcp_tools_enabled is False, type_name
+
+
+def test_general_purpose_keeps_mcp_tools_enabled() -> None:
+    assert BUILTIN_AGENT_TYPES["general-purpose"].mcp_tools_enabled is True
+
+
+def test_filter_tools_strips_mcp_tools_for_explore() -> None:
+    all_tools = [
+        {"name": "mcp__fetch__fetch"},
+        {"name": "mcp__github__create_issue"},
+        {"name": "read_file"},
+    ]
+    filtered = filter_tools(all_tools, BUILTIN_AGENT_TYPES["explore"])
+    assert [tool["name"] for tool in filtered] == ["read_file"]
+
+
+def test_filter_tools_keeps_mcp_tools_for_general_purpose() -> None:
+    all_tools = [
+        {"name": "mcp__fetch__fetch"},
+        {"name": "read_file"},
+    ]
+    filtered = filter_tools(all_tools, BUILTIN_AGENT_TYPES["general-purpose"])
+    assert {tool["name"] for tool in filtered} == {
+        "mcp__fetch__fetch",
+        "read_file",
+    }

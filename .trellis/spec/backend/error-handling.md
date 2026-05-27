@@ -62,6 +62,37 @@ def for_subagent(self, agent_type, *, background: bool = False) -> PermissionGua
 
 ---
 
+## Safe modes are not overridable by user allow rules
+
+`PermissionMode.PLAN` is a read-only contract the user explicitly opted into. That promise breaks the moment an allow rule can punch through the mode:
+
+```python
+# Wrong — allow rule short-circuits before PLAN is checked:
+def requires_confirm(self, tool_name, tool_input):
+    if self._matches_allow(tool_name, tool_input):
+        return False                       # ← user's "trusted" rule lets a write tool through in PLAN
+    if self.mode == PermissionMode.PLAN and tool_name not in self.SAFE_TOOLS:
+        return self._deny()
+```
+
+```python
+# Correct — mode-level safety checks come before per-tool allow rules:
+def requires_confirm(self, tool_name, tool_input):
+    if self.mode == PermissionMode.BYPASS:
+        return False                       # explicit escape hatch (named by the user)
+    if self.mode == PermissionMode.PLAN and tool_name not in self.SAFE_TOOLS:
+        return self._deny()                # PLAN denies regardless of allow rules
+    if self._matches_allow(tool_name, tool_input):
+        return False
+    ...
+```
+
+**Rule**: any safety-mode short-circuit (PLAN, plus any future mode whose semantics include "deny by default") must be evaluated *before* allow rules are consulted. Allow rules are a convenience for `DEFAULT` / `AUTO` ergonomics — not a credential the user can present to bypass a mode they explicitly opted into. `BYPASS` is the only intentional escape hatch, and it is opt-in by name.
+
+**Why this is structural, not per-tool**: in PR4 (MCP integration) an allow rule `mcp__github__` matched against `mcp__github__create_issue` would let a write-side MCP tool through even when the user had switched to PLAN. The same hole would re-open for any future tool family whose name happens to match a user's allow prefix. Fixing it once at the mode-check ordering is the only correct solution; per-tool exception lists rot.
+
+---
+
 ## Dangerous shell patterns are blocked *before* the handler runs
 
 `PermissionGuard.DANGEROUS_PATTERNS` (regex list in `guard.py`) covers `rm -rf`, `git push --force`, `git reset --hard`, `DROP TABLE`, shell-wrapper bypass (`bash -c`), absolute-path `rm`, `env`-prefix bypass, `curl | sh`, `mkfs`, `dd if=`, `find -delete`, `chmod 777`, etc. Any of these forces a permission prompt regardless of mode (except BYPASS).

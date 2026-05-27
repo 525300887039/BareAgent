@@ -1,1 +1,6 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/05-27-mcp-permission-repl/prd.md", "reason": "验收：四模式行为正确 + DANGEROUS_PATTERNS 不应用于 mcp__ + 三只读子代理双层防御 + /mcp 三命令生效 + reload 失败丢 client 标 UNHEALTHY；Out of Scope (per-server auto_approve / 配置热重载 / session 级 allow / multimodal / atexit) 严格不实现"}
+{"file": ".trellis/tasks/05-27-mcp/prd.md", "reason": "父 PRD 总方针校验：MCP 工具不应用 shell 危险模式 + 子代理隔离用单 bool 字段 + reload 不读 config.toml"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "reload 失败路径不抛到 REPL 主循环 + status 正确切换 + fail_closed 子代理拒绝 mcp__"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "校验 REPL 反馈全走 UIProtocol 无裸 print；非法子命令 / unknown server 走 logger 不污染 stdout"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "校验改动只落在 permission/planning/mcp/manager/main.py；不动 src/mcp/{client,registry,transport,protocol,_sse,config,errors}.py 与 src/core/loop.py 与 src/provider/*"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "ruff/pytest 全集合绿；类型注解齐全；至少 10 个新 case"}

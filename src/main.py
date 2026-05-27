@@ -455,6 +455,7 @@ _SLASH_COMMANDS = [
     "/resume",
     "/log",
     "/team",
+    "/mcp",
     "/mcp:",
 ]
 _HELP_TEXT = (
@@ -474,6 +475,7 @@ _HELP_TEXT = (
     "  /resume    Resume a previous session\n"
     "  /log       Debug log viewer (status|serve|open|<seq>)\n"
     "  /team      Manage team agents (list | spawn | send)\n"
+    "  /mcp       Manage MCP servers (status | list | reload <name>)\n"
     "  /mcp:      Invoke an MCP prompt (e.g. /mcp:server:prompt key=value)"
 )
 
@@ -518,13 +520,42 @@ def _install_stdio_permission_prompt(
         return
 
     def _ask(call: Any) -> bool:
-        allowed = ui_console.ask_permission(call.name, call.input)
+        preview_input = _build_permission_ask_payload(permission, call.name, call.input)
+        allowed = ui_console.ask_permission(call.name, preview_input)
         choice = ui_console.consume_permission_choice()
         if allowed and choice == "always":
             _persist_permission_allow_rule(permission, call.name, call.input)
         return allowed
 
     permission._ask_user_fn = _ask
+
+
+def _build_permission_ask_payload(
+    permission: PermissionGuard,
+    tool_name: str,
+    tool_input: Any,
+) -> Any:
+    """Truncate oversized top-level string fields when asking about an MCP tool.
+
+    Non-MCP tools fall back to the raw input dict so existing rendering and
+    permission rules stay unchanged. For MCP tools the guard's
+    ``format_preview`` rule (256 chars per top-level string) is applied by
+    rebuilding the dict — the console layer keeps doing the JSON pretty-print.
+    """
+    if not isinstance(tool_input, dict):
+        return tool_input
+    normalized = tool_name.strip().lower()
+    if not normalized.startswith("mcp__"):
+        return tool_input
+    # Reuse the guard's truncation rule by parsing the formatted JSON back into
+    # a dict — keeps the truncation logic in one place.
+    try:
+        truncated = json.loads(permission.format_preview(tool_name, tool_input))
+    except (TypeError, ValueError):
+        return tool_input
+    if not isinstance(truncated, dict):
+        return tool_input
+    return truncated
 
 
 def _generate_session_id(
@@ -1028,6 +1059,82 @@ def _handle_team_command(
 
 
 _MCP_PROMPT_USAGE = "Usage: /mcp:<server>:<prompt> [key=value ...]"
+_MCP_COMMAND_USAGE = "Usage: /mcp <status|list|reload <name>>"
+
+
+def _dispatch_mcp_command(
+    text: str,
+    *,
+    mcp_manager: MCPManager,
+    ui_console: AgentConsole,
+) -> None:
+    """Handle the space-prefixed ``/mcp <subcommand>`` REPL command.
+
+    Returns nothing — feedback goes through ``ui_console``. Unknown
+    subcommands or missing args become ``print_error`` lines and never raise.
+    """
+    tokens = text.split()
+    if len(tokens) <= 1:
+        ui_console.print_status(_MCP_COMMAND_USAGE)
+        return
+    sub = tokens[1]
+    if sub == "status":
+        rows = mcp_manager.summarize()
+        if not rows:
+            ui_console.print_status("(no MCP servers configured)")
+            return
+        for row in rows:
+            resources_label = "resources" if row["has_resources"] else "no-resources"
+            ui_console.print_status(
+                f"{row['name']}: {row['status']} "
+                f"[{row['tool_count']} tools, "
+                f"{resources_label}, "
+                f"{row['prompt_count']} prompts]"
+            )
+        return
+    if sub == "list":
+        any_server = False
+        for name, client in mcp_manager.iter_running_clients():
+            any_server = True
+            ui_console.print_status(f"[{name}]")
+            cached_tools = getattr(client, "_tools_cache", None) or []
+            for tool in cached_tools:
+                tool_name = tool.get("name") if isinstance(tool, dict) else None
+                if not tool_name:
+                    continue
+                ui_console.print_status(f"  mcp__{name}__{tool_name}")
+            if client.has_capability("resources"):
+                ui_console.print_status(f"  mcp__{name}__resource_list")
+                ui_console.print_status(f"  mcp__{name}__resource_read")
+            cached_prompts = getattr(client, "_prompts", None) or []
+            for prompt in cached_prompts:
+                prompt_name = prompt.get("name") if isinstance(prompt, dict) else None
+                if not prompt_name:
+                    continue
+                ui_console.print_status(f"  /mcp:{name}:{prompt_name}")
+        if not any_server:
+            ui_console.print_status("(no MCP servers running)")
+        return
+    if sub == "reload":
+        if len(tokens) < 3:
+            ui_console.print_error("Usage: /mcp reload <name>")
+            return
+        target = tokens[2]
+        try:
+            mcp_manager.reload(target)
+        except MCPError as exc:
+            ui_console.print_error(f"reload {target!r} failed: {exc}")
+            ui_console.print_error(f"Server {target!r} is now UNHEALTHY.")
+            return
+        except Exception as exc:
+            ui_console.print_error(f"reload {target!r} failed: {exc}")
+            ui_console.print_error(f"Server {target!r} is now UNHEALTHY.")
+            return
+        ui_console.print_status(f"Server {target!r} reloaded.")
+        return
+    ui_console.print_error(
+        f"Unknown /mcp subcommand: {sub}. Use status, list, or reload."
+    )
 
 
 def _parse_mcp_prompt_command(text: str) -> tuple[str, str, dict[str, str]] | None:
@@ -1564,6 +1671,15 @@ def _run_stdio_session(
                     ui_console,
                     teammate_manager=teammate_manager,
                     team_handlers=handlers,
+                )
+                continue
+            if text == "/mcp" or (
+                text.startswith("/mcp ") and not text.startswith("/mcp:")
+            ):
+                _dispatch_mcp_command(
+                    text,
+                    mcp_manager=mcp_manager,
+                    ui_console=ui_console,
                 )
                 continue
             if text.startswith("/mcp:"):

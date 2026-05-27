@@ -1,1 +1,6 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/05-27-mcp-permission-repl/prd.md", "reason": "PR4 自身 PRD：DEFAULT 必 ask + AUTO 通过 + PLAN 拒绝 + 跳过 DANGEROUS_PATTERNS；AgentType 加 mcp_tools_enabled 字段；/mcp status/list/reload 三命令；reload 失败丢 client 标 UNHEALTHY"}
+{"file": ".trellis/tasks/05-27-mcp/prd.md", "reason": "父 PRD 锁定的总方针：MCP 走现有四模式 + DANGEROUS_PATTERNS 不应用 + 三只读子代理禁用 mcp__；config 热重载明确 Out of Scope (留 ROADMAP 4.3)"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "reload 失败语义：manager.reload 抛 / handler 捕获 / status 标 UNHEALTHY / ui 反馈 / REPL 不 crash；fail_closed 子代理双层防御（filter + permission_mode=PLAN）"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "REPL /mcp status/list/reload 反馈走 UIProtocol；非法子命令 / unknown server / reload 失败走 logger.warning；ask_user 参数预览格式化字符串构造在 guard 内"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "改动落点：src/permission/guard.py + src/planning/agent_types.py + src/mcp/manager.py + src/main.py REPL；不新开模块；不动 src/mcp/{client,registry,transport,protocol,_sse,config,errors}.py"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "from __future__ + 完整类型注解 + ruff 全绿；至少 10 个新 pytest case；不破坏 PR1-3 共 380 个测试"}
