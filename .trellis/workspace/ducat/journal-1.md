@@ -77,3 +77,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: PR2: MCP Client + Manager + tools 注入
+
+**Date**: 2026-05-27
+**Task**: PR2: MCP Client + Manager + tools 注入
+**Branch**: `main`
+
+### Summary
+
+PR2 落地 BareAgent MCP 客户端 tools 链路：src/mcp/client.py (握手 + tools/list 缓存 + tools/call 双层错误)、src/mcp/manager.py (ThreadPoolExecutor 并发启动 + 超时跳过 unhealthy)、src/mcp/registry.py (mcp__<server>__<tool> 命名 + inputSchema 原样透传 Zod/Pydantic 双方言 + handler 拍平 text/降级非 text 块/isError 加前缀/跨 server 同名 fail-fast)。errors.py 追加 MCPHandshakeError/MCPCallError；src/core/tools.py 与 src/main.py 接入 mcp_manager；25 个新测试，pytest 342 passed / 3 skipped / ruff 全绿。PR1 transport 层文件未动。Out of Scope (PR3-6) 严格不实现：resources/prompts、权限+REPL+子代理隔离、multimodal、atexit/payload 截断/reload。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1c84fa8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
