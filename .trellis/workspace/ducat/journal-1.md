@@ -209,3 +209,36 @@ PR5 落地 MCP image 端到端通路：_tool_result 双签名（str | list[dict]
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: PR6: MCP 生命周期硬化 + E2E + 文档（收尾）
+
+**Date**: 2026-05-27
+**Task**: PR6: MCP 生命周期硬化 + E2E + 文档（收尾）
+**Branch**: `main`
+
+### Summary
+
+6-PR MCP 大任务的收尾 PR。proactive on_disconnect 链路（transport _closing flag 区分 graceful/unexpected → manager 标 UNHEALTHY + console + BackgroundManager.notify 推送）；atexit + SIGTERM 兜底 close_all（不抢 SIGINT）；registry payload 截断（text 256 KiB / binary 5 MiB，binary 用 len(b64)*3/4 估算不 decode）；OpenAI provider 抽 _lift_image_blocks 共享 chat_completions + Responses-API 两条路径（补 PR5 遗留）；mcp-server-fetch uvx E2E（_manual.py）；CLAUDE.md + directory-structure.md + config.toml 文档同步；error-handling 沉淀 'long-lived readers 区分 graceful/unexpected'；directory-structure 沉淀 'Payload bounds at normalization boundary'。14 新 unit test + 2 manual E2E；461 passed / 3 skipped / 0 failed；ruff 全绿。父任务 05-27-mcp 14 项 AC 全部闭环（本 PR 闭合 #8/#11/#12/#13），父任务一并 archive。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ebb1f3c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
