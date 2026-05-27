@@ -3,7 +3,7 @@
   "name": "mcp-hardening",
   "title": "MCP 生命周期硬化 + E2E + 文档",
   "description": "PR6: 启动超时 + payload 截断 + atexit/signal 清理 + mcp-server-fetch 冒烟 + CLAUDE.md/spec 更新",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

@@ -1,1 +1,6 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/05-27-mcp-hardening/prd.md", "reason": "验收：on_disconnect 链路 + 区分 graceful/unexpected + atexit/SIGTERM + payload 截断 + Responses-API lift + uvx E2E + 文档同步；父任务 14 项 AC 闭环；config.py 默认值 = 262_144"}
+{"file": ".trellis/tasks/05-27-mcp/prd.md", "reason": "校验父 PRD 14 项 AC 全部勾选 + 6 项 DoD 收齐（atexit/截断/crash 通知/uvx 冒烟/CLAUDE.md/spec/config 示例）"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "校验 on_disconnect graceful/unexpected 分流；handler 错误仍返回 string；不破坏 PR4 safe modes 与 PR5 双契约"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "校验改动范围：src/mcp/{transport/*,manager,registry,config}.py + src/main.py(atexit/signal) + src/provider/openai.py(Responses-API lift) + CLAUDE.md + directory-structure.md + config.toml；不动 permission/* / planning/agent_types.py / core/loop.py"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "校验 _on_disconnect / 截断路径走 logger.warning + console.print_error；无 print() 污染"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "校验 ruff/pytest 全绿；类型注解齐全；新增 ≥ 8 case；E2E 在无 uvx 时 skip 不 fail"}

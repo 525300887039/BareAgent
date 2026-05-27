@@ -28,3 +28,36 @@ pretty = true
 # langfuse = false        # 或设 LANGFUSE_PUBLIC_KEY 环境变量自动启用
 # opentelemetry = false   # 或设 OTEL_EXPORTER_OTLP_ENDPOINT 自动启用
 # content_enabled = true  # 是否上报消息内容（PII 敏感场景可关闭）
+
+# --- MCP (Model Context Protocol) ----------------------------------------
+# 在 [[mcp.servers]] 中声明外部 MCP server，BareAgent 启动时会并发拉起并把远端工具
+# 按 `mcp__<name>__<tool>` 命名注入到工具列表；声明 resources capability 的 server
+# 额外得到 `mcp__<name>__resource_list` / `mcp__<name>__resource_read`；prompts 可
+# 通过 REPL slash 命令 `/mcp:<name>:<prompt>` 触发。REPL 命令：`/mcp status|list|reload <name>`。
+[mcp]
+# 单个 server initialize 握手超时（秒）；超时后该 server 标 UNHEALTHY 并跳过，
+# 不阻塞 REPL boot。
+# start_timeout = 10
+# 单次 tool result 文本字节上限（UTF-8），超出会被截断并追加
+# `[truncated, original size: N bytes]` 后缀。256 KiB 对应主流 LLM context 友好范围。
+# max_result_text_bytes = 262144
+# 单个 image / embedded_resource binary 字节上限（base64 解码后估算），超出会被
+# 替换为 `[Resource omitted: too large (N bytes)]` 占位文本。
+# max_result_binary_bytes = 5242880
+
+# 示例 1：stdio 子进程模式（mcp-server-fetch via uvx）。
+# [[mcp.servers]]
+# name = "fetch"
+# transport = "stdio"
+# command = "uvx"
+# args = ["mcp-server-fetch"]
+# # env = { FETCH_USER_AGENT = "BareAgent/0.1" }
+# # cwd = "/path/to/workspace"
+
+# 示例 2：HTTP Streamable (MCP 2025-03-26) 远端服务。
+# [[mcp.servers]]
+# name = "team-knowledge"
+# transport = "http_streamable"
+# url = "https://mcp.example.com/mcp"
+# headers = { Authorization = "Bearer ${KNOWLEDGE_TOKEN}" }
+# # transport 也可设为 "http_legacy"（MCP 2024-11-05 双端点）以兼容旧 server。

@@ -250,6 +250,72 @@ def test_reload_unknown_server_raises_mcp_error() -> None:
     manager.close_all()
 
 
+def test_on_disconnect_marks_unhealthy_and_notifies(monkeypatch) -> None:
+    """PR6: an unexpected disconnect from the transport must flip status to
+    UNHEALTHY, drop the client, and push a notification through the
+    BackgroundManager-style notifier."""
+    cfg = MCPServerConfig(name="srv", transport="stdio", command=["echo"])
+    transport = _ControllableTransport()
+    manager = MCPManager(MCPConfig(servers=[cfg]))
+    _patch_construct_transport(manager, {"srv": transport})
+    manager.start_all()
+    assert manager.get_status("srv") == ServerStatus.RUNNING
+
+    # Stand-in for ``BackgroundManager``: only ``notify`` needs to match the
+    # real surface we use in production.
+    notified: list[tuple[str, str]] = []
+
+    class _FakeNotifier:
+        def notify(self, task_id: str, message: str) -> None:
+            notified.append((task_id, message))
+
+    manager._notifier = _FakeNotifier()  # type: ignore[assignment]
+
+    manager._on_disconnect("srv", "subprocess died: code 137")
+
+    assert manager.get_status("srv") == ServerStatus.UNHEALTHY
+    assert manager.get_client("srv") is None
+    assert notified == [
+        ("mcp:srv", "MCP server 'srv' disconnected: subprocess died: code 137")
+    ]
+
+
+def test_build_client_registers_disconnect_handler() -> None:
+    """``_build_client`` must wire ``set_disconnect_handler`` on the transport
+    so the manager learns about disconnects through the proactive path, not
+    just on the next call."""
+    cfg = MCPServerConfig(name="srv", transport="stdio", command=["echo"])
+    transport = _ControllableTransport()
+    manager = MCPManager(MCPConfig(servers=[cfg]))
+    _patch_construct_transport(manager, {"srv": transport})
+    manager.start_all()
+    assert manager.get_status("srv") == ServerStatus.RUNNING
+
+    # The handler is registered as a closure; trip it directly to confirm it
+    # routes back to ``_on_disconnect`` rather than to nowhere.
+    assert transport._disconnect_handler is not None  # noqa: SLF001
+    transport._disconnect_handler("simulated")  # type: ignore[misc]  # noqa: SLF001
+    assert manager.get_status("srv") == ServerStatus.UNHEALTHY
+
+
+def test_summarize_reflects_unhealthy_after_disconnect() -> None:
+    """After ``_on_disconnect`` the per-server summary row drops to UNHEALTHY
+    with zeroed counts — that is what ``/mcp status`` renders to the REPL."""
+    cfg = MCPServerConfig(name="srv", transport="stdio", command=["echo"])
+    manager = MCPManager(MCPConfig(servers=[cfg]))
+    _patch_construct_transport(manager, {"srv": _ControllableTransport()})
+    manager.start_all()
+    rows_before = manager.summarize()
+    assert rows_before[0]["status"] == ServerStatus.RUNNING.value
+
+    manager._on_disconnect("srv", "EOF")
+    rows_after = manager.summarize()
+    assert rows_after[0]["status"] == ServerStatus.UNHEALTHY.value
+    assert rows_after[0]["tool_count"] == 0
+    assert rows_after[0]["prompt_count"] == 0
+    assert rows_after[0]["has_resources"] is False
+
+
 def test_handshake_handshake_error_is_caught_and_warned(monkeypatch) -> None:
     """Even MCPHandshakeError surfaced from client.start is caught."""
     cfg = MCPServerConfig(name="boom", transport="stdio", command=["echo"])

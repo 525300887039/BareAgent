@@ -604,6 +604,76 @@ def test_integration_mcp_handler_output_feeds_anthropic_provider(monkeypatch) ->
     ]
 
 
+# --- PR6: OpenAI Responses-API image lift ---------------------------------
+
+
+def test_responses_api_tool_result_with_image_lifts_into_user_message(
+    monkeypatch,
+) -> None:
+    """PR6: a ``tool_result`` carrying an image must produce both a
+    ``function_call_output`` (text part) and a follow-up Responses-API user
+    message holding the ``input_image`` part — same lift logic as the
+    chat_completions path, different output shape."""
+    provider = _make_openai(monkeypatch)
+    out = provider._convert_response_message(
+        "user",
+        [
+            {
+                "type": "tool_result",
+                "tool_use_id": "call_42",
+                "content": [
+                    {"type": "text", "text": "see:"},
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": "AAAA",
+                        },
+                    },
+                ],
+            }
+        ],
+    )
+    # function_call_output for the tool, then a user message holding the image.
+    assert len(out) == 2
+    assert out[0] == {
+        "type": "function_call_output",
+        "call_id": "call_42",
+        "output": "see:",
+    }
+    image_msg = out[1]
+    assert image_msg["type"] == "message"
+    assert image_msg["role"] == "user"
+    parts = image_msg["content"]
+    assert parts[0] == {"type": "input_text", "text": "[Tool returned 1 image(s)]"}
+    assert parts[1] == {
+        "type": "input_image",
+        "image_url": "data:image/png;base64,AAAA",
+    }
+
+
+def test_responses_api_text_only_tool_result_does_not_spawn_image_message(
+    monkeypatch,
+) -> None:
+    """Regression: a text-only ``list`` tool_result must NOT spawn a follow-up
+    user message on the Responses-API path."""
+    provider = _make_openai(monkeypatch)
+    out = provider._convert_response_message(
+        "user",
+        [
+            {
+                "type": "tool_result",
+                "tool_use_id": "call_1",
+                "content": [{"type": "text", "text": "ok"}],
+            }
+        ],
+    )
+    assert len(out) == 1
+    assert out[0]["type"] == "function_call_output"
+    assert out[0]["output"] == "ok"
+
+
 def test_integration_mcp_handler_output_feeds_openai_provider(monkeypatch) -> None:
     """Same handler output is split into ``tool`` + follow-up ``user`` for OpenAI."""
     client = MagicMock()

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import logging
 import os
+import signal
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -1408,6 +1410,22 @@ def _handle_mode_selection_stdio(
     ui_console.print_status("Invalid choice, mode unchanged.")
 
 
+def _install_mcp_cleanup(mcp_manager: MCPManager) -> None:
+    """Register exit-time + SIGTERM hooks so MCP subprocesses are reaped.
+
+    ``atexit`` catches ``return`` from ``main()`` and any ``sys.exit()``;
+    the SIGTERM handler converts a polite termination into ``sys.exit(130)``
+    so ``atexit`` actually fires (raw SIGTERM bypasses it). SIGINT is
+    intentionally left alone — prompt-toolkit + the existing
+    ``KeyboardInterrupt`` handling in the REPL loop already cover Ctrl+C.
+    """
+    atexit.register(mcp_manager.close_all)
+    try:
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(130))
+    except (ValueError, OSError):  # pragma: no cover — non-main thread / unsupported OS
+        pass
+
+
 def _run_stdio_session(
     config: Config,
     provider: BaseLLMProvider,
@@ -1448,8 +1466,9 @@ def _run_stdio_session(
         workspace_path,
         skill_summary=skill_loader.get_skill_list_prompt(),
     )
-    mcp_manager = MCPManager(config.mcp, console=ui_console)
+    mcp_manager = MCPManager(config.mcp, console=ui_console, notifier=bg_manager)
     mcp_manager.start_all()
+    _install_mcp_cleanup(mcp_manager)
     tools = get_tools(mcp_manager)
     permission = _build_permission_guard(config)
     _install_stdio_permission_prompt(permission, ui_console)

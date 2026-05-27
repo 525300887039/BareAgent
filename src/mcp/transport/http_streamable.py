@@ -56,6 +56,10 @@ class HttpStreamableTransport(Transport):
         self._session_id: str | None = None
         self._session_lock = threading.Lock()
         self._closed = False
+        # Distinguishes ``close()``-initiated shutdown from real disconnects so
+        # the reader thread does not fire the disconnect handler on a normal
+        # exit.
+        self._closing = False
 
     def start(self) -> None:
         if self._client is not None:
@@ -113,6 +117,7 @@ class HttpStreamableTransport(Transport):
         if self._closed:
             return
         self._closed = True
+        self._closing = True
         if self._listen_cm is not None:
             try:
                 self._listen_cm.__exit__(None, None, None)
@@ -172,6 +177,7 @@ class HttpStreamableTransport(Transport):
 
     def _listen_loop(self) -> None:
         assert self._listen_response is not None
+        disconnect_reason: str | None = None
         try:
             for event in parse_sse_stream(self._listen_response.iter_lines()):
                 if event["event"] == "message":
@@ -182,10 +188,16 @@ class HttpStreamableTransport(Transport):
                         event["event"],
                     )
         except httpx.HTTPError as exc:
+            disconnect_reason = f"listen stream broken: {exc}"
             _log.warning("MCP http_streamable: listen stream broken: %s", exc)
         except Exception as exc:  # pragma: no cover — defensive
+            disconnect_reason = f"listener crashed: {exc}"
             _log.warning("MCP http_streamable listener crashed: %s", exc)
         finally:
+            if not self._closing:
+                self._invoke_disconnect(
+                    disconnect_reason or "HTTP streamable listen stream ended"
+                )
             self._fail_all_pending("HTTP streamable listen stream closed")
 
     def _on_message(self, data: str) -> None:

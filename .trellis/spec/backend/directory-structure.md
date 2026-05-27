@@ -30,6 +30,14 @@ src/
 ├── concurrency/       # background.py (thread pool), notification.py
 ├── tracing/           # Tracer ABC + proxy + JsonFile / Langfuse / OTel backends
 ├── debug/             # InteractionLogger, web_viewer.py SPA
+├── mcp/               # MCP client — multi-server orchestration + tool injection
+│   ├── manager.py     #   MCPManager: concurrent start, status, disconnect hooks, reload
+│   ├── client.py      #   MCPClient: one server's handshake + tools/resources/prompts
+│   ├── registry.py    #   mcp__<server>__<tool> schema + handler injection, truncation
+│   ├── protocol.py    #   JSON-RPC 2.0 + MCP message dataclasses
+│   ├── config.py      #   [[mcp.servers]] parsing + per-call payload thresholds
+│   ├── errors.py      #   MCP*Error hierarchy
+│   └── transport/     #   Transport ABC + stdio.py + http_legacy.py + http_streamable.py
 └── ui/                # AgentConsole (rich), StreamPrinter, prompt.py (prompt-toolkit), theme.py
 ```
 
@@ -51,7 +59,8 @@ Use this in order — stop at the first match:
 8. **Observability span / metric?** → `src/tracing/`. Add a new backend file if needed; otherwise just call `tracer.trace(...)` at the instrumentation site.
 9. **Debug payload capture / inspector UI?** → `src/debug/`.
 10. **Terminal rendering / input?** → `src/ui/`. **Never** print directly from non-ui packages.
-11. **REPL command, config plumbing, top-level wiring?** → `src/main.py`.
+11. **New MCP-server integration / transport / schema-injection rule?** → `src/mcp/`. New transport implementation → `transport/<name>.py` subclassing `Transport` (ABC in `transport/base.py`). Cross-server orchestration / lifecycle / disconnect handling → `manager.py`. Tool / resource / prompt name-mangling and handler closures → `registry.py`. Config keys → `config.py`. Per-call thresholds (text / binary size caps) live in `MCPConfig` and are applied at the `registry.py` normalization boundary, never inside `provider/*` adapters.
+12. **REPL command, config plumbing, top-level wiring?** → `src/main.py`.
 
 If a change touches more than one of the above, decompose it. A handler that needs persistence calls into `planning/`; it does not put a JSON file alongside itself.
 
@@ -92,6 +101,27 @@ This is what `src/mcp/registry.py::_to_content_blocks` emits, what `src/core/loo
 4. Each provider adapter maps internal → provider-native one-way.
 
 **Anti-pattern**: introducing a neutral `{type, mime, data}` abstraction and writing `from_internal()` / `to_internal()` on every provider. That doubles the surface area and creates round-trip ambiguity when fields don't line up (e.g. Anthropic's `media_type` vs OpenAI's MIME-in-URL).
+
+---
+
+## Payload bounds belong at the normalization boundary, not in providers
+
+When an external data source can hand BareAgent payloads of unbounded size (MCP tool results, file readers, web fetch), enforce size caps at the **same layer that normalizes the foreign shape into the internal shape** — *before* the payload reaches `core/loop.py`. The MCP integration (PR6) does this in `src/mcp/registry.py::_to_content_blocks` and `_flatten_content`:
+
+- A text block whose UTF-8 length exceeds `MCPConfig.max_result_text_bytes` is truncated and tagged with `\n[truncated, original size: N bytes]`. The LLM sees the suffix and can ask for a different slice next turn.
+- An image / embedded-resource binary whose estimated decoded size exceeds `MCPConfig.max_result_binary_bytes` is replaced with a `[Resource omitted: too large (N bytes)]` text placeholder. The estimate is computed from the base64 string length (`len(data) * 3 // 4`) so a 6 MiB image never has to be `base64.b64decode`d into RAM just to be rejected.
+
+**Why not in `provider/*`?** Two reasons:
+
+1. Every provider would need the same check, with subtle divergence over time. Centralizing it at the normalization boundary keeps the rule single-sourced.
+2. The provider serializer's job is shape translation (Anthropic ↔ OpenAI ↔ etc.). Mixing in size enforcement would couple "is this too big" to "what shape does this provider want", and the truth is they're independent.
+
+**Why not in `core/loop.py`?** Because the loop is provider-agnostic and content-agnostic — it stores `list[dict]` from a handler verbatim. The truncation contract should live next to the code that *understands* the content (image vs text vs resource), which is the normalization site.
+
+**Rule when adding a new bounded modality**:
+- Put the threshold field on the modality's owning config dataclass (`MCPConfig`, future `FileReaderConfig`, etc.).
+- Apply the cap in the same function that translates the foreign shape into the BareAgent internal shape.
+- Emit a deterministic, LLM-readable suffix or placeholder so the model can detect truncation and adapt.
 
 ---
 

@@ -426,6 +426,99 @@ def test_resource_read_handler_rejects_missing_uri() -> None:
     assert "uri" in out
 
 
+# --- PR6: payload truncation at the normalization boundary ----------------
+
+
+def test_to_content_blocks_text_under_threshold_passes_through() -> None:
+    """PR6: a text block within the configured byte cap is preserved verbatim."""
+    from src.mcp.config import MCPConfig
+    from src.mcp.registry import _to_content_blocks
+
+    cfg = MCPConfig(max_result_text_bytes=262_144)
+    text = "a" * 250 * 1024  # 250 KiB, under the 256 KiB cap
+    out = _to_content_blocks([{"type": "text", "text": text}], config=cfg)
+    assert out == [{"type": "text", "text": text}]
+
+
+def test_to_content_blocks_text_over_threshold_is_truncated() -> None:
+    """PR6: a text block above the byte cap is sliced and tagged so the LLM
+    can detect the truncation and act on it (retry / paginate)."""
+    from src.mcp.config import MCPConfig
+    from src.mcp.registry import _to_content_blocks
+
+    cfg = MCPConfig(max_result_text_bytes=262_144)
+    text = "a" * (257 * 1024)  # 257 KiB, just past the 256 KiB cap
+    original_bytes = len(text.encode("utf-8"))
+    out = _to_content_blocks([{"type": "text", "text": text}], config=cfg)
+    assert len(out) == 1
+    rendered = out[0]["text"]
+    assert rendered.endswith(f"[truncated, original size: {original_bytes} bytes]")
+    # Body before the suffix is exactly the byte cap (chars are 1-byte ASCII).
+    body = rendered.split("\n[truncated", 1)[0]
+    assert len(body.encode("utf-8")) == 262_144
+
+
+def test_to_content_blocks_image_over_binary_threshold_is_omitted() -> None:
+    """PR6: an image whose base64 decodes to > max_result_binary_bytes is
+    replaced with an LLM-readable placeholder (no decode allocation)."""
+    from src.mcp.config import MCPConfig
+    from src.mcp.registry import _to_content_blocks
+
+    cfg = MCPConfig(max_result_binary_bytes=5_242_880)  # 5 MiB
+    # 6 MiB of decoded payload ≈ 8 MiB base64 string. We approximate by
+    # generating a base64 string of the right length without actually
+    # decoding the bytes anywhere.
+    target_decoded = 6 * 1024 * 1024
+    b64 = "A" * ((target_decoded * 4) // 3)
+    out = _to_content_blocks(
+        [{"type": "image", "data": b64, "mimeType": "image/png"}], config=cfg
+    )
+    assert len(out) == 1
+    assert out[0]["type"] == "text"
+    assert "Resource omitted: too large" in out[0]["text"]
+
+
+def test_to_content_blocks_image_under_binary_threshold_passes_through() -> None:
+    """Sanity check: an image well below the binary cap is not degraded."""
+    from src.mcp.config import MCPConfig
+    from src.mcp.registry import _to_content_blocks
+
+    cfg = MCPConfig(max_result_binary_bytes=5_242_880)
+    out = _to_content_blocks(
+        [{"type": "image", "data": "AAAA", "mimeType": "image/png"}], config=cfg
+    )
+    assert out == [
+        {
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/png", "data": "AAAA"},
+        }
+    ]
+
+
+def test_flatten_content_with_config_truncates_text() -> None:
+    """PR6: ``_flatten_content`` applies the same text cap on error paths so
+    huge error payloads do not bypass the truncation contract."""
+    from src.mcp.config import MCPConfig
+    from src.mcp.registry import _flatten_content
+
+    cfg = MCPConfig(max_result_text_bytes=1024)
+    blob = "x" * 2048
+    out = _flatten_content([{"type": "text", "text": blob}], config=cfg)
+    assert out.endswith("[truncated, original size: 2048 bytes]")
+    body = out.split("\n[truncated", 1)[0]
+    assert len(body.encode("utf-8")) == 1024
+
+
+def test_flatten_content_without_config_is_unchanged() -> None:
+    """Back-compat: callers that omit the config (transcript injection, etc.)
+    still get the legacy unbounded behavior."""
+    from src.mcp.registry import _flatten_content
+
+    blob = "y" * 2048
+    out = _flatten_content([{"type": "text", "text": blob}])
+    assert out == blob
+
+
 def test_flatten_content_handles_text_other_and_empty() -> None:
     assert _flatten_content([]) == ""
     assert (

@@ -24,6 +24,7 @@ from .transport.http_streamable import HttpStreamableTransport
 from .transport.stdio import StdioTransport
 
 if TYPE_CHECKING:
+    from src.concurrency.background import BackgroundManager
     from src.ui.protocol import UIProtocol
 
 _log = logging.getLogger(__name__)
@@ -50,9 +51,16 @@ class MCPManager:
         self,
         config: MCPConfig,
         console: UIProtocol | None = None,
+        notifier: BackgroundManager | None = None,
     ) -> None:
         self._config = config
         self._console = console
+        # ``notifier`` is the shared ``BackgroundManager`` already used for
+        # background-task completion notifications. When a managed MCP server
+        # disconnects unexpectedly, the manager posts a "failed" notification
+        # through the same channel so the REPL surface treats it as an async
+        # event (see ``concurrency/notification.py``).
+        self._notifier = notifier
         self._clients: dict[str, MCPClient] = {}
         self._status: dict[str, ServerStatus] = {}
         self._lock = Lock()
@@ -128,7 +136,36 @@ class MCPManager:
         raises — the caller decides how to mark the server.
         """
         transport = self._construct_transport(server)
+        # Register the proactive disconnect hook so the manager learns about
+        # subprocess death / SSE stream loss the moment the reader thread sees
+        # it — without waiting for the next call to surface the failure.
+        transport.set_disconnect_handler(
+            lambda reason, _name=server.name: self._on_disconnect(_name, reason)
+        )
         return MCPClient(server, transport)
+
+    def _on_disconnect(self, name: str, reason: str) -> None:
+        """Mark a server unhealthy and surface the event to the user immediately.
+
+        Called by transport reader threads on unexpected disconnect (EOF,
+        broken pipe, SSE stream break). Idempotent: if the server is already
+        non-RUNNING, the console / notifier still fire so the user always sees
+        the message at least once per real failure.
+        """
+        with self._lock:
+            self._status[name] = ServerStatus.UNHEALTHY
+            self._clients.pop(name, None)
+        message = f"MCP server {name!r} disconnected: {reason}"
+        if self._console is not None:
+            try:
+                self._console.print_error(message)
+            except Exception:  # pragma: no cover — console must never crash reader
+                pass
+        if self._notifier is not None:
+            try:
+                self._notifier.notify(f"mcp:{name}", message)
+            except Exception:  # pragma: no cover — notification must never crash
+                pass
 
     def get_client(self, name: str) -> MCPClient | None:
         """Return the running client for ``name`` or ``None`` if it isn't healthy."""

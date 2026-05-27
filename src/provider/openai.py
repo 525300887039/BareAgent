@@ -13,6 +13,75 @@ _PROTECTED_RESPONSES_KEYS = frozenset({"model", "input", "tools", "instructions"
 _OPENAI_OFFICIAL_HOSTS = frozenset({"api.openai.com"})
 
 
+def _stringify_block(value: Any) -> str:
+    """Render an arbitrary content block as compact JSON for the tool role.
+
+    Mirrors ``BaseLLMProvider._stringify_content`` for single items so the lift
+    helper stays a free function (and therefore reusable from both the
+    chat_completions and Responses-API code paths).
+    """
+    if isinstance(value, dict) and value.get("type") == "text":
+        return str(value.get("text", ""))
+    return json.dumps(value, ensure_ascii=False, default=str)
+
+
+def _lift_image_blocks(
+    tool_result_content: Any,
+) -> tuple[str, list[dict[str, Any]]]:
+    """Split multimodal MCP tool_result content into (text, image_blocks).
+
+    OpenAI's ``tool`` role (chat_completions) and the Responses API's
+    ``function_call_output`` item both refuse image attachments — image
+    content must be lifted into a follow-up ``user`` message. Both code paths
+    share this helper so the lift rules (placeholder text when there is no
+    text part, image_url shape, non-base64 source degradation) stay aligned.
+
+    Returns ``(text_for_tool_role, image_blocks)``. ``text_for_tool_role`` is
+    always a string: empty content yields a placeholder when images exist, or
+    a stringified fallback otherwise. ``image_blocks`` is a list of
+    chat-completion-shaped ``{type:"image_url", image_url:{url:"data:..."}}``
+    blocks; the Responses-API caller translates them to ``input_image`` parts.
+    """
+    if not isinstance(tool_result_content, list):
+        return _stringify_block(tool_result_content), []
+
+    text_parts: list[str] = []
+    image_blocks: list[dict[str, Any]] = []
+    for item in tool_result_content:
+        if not isinstance(item, dict):
+            text_parts.append(_stringify_block(item))
+            continue
+        item_type = item.get("type")
+        if item_type == "text":
+            text = item.get("text", "")
+            if isinstance(text, str):
+                text_parts.append(text)
+            continue
+        if item_type == "image":
+            source = item.get("source")
+            if not isinstance(source, dict) or source.get("type") != "base64":
+                text_parts.append(_stringify_block(item))
+                continue
+            data = source.get("data", "")
+            if not isinstance(data, str) or not data:
+                text_parts.append(_stringify_block(item))
+                continue
+            mime = source.get("media_type", "image/png")
+            image_blocks.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{data}"},
+                }
+            )
+            continue
+        text_parts.append(_stringify_block(item))
+
+    text = "\n".join(part for part in text_parts if part)
+    if not text and image_blocks:
+        text = "[Tool returned image(s); see next message]"
+    return text, image_blocks
+
+
 class OpenAIProvider(BaseLLMProvider):
     def __init__(
         self,
@@ -336,16 +405,28 @@ class OpenAIProvider(BaseLLMProvider):
 
         converted: list[dict[str, Any]] = []
         text_parts: list[str] = []
+        # Image blocks lifted out of multimodal tool_result content. They must
+        # be attached to a user message *after* the function_call_output (the
+        # Responses API does not accept ``image_url`` inside the output value
+        # itself), mirroring the chat_completions lift logic.
+        deferred_image_messages: list[dict[str, Any]] = []
         for block in content:
             block_type = block.get("type")
             if block_type == "tool_result":
+                tool_use_id = block.get("tool_use_id", "")
+                raw_content = block.get("content", "")
+                output_text, image_blocks = _lift_image_blocks(raw_content)
                 converted.append(
                     {
                         "type": "function_call_output",
-                        "call_id": block.get("tool_use_id", ""),
-                        "output": self._stringify_content(block.get("content", "")),
+                        "call_id": tool_use_id,
+                        "output": output_text,
                     }
                 )
+                if image_blocks:
+                    deferred_image_messages.append(
+                        self._build_responses_image_user_message(image_blocks)
+                    )
                 continue
             if block_type == "tool_use":
                 converted.append(
@@ -367,7 +448,36 @@ class OpenAIProvider(BaseLLMProvider):
         text = "\n".join(part for part in text_parts if part)
         if text:
             converted.insert(0, self._make_response_text_message(role, text))
+        # Image-bearing follow-ups always go after the function_call_output
+        # they came from. Multiple tool_results in one message keep their
+        # relative ordering — first lifted, first appended.
+        converted.extend(deferred_image_messages)
         return converted
+
+    def _build_responses_image_user_message(
+        self, image_blocks: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Build a Responses-API ``message`` carrying lifted image blocks.
+
+        The Responses API expects ``input_image`` parts (not ``image_url``),
+        so we translate from the chat_completions shape stored in
+        ``image_blocks`` into the Responses-API native shape here.
+        """
+        count = len(image_blocks)
+        parts: list[dict[str, Any]] = [
+            {
+                "type": "input_text",
+                "text": f"[Tool returned {count} image(s)]",
+            }
+        ]
+        for block in image_blocks:
+            url = block.get("image_url", {}).get("url", "")
+            parts.append({"type": "input_image", "image_url": url})
+        return {
+            "type": "message",
+            "role": "user",
+            "content": parts,
+        }
 
     def _make_response_text_message(self, role: str, text: str) -> dict[str, Any]:
         content_type = "output_text" if role == "assistant" else "input_text"
@@ -422,6 +532,8 @@ class OpenAIProvider(BaseLLMProvider):
         - ``list`` content (multimodal MCP path) puts text into the ``tool``
           message and lifts image blocks into a follow-up ``user`` message,
           because OpenAI's ``tool`` role does not accept ``image_url`` parts.
+          The lift logic is shared with the Responses-API path via the
+          module-level ``_lift_image_blocks`` helper.
         """
         tool_use_id = block.get("tool_use_id", "")
         raw_content = block.get("content", "")
@@ -434,40 +546,7 @@ class OpenAIProvider(BaseLLMProvider):
                 }
             ]
 
-        text_parts: list[str] = []
-        image_blocks: list[dict[str, Any]] = []
-        for item in raw_content:
-            if not isinstance(item, dict):
-                text_parts.append(self._stringify_content(item))
-                continue
-            item_type = item.get("type")
-            if item_type == "text":
-                text = item.get("text", "")
-                if isinstance(text, str):
-                    text_parts.append(text)
-                continue
-            if item_type == "image":
-                source = item.get("source")
-                if not isinstance(source, dict) or source.get("type") != "base64":
-                    text_parts.append(self._stringify_content(item))
-                    continue
-                data = source.get("data", "")
-                if not isinstance(data, str) or not data:
-                    text_parts.append(self._stringify_content(item))
-                    continue
-                mime = source.get("media_type", "image/png")
-                image_blocks.append(
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:{mime};base64,{data}"},
-                    }
-                )
-                continue
-            text_parts.append(self._stringify_content(item))
-
-        tool_text = "\n".join(part for part in text_parts if part)
-        if not tool_text and image_blocks:
-            tool_text = "[Tool returned image(s); see next message]"
+        tool_text, image_blocks = _lift_image_blocks(raw_content)
         messages: list[dict[str, Any]] = [
             {
                 "role": "tool",

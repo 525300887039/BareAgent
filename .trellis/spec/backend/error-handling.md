@@ -236,3 +236,25 @@ def _run(self, task_id: str, fn, *args) -> None:
 A background thread that crashes posts a `failed` notification with the error message. `AutonomousAgent.run` does similar: `logging.exception("Task %s failed in agent %s", task.id, self.name)` then continues the loop (one teammate dying must not kill the daemon).
 
 **Rule**: every long-running background entry point (threads, daemonized agents) must catch `Exception` at its top frame and report the failure to a queue or log. Letting a daemon thread die silently is a debugging trap.
+
+---
+
+## Long-lived connection readers must distinguish graceful close from unexpected disconnect
+
+Any background reader watching an external endpoint that can either be torn down by us (`close()` called) or die on its own (subprocess EOF, SSE stream broken, socket reset) needs a way to tell the two apart. The pattern `src/mcp/transport/` follows:
+
+- A `_closing` boolean is set by `close()` *before* the underlying stream is dismantled.
+- The reader thread's `finally:` block inspects `_closing` and only fires `_invoke_disconnect(reason)` when it is `False`.
+- `_invoke_disconnect` is idempotent (`_disconnect_invoked` latch) — if the reader detects a half-closed stream and then the `finally` also tries to fire, the user only sees one notification.
+- The disconnect handler (`Transport.set_disconnect_handler`) is registered by the orchestrator (`MCPManager._build_client`) and routes to `manager._on_disconnect(name, reason)`, which marks the server `UNHEALTHY` and pushes a `BackgroundManager.notify` event so the REPL surfaces the failure before the next LLM turn.
+
+```python
+# In the reader thread's finally:
+if not self._closing:
+    self._invoke_disconnect(reason or "stream ended unexpectedly")
+self._fail_all_pending("…")
+```
+
+**Why this matters**: without the `_closing` flag, a clean `close_all()` at shutdown would race the reader's EOF detection and fire a spurious "MCP server X disconnected" toast every time the user hit `/exit`. With it, the user only sees disconnect notifications for *real* failures — which is the whole point of the proactive channel.
+
+**Rule**: any new transport / long-lived reader (LSP client, future websocket bridge, etc.) must replicate this three-piece structure: a `_closing` flag set on user-initiated teardown, an `_invoke_disconnect`-style one-shot hook fired only when `_closing` is false, and an orchestrator-level handler that marks the resource unhealthy + notifies the user through the same channel as other async events.

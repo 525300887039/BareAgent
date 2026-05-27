@@ -492,6 +492,48 @@ def test_handle_log_command_serves_and_opens_viewer(
     ]
 
 
+def test_install_mcp_cleanup_registers_atexit_and_sigterm_handler(
+    monkeypatch,
+) -> None:
+    """PR6: ``_install_mcp_cleanup`` registers ``manager.close_all`` with
+    ``atexit`` and swaps in a SIGTERM handler that routes through
+    ``sys.exit(130)`` so ``atexit`` actually fires on polite termination."""
+    import signal as _signal
+
+    registered: list[object] = []
+    signal_handlers: dict[int, object] = {}
+
+    monkeypatch.setattr(
+        main_module.atexit, "register", lambda fn, *a, **k: registered.append(fn) or fn
+    )
+    monkeypatch.setattr(
+        main_module.signal,
+        "signal",
+        lambda sig, handler: signal_handlers.setdefault(sig, handler) or handler,
+    )
+
+    class _FakeManager:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close_all(self) -> None:
+            self.closed = True
+
+    manager = _FakeManager()
+    main_module._install_mcp_cleanup(manager)
+
+    assert registered == [manager.close_all]
+    assert _signal.SIGTERM in signal_handlers
+    # Calling the SIGTERM handler should raise ``SystemExit(130)`` so atexit fires.
+    raised = False
+    try:
+        signal_handlers[_signal.SIGTERM](_signal.SIGTERM, None)  # type: ignore[operator]
+    except SystemExit as exc:
+        raised = True
+        assert exc.code == 130
+    assert raised
+
+
 def test_main_runs_stdio_session(
     monkeypatch,
 ) -> None:

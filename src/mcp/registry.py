@@ -25,6 +25,7 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from .config import MCPConfig
 from .errors import MCPCallError, MCPError
 
 if TYPE_CHECKING:
@@ -49,6 +50,44 @@ _SUPPORTED_IMAGE_MIME_TYPES = frozenset(
 
 _RESOURCE_LIST_SUFFIX = "resource_list"
 _RESOURCE_READ_SUFFIX = "resource_read"
+
+# Truncation suffix templates. Stable text so trellis-check / tests can match
+# them verbatim and the LLM can reliably detect that it was truncated and
+# adjust its next request (e.g. ask for less / paginate).
+_TEXT_TRUNCATED_SUFFIX = "\n[truncated, original size: {n} bytes]"
+_RESOURCE_OMITTED_TEMPLATE = "[Resource omitted: too large ({n} bytes)]"
+
+
+def _truncate_text(text: str, max_bytes: int) -> str:
+    """Return ``text`` truncated to fit within ``max_bytes`` UTF-8 bytes.
+
+    Appends ``[truncated, original size: N bytes]`` when truncation kicks in
+    so the LLM knows the payload was cut. ``max_bytes <= 0`` disables the
+    cap (helpful in tests that construct a bare ``MCPConfig``).
+    """
+    if max_bytes <= 0:
+        return text
+    encoded = text.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return text
+    original_size = len(encoded)
+    # Slice at byte boundary, then decode with replacement so we never split a
+    # multibyte character mid-codepoint.
+    truncated = encoded[:max_bytes].decode("utf-8", errors="ignore")
+    return truncated + _TEXT_TRUNCATED_SUFFIX.format(n=original_size)
+
+
+def _estimate_base64_bytes(data: str) -> int:
+    """Estimate the decoded size of a base64 string without allocating it.
+
+    Each 4 base64 chars decode to 3 bytes (minus padding). Approximation is
+    accurate to within ~2 bytes, plenty precise for a single-threshold check
+    and *much* cheaper than ``base64.b64decode`` on a 6 MiB payload.
+    """
+    if not data:
+        return 0
+    padding = data.count("=", max(0, len(data) - 2))
+    return (len(data) * 3) // 4 - padding
 
 
 def mcp_tool_name(server_name: str, tool_name: str) -> str:
@@ -120,9 +159,17 @@ def build_mcp_handlers(manager: MCPManager) -> dict[str, Callable[..., Any]]:
 
     Handlers swallow ``MCPCallError`` and ``isError: true`` results into the
     BareAgent error-as-text convention so the agent loop never crashes on a
-    misbehaving MCP server.
+    misbehaving MCP server. The active :class:`MCPConfig` is captured by each
+    handler closure so :func:`_to_content_blocks` can enforce the configured
+    text / binary truncation thresholds without round-tripping through the
+    manager on every call.
     """
     handlers: dict[str, Callable[..., Any]] = {}
+    # MagicMock-based test managers may not expose a real ``MCPConfig`` — fall
+    # back to ``None`` (= no truncation) so the registry stays usable in unit
+    # tests without forcing every fixture to wire a config.
+    raw_config = getattr(manager, "config", None)
+    config = raw_config if isinstance(raw_config, MCPConfig) else None
     for server_name, client in manager.iter_running_clients():
         try:
             tools = client.list_tools()
@@ -142,13 +189,17 @@ def build_mcp_handlers(manager: MCPManager) -> dict[str, Callable[..., Any]]:
                 continue
             seen_in_server.add(original_name)
             full_name = mcp_tool_name(server_name, original_name)
-            handlers[full_name] = _make_handler(manager, server_name, original_name)
+            handlers[full_name] = _make_handler(
+                manager, server_name, original_name, config
+            )
 
         if _client_has_capability(client, "resources"):
             list_name = mcp_tool_name(server_name, _RESOURCE_LIST_SUFFIX)
             read_name = mcp_tool_name(server_name, _RESOURCE_READ_SUFFIX)
             handlers[list_name] = _make_resource_list_handler(manager, server_name)
-            handlers[read_name] = _make_resource_read_handler(manager, server_name)
+            handlers[read_name] = _make_resource_read_handler(
+                manager, server_name, config
+            )
     return handlers
 
 
@@ -156,6 +207,7 @@ def _make_handler(
     manager: MCPManager,
     server_name: str,
     original_tool_name: str,
+    config: MCPConfig | None,
 ) -> Callable[..., str | list[dict[str, Any]]]:
     """Closure: looks up the live client at call-time so reload/crashes show up.
 
@@ -178,9 +230,9 @@ def _make_handler(
         content = result.get("content")
         content_list = content if isinstance(content, list) else []
         if result.get("isError"):
-            body = _flatten_content(content_list)
+            body = _flatten_content(content_list, config=config)
             return f"Error: {body}" if body else "Error: (no content)"
-        return _to_content_blocks(content_list)
+        return _to_content_blocks(content_list, config=config)
 
     _handler.__name__ = f"mcp_handler_{server_name}_{original_tool_name}"
     return _handler
@@ -220,6 +272,7 @@ def _make_resource_list_handler(
 def _make_resource_read_handler(
     manager: MCPManager,
     server_name: str,
+    config: MCPConfig | None,
 ) -> Callable[..., str | list[dict[str, Any]]]:
     """Closure: ``resources/read`` -> multimodal content blocks on success.
 
@@ -243,9 +296,9 @@ def _make_resource_read_handler(
         contents = result.get("contents")
         contents_list = contents if isinstance(contents, list) else []
         if result.get("isError"):
-            body = _flatten_content(contents_list)
+            body = _flatten_content(contents_list, config=config)
             return f"Error: {body}" if body else "Error: (no content)"
-        return _to_content_blocks(contents_list)
+        return _to_content_blocks(contents_list, config=config)
 
     _handler.__name__ = f"mcp_handler_{server_name}_resource_read"
     return _handler
@@ -281,7 +334,11 @@ def _resource_tool_schemas(server_name: str) -> list[dict[str, Any]]:
     ]
 
 
-def _flatten_content(content: list[dict[str, Any]]) -> str:
+def _flatten_content(
+    content: list[dict[str, Any]],
+    *,
+    config: MCPConfig | None = None,
+) -> str:
     """Stringify an MCP content array (tools/call, resources/read, prompts).
 
     ``text`` blocks are concatenated verbatim with a newline between them. Any
@@ -289,6 +346,10 @@ def _flatten_content(content: list[dict[str, Any]]) -> str:
     helper around for error paths (where we want a single error string) and
     for prompts / transcript injection (where the consumer is a chat message
     that must be plain text).
+
+    When ``config`` is supplied the final joined string is truncated to fit
+    ``config.max_result_text_bytes`` so error payloads (which the LLM will see
+    next turn) stay within the same envelope as success payloads.
     """
     parts: list[str] = []
     for block in content:
@@ -303,10 +364,17 @@ def _flatten_content(content: list[dict[str, Any]]) -> str:
             parts.append(f"[{block_type} omitted: PR5]")
         else:
             parts.append(f"[{block_type or 'unknown'} omitted: PR5]")
-    return "\n".join(parts)
+    joined = "\n".join(parts)
+    if config is not None:
+        joined = _truncate_text(joined, config.max_result_text_bytes)
+    return joined
 
 
-def _to_content_blocks(mcp_content: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _to_content_blocks(
+    mcp_content: list[dict[str, Any]],
+    *,
+    config: MCPConfig | None = None,
+) -> list[dict[str, Any]]:
     """Normalize an MCP ``content`` array into BareAgent-internal content blocks.
 
     Output blocks use Anthropic's native shape so the Anthropic provider can
@@ -328,6 +396,8 @@ def _to_content_blocks(mcp_content: list[dict[str, Any]]) -> list[dict[str, Any]
     Degradations always emit ``logger.warning`` rather than raising, so a
     misbehaving server can never kill the agent loop.
     """
+    max_text_bytes = config.max_result_text_bytes if config is not None else 0
+    max_binary_bytes = config.max_result_binary_bytes if config is not None else 0
     blocks: list[dict[str, Any]] = []
     for block in mcp_content:
         if not isinstance(block, dict):
@@ -341,13 +411,15 @@ def _to_content_blocks(mcp_content: list[dict[str, Any]]) -> list[dict[str, Any]
             continue
         block_type = block.get("type")
         if block_type == "text":
-            text = block.get("text")
-            blocks.append(
-                {"type": "text", "text": text if isinstance(text, str) else ""}
-            )
+            text = block.get("text") if isinstance(block.get("text"), str) else ""
+            if max_text_bytes > 0:
+                text = _truncate_text(text, max_text_bytes)
+            blocks.append({"type": "text", "text": text})
             continue
         if block_type == "image":
-            blocks.append(_image_block_or_placeholder(block))
+            blocks.append(
+                _image_block_or_placeholder(block, max_binary_bytes=max_binary_bytes)
+            )
             continue
         if block_type == "audio":
             _log.warning(
@@ -361,7 +433,9 @@ def _to_content_blocks(mcp_content: list[dict[str, Any]]) -> list[dict[str, Any]
             )
             continue
         if block_type == "embedded_resource":
-            blocks.append(_embedded_resource_placeholder(block))
+            blocks.append(
+                _embedded_resource_placeholder(block, max_binary_bytes=max_binary_bytes)
+            )
             continue
         if block_type == "resource_link":
             uri = block.get("uri")
@@ -378,7 +452,11 @@ def _to_content_blocks(mcp_content: list[dict[str, Any]]) -> list[dict[str, Any]
     return blocks
 
 
-def _image_block_or_placeholder(block: dict[str, Any]) -> dict[str, Any]:
+def _image_block_or_placeholder(
+    block: dict[str, Any],
+    *,
+    max_binary_bytes: int = 0,
+) -> dict[str, Any]:
     """Convert an MCP ``image`` content block to BareAgent's internal shape.
 
     Falls back to a text placeholder on any of the standard degradation paths
@@ -399,6 +477,20 @@ def _image_block_or_placeholder(block: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(data, str) or not data:
         _log.warning("MCP image block has empty/missing data; degrading to placeholder")
         return {"type": "text", "text": "[Image omitted: empty data]"}
+    if max_binary_bytes > 0:
+        # Estimate the decoded byte length from the base64 string size; avoids
+        # allocating a 6 MiB bytes object just to discover we should drop it.
+        estimated = _estimate_base64_bytes(data)
+        if estimated > max_binary_bytes:
+            _log.warning(
+                "MCP image block exceeds max_result_binary_bytes (%d > %d); omitting",
+                estimated,
+                max_binary_bytes,
+            )
+            return {
+                "type": "text",
+                "text": _RESOURCE_OMITTED_TEMPLATE.format(n=estimated),
+            }
     return {
         "type": "image",
         "source": {
@@ -409,7 +501,11 @@ def _image_block_or_placeholder(block: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _embedded_resource_placeholder(block: dict[str, Any]) -> dict[str, Any]:
+def _embedded_resource_placeholder(
+    block: dict[str, Any],
+    *,
+    max_binary_bytes: int = 0,
+) -> dict[str, Any]:
     resource = block.get("resource")
     if not isinstance(resource, dict):
         _log.warning(
@@ -420,6 +516,23 @@ def _embedded_resource_placeholder(block: dict[str, Any]) -> dict[str, Any]:
     mime = resource.get("mimeType")
     uri_text = uri if isinstance(uri, str) and uri else "unknown"
     mime_text = mime if isinstance(mime, str) and mime else "unknown"
+    # If the resource was inlined as base64 ``blob`` and exceeds the binary
+    # cap, surface the omission in a clear, LLM-readable form. ``text`` (no
+    # blob) resources fall back to the legacy placeholder unchanged.
+    blob = resource.get("blob")
+    if isinstance(blob, str) and blob and max_binary_bytes > 0:
+        estimated = _estimate_base64_bytes(blob)
+        if estimated > max_binary_bytes:
+            _log.warning(
+                "MCP embedded_resource blob exceeds max_result_binary_bytes "
+                "(%d > %d); omitting",
+                estimated,
+                max_binary_bytes,
+            )
+            return {
+                "type": "text",
+                "text": _RESOURCE_OMITTED_TEMPLATE.format(n=estimated),
+            }
     return {"type": "text", "text": f"[Resource: {uri_text} ({mime_text})]"}
 
 

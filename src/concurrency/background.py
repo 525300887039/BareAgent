@@ -14,6 +14,23 @@ class BackgroundManager:
         self._threads: dict[str, threading.Thread] = {}
         self._lock = threading.Lock()
 
+    def notify(self, task_id: str, message: str, *, status: str = "failed") -> None:
+        """Post an external notification onto the same channel as task completions.
+
+        Used by subsystems that have nothing to run in a background thread but
+        still want their event surfaced through the REPL's background-update
+        injection (see ``src/concurrency/notification.py``). MCP disconnect
+        events flow through here so the user sees them between LLM turns even
+        when no MCP tool was in-flight.
+        """
+        self._queue.put(
+            {
+                "task_id": task_id,
+                "status": status,
+                "error": message,
+            }
+        )
+
     def submit(self, task_id: str, fn: Callable[..., Any], *args: Any) -> str:
         with self._lock:
             # Prune dead threads to prevent unbounded growth.

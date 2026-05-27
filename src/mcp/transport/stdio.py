@@ -49,6 +49,9 @@ class StdioTransport(Transport):
         self._stderr_reader: threading.Thread | None = None
         self._write_lock = threading.Lock()
         self._closed = False
+        # Set true by ``close()`` so the reader thread can distinguish graceful
+        # shutdown (don't fire disconnect handler) from unexpected EOF.
+        self._closing = False
 
     def start(self) -> None:
         if self._proc is not None:
@@ -95,6 +98,7 @@ class StdioTransport(Transport):
         if self._closed:
             return
         self._closed = True
+        self._closing = True
         proc = self._proc
         if proc is None:
             return
@@ -130,6 +134,7 @@ class StdioTransport(Transport):
     def _read_loop(self) -> None:
         proc = self._proc
         assert proc is not None and proc.stdout is not None
+        disconnect_reason: str | None = None
         try:
             for raw in self._iter_lines(proc.stdout):
                 line = raw.decode("utf-8", errors="replace").strip()
@@ -146,8 +151,22 @@ class StdioTransport(Transport):
                     continue
                 self._dispatch(msg)
         except Exception as exc:  # pragma: no cover — defensive
+            disconnect_reason = f"stdio reader crashed: {exc}"
             _log.warning("MCP stdio reader crashed: %s", exc)
         finally:
+            # Distinguish graceful (user called close) from unexpected EOF /
+            # subprocess crash. Only fire disconnect handler in the unexpected
+            # case so a normal shutdown does not spuriously notify the manager.
+            if not self._closing:
+                if disconnect_reason is None:
+                    returncode = proc.poll()
+                    if returncode is not None:
+                        disconnect_reason = (
+                            f"stdout EOF (subprocess exited with code {returncode})"
+                        )
+                    else:
+                        disconnect_reason = "stdout EOF (subprocess exited)"
+                self._invoke_disconnect(disconnect_reason)
             self._fail_all_pending("stdio reader exited (subprocess EOF or error)")
 
     def _stderr_loop(self) -> None:

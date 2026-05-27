@@ -58,6 +58,9 @@ class HttpLegacyTransport(Transport):
         self._endpoint_url: str | None = None
         self._endpoint_event = threading.Event()
         self._closed = False
+        # Reader uses ``_closing`` to skip the disconnect handler when shutdown
+        # is user-initiated. Set by ``close()`` before tearing down the stream.
+        self._closing = False
 
     def start(self) -> None:
         if self._client is not None:
@@ -104,6 +107,7 @@ class HttpLegacyTransport(Transport):
         if self._closed:
             return
         self._closed = True
+        self._closing = True
         self._cleanup()
         self._fail_all_pending("HTTP legacy transport closed")
 
@@ -137,6 +141,7 @@ class HttpLegacyTransport(Transport):
 
     def _read_loop(self) -> None:
         assert self._response is not None
+        disconnect_reason: str | None = None
         try:
             for event in parse_sse_stream(self._response.iter_lines()):
                 if event["event"] == "endpoint":
@@ -148,10 +153,16 @@ class HttpLegacyTransport(Transport):
                         "MCP http_legacy: unknown SSE event %r", event["event"]
                     )
         except httpx.HTTPError as exc:
+            disconnect_reason = f"SSE stream broken: {exc}"
             _log.warning("MCP http_legacy: SSE stream broken: %s", exc)
         except Exception as exc:  # pragma: no cover — defensive
+            disconnect_reason = f"reader crashed: {exc}"
             _log.warning("MCP http_legacy reader crashed: %s", exc)
         finally:
+            if not self._closing:
+                self._invoke_disconnect(
+                    disconnect_reason or "SSE stream ended unexpectedly"
+                )
             self._fail_all_pending("SSE stream closed (server disconnect or error)")
 
     def _on_endpoint(self, data: str) -> None:

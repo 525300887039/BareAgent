@@ -79,6 +79,9 @@ ruff format src tests               # 格式化
 ### 调试与日志 (`src/debug/`)
 `InteractionLogger`（interaction_log.py）：将完整 LLM 请求/响应 payload 按会话写入 `.logs/<session-id>/` 的 JSONL，支持订阅事件流。`DebugViewerHandler`（web_viewer.py + viewer.html）：内置只读 HTTP SPA，REPL 中通过 `/log` 命令启动（端口由 `[debug] viewer_port` 控制，默认 8321）。需在配置中将 `[debug] enabled` 设为 `true` 才会写日志。
 
+### MCP 客户端 (`src/mcp/`)
+将外部 [Model Context Protocol](https://modelcontextprotocol.io) server 作为可插拔工具源接入 BareAgent。`MCPManager`（manager.py）并发拉起所有 `[[mcp.servers]]`，每个 server 一个 `MCPClient`（client.py）+ `Transport`（transport/，ABC + stdio / http_legacy / http_streamable 三实现）。`registry.py` 把远端工具按 `mcp__<server>__<tool>` 命名注入 `get_tools()` / `get_handlers()`；声明 `resources` capability 的 server 额外得到 `mcp__<server>__resource_list` + `mcp__<server>__resource_read`；`prompts/list` 通过 REPL slash 命令 `/mcp:<server>:<prompt>` 触发。REPL 配套命令：`/mcp status|list|reload`。生命周期硬化：transport reader 线程主动感知 EOF / 断流 → manager 立刻标 UNHEALTHY 并通过 `BackgroundManager.notify` 推送通知；`atexit + SIGTERM` 兜底清理子进程；单次 tool result 在 registry 层按 `max_result_text_bytes` / `max_result_binary_bytes` 截断（256 KiB / 5 MiB 默认）以保护 LLM 上下文。子代理隔离：`AgentType.mcp_tools_enabled`（explore/plan/code-review 默认 False）。关键文件：`src/mcp/__init__.py`、`src/mcp/manager.py`、`src/mcp/registry.py`、`src/mcp/client.py`、`src/mcp/transport/`、`src/mcp/config.py`、`src/mcp/errors.py`。配置见 `config.toml [mcp]` + `[[mcp.servers]]`。
+
 ## 配置
 
 `config.toml`（默认值）→ `config.local.toml`（本地覆盖，已 git-ignore）→ 环境变量 / CLI 参数（优先级递增）。

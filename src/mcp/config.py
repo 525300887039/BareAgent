@@ -14,7 +14,10 @@ from .errors import MCPError
 
 _VALID_TRANSPORTS = ("stdio", "http_legacy", "http_streamable")
 
-_DEFAULT_MAX_TEXT_BYTES = 1_048_576  # 1 MiB
+# 256 KiB. The text result of a single MCP tool call lands directly in the
+# next LLM turn; anything significantly larger blows past the typical
+# context window before the model even sees the rest of the turn.
+_DEFAULT_MAX_TEXT_BYTES = 262_144  # 256 KiB
 _DEFAULT_MAX_BINARY_BYTES = 5_242_880  # 5 MiB
 _DEFAULT_START_TIMEOUT = 10.0
 

@@ -157,3 +157,37 @@ def test_stdio_is_alive_reflects_process_state() -> None:
         transport.close()
     # After close the process should be dead.
     assert transport.is_alive() is False
+
+
+def test_stdio_disconnect_handler_fires_on_unexpected_subprocess_death() -> None:
+    """PR6: killing the subprocess wakes up the reader → ``_invoke_disconnect``
+    fires with a reason mentioning EOF, and the manager would mark UNHEALTHY."""
+    transport = _make_transport()
+    transport.start()
+    try:
+        seen: list[str] = []
+        transport.set_disconnect_handler(lambda reason: seen.append(reason))
+        # Hard-kill the subprocess to simulate a crash.
+        assert transport._proc is not None  # noqa: SLF001
+        transport._proc.kill()  # noqa: SLF001
+        # Reader thread should detect EOF and invoke the handler quickly.
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline and not seen:
+            time.sleep(0.05)
+        assert len(seen) == 1, f"expected exactly one disconnect, got {seen}"
+        assert "EOF" in seen[0] or "exited" in seen[0]
+    finally:
+        transport.close()
+
+
+def test_stdio_disconnect_handler_not_fired_on_graceful_close() -> None:
+    """PR6: ``close()`` must mark ``_closing`` so the reader does NOT invoke the
+    handler when EOF is the expected consequence of shutdown."""
+    transport = _make_transport()
+    transport.start()
+    seen: list[str] = []
+    transport.set_disconnect_handler(lambda reason: seen.append(reason))
+    transport.close()
+    # Give the reader a beat to wind down — handler should still be silent.
+    time.sleep(0.2)
+    assert seen == []
