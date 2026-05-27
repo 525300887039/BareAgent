@@ -1,13 +1,16 @@
-"""Single-server MCP client: initialize handshake, tools/list, tools/call.
+"""Single-server MCP client: initialize handshake + tools / resources / prompts.
 
 The client owns the JSON-RPC dialogue but not the connection: a constructed
 ``Transport`` is passed in by the manager so unit tests can substitute a fake.
-PR2 implements only the tools capability path; resources / prompts / sampling
-are deferred to later PRs.
+PR3 adds resources (``resources/list`` + ``resources/read``) and prompts
+(``prompts/list`` cached at handshake time + ``prompts/get`` on demand). Tools
+remain lazy, as in PR2.
 """
 
 from __future__ import annotations
 
+import logging
+import re
 from threading import Lock
 from typing import Any
 
@@ -16,9 +19,16 @@ from .errors import MCPCallError, MCPHandshakeError, MCPProtocolError, MCPTransp
 from .protocol import Notification, Request, new_request_id
 from .transport.base import Transport
 
+_log = logging.getLogger(__name__)
+
 # Latest MCP version BareAgent understands. Servers may negotiate down.
 _CLIENT_PROTOCOL_VERSION = "2025-06-18"
 _CLIENT_INFO = {"name": "BareAgent", "version": "0.1.0"}
+
+# PRD: only ``[a-zA-Z0-9_-]`` survive — prompt names with other characters can't
+# safely round-trip through the ``/mcp:<server>:<prompt>`` REPL syntax, so the
+# client drops them at catalog time and warns.
+_PROMPT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 class MCPClient:
@@ -35,6 +45,7 @@ class MCPClient:
         self._transport = transport
         self._cache_lock = Lock()
         self._tools_cache: list[dict[str, Any]] | None = None
+        self._prompts: list[dict[str, Any]] | None = None
         self._server_info: dict[str, Any] = {}
         self._server_capabilities: dict[str, Any] = {}
         self._negotiated_version: str | None = None
@@ -105,6 +116,19 @@ class MCPClient:
             ) from exc
 
         self._started = True
+
+        # Eagerly cache the prompts catalog if the server declared the capability.
+        # Failures here must not undo the handshake — log + fall back to empty.
+        if self.has_capability("prompts"):
+            try:
+                self._prompts = self._fetch_prompts(timeout=timeout)
+            except (MCPCallError, MCPProtocolError, MCPTransportError) as exc:
+                _log.warning(
+                    "MCP server %r prompts/list failed during start: %s",
+                    self._config.name,
+                    exc,
+                )
+                self._prompts = []
 
     def list_tools(self, *, timeout: float = 30.0) -> list[dict[str, Any]]:
         """Return cached or freshly fetched ``tools/list`` entries.
@@ -177,12 +201,137 @@ class MCPClient:
             return {"content": [], "isError": False}
         return result
 
+    def has_capability(self, name: str) -> bool:
+        """Return True if the server declared the named top-level capability.
+
+        Per MCP 2025-06-18, ``capabilities`` is a flat object whose keys (``tools``,
+        ``resources``, ``prompts``, ``logging``, …) signal *presence*; sub-flags
+        like ``{"prompts": {"listChanged": true}}`` are advisory. PR3 only checks
+        key presence.
+        """
+        return name in self._server_capabilities
+
+    def list_prompts(self) -> list[dict[str, Any]]:
+        """Return the prompts catalog cached during ``start()``.
+
+        Never re-fetches: the catalog is populated at handshake time, and if the
+        server didn't declare the prompts capability the result is the empty
+        list. (Prompts can change via ``notifications/prompts/list_changed`` —
+        that subscription is deferred to a later PR.)
+        """
+        return list(self._prompts or [])
+
+    def get_prompt(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        timeout: float = 30.0,
+    ) -> dict[str, Any]:
+        """Invoke ``prompts/get`` and return the raw result.
+
+        The result typically contains a ``messages`` array shaped for the LLM
+        ({role, content}). JSON-RPC errors raise ``MCPCallError`` so the REPL
+        dispatcher can render the message verbatim; per-message field validation
+        is left to the caller (the spec allows server-specific extensions).
+        """
+        request = Request(
+            id=new_request_id(),
+            method="prompts/get",
+            params={"name": name, "arguments": arguments or {}},
+        )
+        response = self._transport.request(request, timeout=timeout)
+        if response.error is not None:
+            raise MCPCallError(
+                f"MCP Error: {response.error.code} {response.error.message}"
+            )
+        result = response.result
+        if not isinstance(result, dict):
+            return {"messages": []}
+        return result
+
+    def list_resources(self, *, timeout: float = 30.0) -> list[dict[str, Any]]:
+        """Fetch ``resources/list`` fresh — not cached because resources are dynamic.
+
+        Returns the raw ``resources`` array (entries typically have ``uri`` /
+        ``name`` / ``description`` / ``mimeType``). Servers that omit the
+        capability still get the call attempted by the registry handler; the
+        handler is expected to guard the call site.
+        """
+        request = Request(id=new_request_id(), method="resources/list")
+        response = self._transport.request(request, timeout=timeout)
+        if response.error is not None:
+            raise MCPCallError(
+                f"MCP Error: {response.error.code} {response.error.message}"
+            )
+        result = response.result if isinstance(response.result, dict) else {}
+        resources = result.get("resources")
+        if not isinstance(resources, list):
+            return []
+        return [item for item in resources if isinstance(item, dict)]
+
+    def read_resource(self, uri: str, *, timeout: float = 60.0) -> dict[str, Any]:
+        """Invoke ``resources/read`` and return the raw result.
+
+        ``contents`` is preserved verbatim (each block has ``type`` /
+        ``text`` / ``blob`` / ``uri`` / ``mimeType`` depending on the source);
+        ``isError: true`` is intentionally not raised — the registry layer
+        flattens it into a ``Error: ...`` string for the LLM, mirroring the
+        ``call_tool`` convention.
+        """
+        request = Request(
+            id=new_request_id(),
+            method="resources/read",
+            params={"uri": uri},
+        )
+        response = self._transport.request(request, timeout=timeout)
+        if response.error is not None:
+            raise MCPCallError(
+                f"MCP Error: {response.error.code} {response.error.message}"
+            )
+        result = response.result
+        if not isinstance(result, dict):
+            return {"contents": [], "isError": False}
+        return result
+
     def close(self) -> None:
         """Tear down the transport. Idempotent."""
         self._safe_close()
 
     def is_alive(self) -> bool:
         return self._started and self._transport.is_alive()
+
+    def _fetch_prompts(self, *, timeout: float) -> list[dict[str, Any]]:
+        request = Request(id=new_request_id(), method="prompts/list")
+        response = self._transport.request(request, timeout=timeout)
+        if response.error is not None:
+            raise MCPCallError(
+                f"MCP Error: {response.error.code} {response.error.message}"
+            )
+        result = response.result if isinstance(response.result, dict) else {}
+        prompts = result.get("prompts")
+        if not isinstance(prompts, list):
+            return []
+        cleaned: list[dict[str, Any]] = []
+        for prompt in prompts:
+            if not isinstance(prompt, dict):
+                continue
+            name = prompt.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            if not _PROMPT_NAME_RE.match(name):
+                # Names outside [a-zA-Z0-9_-] would collide with the
+                # ``/mcp:<server>:<prompt>`` REPL syntax. Skip + warn rather
+                # than silently surface unusable entries.
+                _log.warning(
+                    "MCP server %r prompt %r contains characters outside "
+                    "[a-zA-Z0-9_-]; skipping",
+                    self._config.name,
+                    name,
+                )
+                continue
+            cleaned.append(prompt)
+        return cleaned
 
     def _safe_close(self) -> None:
         try:

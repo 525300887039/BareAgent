@@ -3,7 +3,7 @@
   "name": "mcp-resources-prompts",
   "title": "MCP Resources + Prompts 支持",
   "description": "PR3: resources/list&read 暴露为工具 + prompts/list&get 暴露为 /mcp:<server>:<prompt> 命令",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

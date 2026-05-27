@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 import tomllib
@@ -21,7 +22,8 @@ from src.core.context import assemble_system_prompt
 from src.core.loop import LLMCallError, agent_loop
 from src.core.tools import get_handlers, get_tools
 from src.debug.interaction_log import InteractionLogger
-from src.mcp import MCPConfig, MCPError, MCPManager, parse_mcp_config
+from src.mcp import MCPCallError, MCPConfig, MCPError, MCPManager, parse_mcp_config
+from src.mcp.registry import _flatten_content as _mcp_flatten_content
 from src.memory.compact import Compactor
 from src.memory.transcript import TranscriptManager
 from src.permission.guard import (
@@ -41,6 +43,8 @@ from src.team.mailbox import Message, MessageBus
 from src.team.manager import TeammateManager
 from src.team.protocols import Protocol, ProtocolFSM, decode_protocol_content
 from src.ui.console import AgentConsole
+
+_log = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.toml"
@@ -451,6 +455,7 @@ _SLASH_COMMANDS = [
     "/resume",
     "/log",
     "/team",
+    "/mcp:",
 ]
 _HELP_TEXT = (
     "Available commands:\n"
@@ -468,7 +473,8 @@ _HELP_TEXT = (
     "  /sessions  List saved sessions\n"
     "  /resume    Resume a previous session\n"
     "  /log       Debug log viewer (status|serve|open|<seq>)\n"
-    "  /team      Manage team agents (list | spawn | send)"
+    "  /team      Manage team agents (list | spawn | send)\n"
+    "  /mcp:      Invoke an MCP prompt (e.g. /mcp:server:prompt key=value)"
 )
 
 
@@ -1021,6 +1027,109 @@ def _handle_team_command(
     )
 
 
+_MCP_PROMPT_USAGE = "Usage: /mcp:<server>:<prompt> [key=value ...]"
+
+
+def _parse_mcp_prompt_command(text: str) -> tuple[str, str, dict[str, str]] | None:
+    """Parse ``/mcp:<server>:<prompt> [k=v ...]`` into (server, prompt, args).
+
+    Returns ``None`` if the command is malformed; logging is the caller's job
+    so callers can surface UI feedback consistently.
+    """
+    if not text.startswith("/mcp:"):
+        return None
+    rest = text[len("/mcp:") :]
+    head, _, tail = rest.partition(" ")
+    if ":" not in head:
+        return None
+    server_name, prompt_name = head.split(":", 1)
+    server_name = server_name.strip()
+    prompt_name = prompt_name.strip()
+    if not server_name or not prompt_name:
+        return None
+    arguments: dict[str, str] = {}
+    for tok in tail.split():
+        if "=" not in tok:
+            _log.warning(
+                "Ignoring malformed /mcp: argument %r (expected key=value)", tok
+            )
+            continue
+        k, _sep, v = tok.partition("=")
+        if not k:
+            _log.warning("Ignoring malformed /mcp: argument %r (empty key)", tok)
+            continue
+        arguments[k] = v
+    return server_name, prompt_name, arguments
+
+
+def _dispatch_mcp_prompt(
+    text: str,
+    *,
+    mcp_manager: MCPManager,
+    messages: list[dict[str, Any]],
+    ui_console: AgentConsole,
+) -> bool:
+    """Handle a ``/mcp:`` slash command. Returns True if messages were appended.
+
+    On success the parsed ``prompts/get`` result is converted into transcript
+    messages and appended; the caller is then expected to trigger the next
+    ``agent_loop()`` iteration just like a normal user input.
+    """
+    parsed = _parse_mcp_prompt_command(text)
+    if parsed is None:
+        ui_console.print_error(_MCP_PROMPT_USAGE)
+        return False
+    server_name, prompt_name, arguments = parsed
+
+    client = mcp_manager.get_client(server_name)
+    if client is None:
+        ui_console.print_error(f"Error: MCP server {server_name!r} is not running")
+        return False
+    if not client.has_capability("prompts"):
+        ui_console.print_error(
+            f"Error: server {server_name!r} does not support prompts"
+        )
+        return False
+
+    try:
+        result = client.get_prompt(prompt_name, arguments)
+    except MCPCallError as exc:
+        ui_console.print_error(str(exc))
+        return False
+    except Exception as exc:  # pragma: no cover — defensive
+        ui_console.print_error(f"Error: {type(exc).__name__}: {exc}")
+        return False
+
+    raw_messages = result.get("messages") if isinstance(result, dict) else None
+    if not isinstance(raw_messages, list) or not raw_messages:
+        ui_console.print_error(
+            f"Error: prompt {prompt_name!r} from {server_name!r} returned no messages"
+        )
+        return False
+
+    appended = False
+    for entry in raw_messages:
+        if not isinstance(entry, dict):
+            continue
+        role = entry.get("role")
+        if role not in {"user", "assistant"}:
+            continue
+        content = entry.get("content")
+        if isinstance(content, list):
+            blocks = content
+        elif isinstance(content, dict):
+            blocks = [content]
+        elif isinstance(content, str):
+            blocks = [{"type": "text", "text": content}]
+        else:
+            blocks = []
+        text_body = _mcp_flatten_content(blocks)
+        messages.append({"role": role, "content": text_body})
+        appended = True
+
+    return appended
+
+
 def _drain_team_mailbox(
     ui_console: AgentConsole,
     *,
@@ -1456,6 +1565,51 @@ def _run_stdio_session(
                     teammate_manager=teammate_manager,
                     team_handlers=handlers,
                 )
+                continue
+            if text.startswith("/mcp:"):
+                snapshot_len = len(messages)
+                appended = _dispatch_mcp_prompt(
+                    text,
+                    mcp_manager=mcp_manager,
+                    messages=messages,
+                    ui_console=ui_console,
+                )
+                if not appended:
+                    continue
+                # Re-render the injected user turn(s) so the screen matches the
+                # transcript before agent_loop runs.
+                _replay_stdio_transcript(messages[snapshot_len:], ui_console)
+                if messages[-1].get("role") != "user":
+                    # Trailing assistant message — no LLM call needed; prompt for input.
+                    ui_console.print_status(
+                        "Prompt injected. Type your follow-up to continue."
+                    )
+                    continue
+                try:
+                    agent_loop(
+                        provider=provider,
+                        messages=messages,
+                        tools=tools,
+                        handlers=handlers,
+                        permission=permission,
+                        compact_fn=compact_fn,
+                        bg_manager=bg_manager,
+                        stream=config.ui.stream,
+                        console=ui_console,
+                        interaction_logger=interaction_logger,
+                    )
+                    _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
+                    main_mailbox_cursor = _drain_team_mailbox(
+                        ui_console,
+                        message_bus=message_bus,
+                        since=main_mailbox_cursor,
+                    )
+                except LLMCallError:
+                    del messages[snapshot_len:]
+                    ui_console.print_error("LLM call failed, please try again.")
+                except KeyboardInterrupt:
+                    del messages[snapshot_len:]
+                    ui_console.print_status("Agent loop interrupted.")
                 continue
 
             messages.append({"role": "user", "content": text})

@@ -10,6 +10,7 @@ import pytest
 from src.mcp.errors import MCPCallError, MCPError
 from src.mcp.manager import ServerStatus
 from src.mcp.registry import (
+    _flatten_content,
     build_mcp_handlers,
     build_mcp_tool_schemas,
     mcp_tool_name,
@@ -20,11 +21,22 @@ def _fake_manager(
     clients: dict[str, MagicMock],
     statuses: dict[str, ServerStatus] | None = None,
 ) -> MagicMock:
-    """Build a MagicMock that quacks like MCPManager for the registry."""
+    """Build a MagicMock that quacks like MCPManager for the registry.
+
+    Each client mock defaults ``has_capability(...)`` to ``False`` — opt into
+    resources/prompts injection by setting ``client.has_capability.return_value``
+    or ``side_effect`` in the test body.
+    """
     manager = MagicMock()
     effective_status = dict(statuses or {})
     for name in clients:
         effective_status.setdefault(name, ServerStatus.RUNNING)
+
+    for client in clients.values():
+        # MagicMock auto-creates truthy child mocks — pin has_capability to a
+        # plain False return so PR3 resource tool injection only fires when a
+        # test explicitly opts in by overriding return_value / side_effect.
+        client.has_capability.return_value = False
 
     def _iter_running() -> Any:
         return iter(
@@ -240,3 +252,173 @@ def test_namespaced_collision_across_servers_raises() -> None:
 
     with pytest.raises(MCPError):
         build_mcp_tool_schemas(manager)
+
+
+# --- PR3: resources capability injection ----------------------------------
+
+
+def _resource_capable_client(
+    tools: list[dict[str, Any]] | None = None,
+) -> MagicMock:
+    client = MagicMock()
+    client.list_tools.return_value = tools or []
+    client.has_capability.side_effect = lambda name: name == "resources"
+    return client
+
+
+def test_resource_tools_injected_only_when_capability_declared() -> None:
+    plain = MagicMock()
+    plain.list_tools.return_value = []
+    plain.has_capability.return_value = False
+
+    capable = _resource_capable_client()
+
+    manager = _fake_manager({"plain": plain, "fs": capable})
+    schemas = build_mcp_tool_schemas(manager)
+    names = {schema["name"] for schema in schemas}
+
+    assert "mcp__fs__resource_list" in names
+    assert "mcp__fs__resource_read" in names
+    assert "mcp__plain__resource_list" not in names
+    assert "mcp__plain__resource_read" not in names
+
+
+def test_resource_read_schema_requires_uri() -> None:
+    capable = _resource_capable_client()
+    manager = _fake_manager({"fs": capable})
+
+    schemas = build_mcp_tool_schemas(manager)
+    read_schema = next(s for s in schemas if s["name"] == "mcp__fs__resource_read")
+    assert read_schema["input_schema"]["required"] == ["uri"]
+    assert read_schema["input_schema"]["properties"]["uri"]["type"] == "string"
+
+
+def test_resource_list_handler_flattens_resources_to_multiline_string() -> None:
+    capable = _resource_capable_client()
+    capable.list_resources.return_value = [
+        {
+            "uri": "file:///a.txt",
+            "name": "A",
+            "description": "First",
+            "mimeType": "text/plain",
+        },
+        {"uri": "file:///b.bin", "name": "B"},
+    ]
+    manager = _fake_manager({"fs": capable})
+    handler = build_mcp_handlers(manager)["mcp__fs__resource_list"]
+
+    out = handler()
+    lines = out.splitlines()
+    assert len(lines) == 2
+    assert lines[0] == "file:///a.txt | A | First | text/plain"
+    assert lines[1] == "file:///b.bin | B |  | "
+
+
+def test_resource_list_handler_returns_error_on_mcp_call_error() -> None:
+    capable = _resource_capable_client()
+    capable.list_resources.side_effect = MCPCallError("MCP Error: -32603 down")
+    manager = _fake_manager({"fs": capable})
+
+    handler = build_mcp_handlers(manager)["mcp__fs__resource_list"]
+    assert handler() == "MCP Error: -32603 down"
+
+
+def test_resource_list_handler_returns_error_when_server_unhealthy() -> None:
+    capable = _resource_capable_client()
+    manager = _fake_manager({"fs": capable})
+    handlers = build_mcp_handlers(manager)
+    manager.get_client.side_effect = lambda name: None  # noqa: ARG005
+
+    out = handlers["mcp__fs__resource_list"]()
+    assert out.startswith("Error: ")
+    assert "fs" in out
+
+
+def test_resource_read_handler_success_flattens_text_content() -> None:
+    capable = _resource_capable_client()
+    capable.read_resource.return_value = {
+        "contents": [
+            {"type": "text", "text": "line one"},
+            {"type": "text", "text": "line two"},
+        ],
+        "isError": False,
+    }
+    manager = _fake_manager({"fs": capable})
+    handler = build_mcp_handlers(manager)["mcp__fs__resource_read"]
+
+    out = handler(uri="file:///a.txt")
+    assert out == "line one\nline two"
+    capable.read_resource.assert_called_once_with("file:///a.txt")
+
+
+def test_resource_read_handler_translates_blob_to_placeholder() -> None:
+    capable = _resource_capable_client()
+    capable.read_resource.return_value = {
+        "contents": [
+            {"type": "text", "text": "preamble"},
+            {
+                "type": "blob",
+                "blob": "ZmFrZQ==",
+                "mimeType": "application/octet-stream",
+            },
+        ],
+        "isError": False,
+    }
+    manager = _fake_manager({"fs": capable})
+    handler = build_mcp_handlers(manager)["mcp__fs__resource_read"]
+
+    out = handler(uri="file:///a.bin")
+    assert "preamble" in out
+    assert "[blob omitted: PR5]" in out
+
+
+def test_resource_read_handler_prefixes_is_error_payload() -> None:
+    capable = _resource_capable_client()
+    capable.read_resource.return_value = {
+        "contents": [{"type": "text", "text": "permission denied"}],
+        "isError": True,
+    }
+    manager = _fake_manager({"fs": capable})
+    handler = build_mcp_handlers(manager)["mcp__fs__resource_read"]
+
+    out = handler(uri="file:///secret")
+    assert out == "Error: permission denied"
+
+
+def test_resource_read_handler_returns_error_on_mcp_call_error() -> None:
+    capable = _resource_capable_client()
+    capable.read_resource.side_effect = MCPCallError("MCP Error: -32602 bad uri")
+    manager = _fake_manager({"fs": capable})
+
+    handler = build_mcp_handlers(manager)["mcp__fs__resource_read"]
+    assert handler(uri="file:///x") == "MCP Error: -32602 bad uri"
+
+
+def test_resource_read_handler_rejects_missing_uri() -> None:
+    capable = _resource_capable_client()
+    manager = _fake_manager({"fs": capable})
+
+    handler = build_mcp_handlers(manager)["mcp__fs__resource_read"]
+    out = handler()
+    assert out.startswith("Error:")
+    assert "uri" in out
+
+
+def test_flatten_content_handles_text_other_and_empty() -> None:
+    assert _flatten_content([]) == ""
+    assert (
+        _flatten_content(
+            [
+                {"type": "text", "text": "a"},
+                {"type": "text", "text": "b"},
+            ]
+        )
+        == "a\nb"
+    )
+    assert _flatten_content([{"type": "image", "data": "x"}]) == "[image omitted: PR5]"
+    assert (
+        _flatten_content([{"type": "weird"}, {"type": "text", "text": "ok"}])
+        == "[weird omitted: PR5]\nok"
+    )
+    # Non-dict blocks are ignored, not crashed on.
+    assert _flatten_content([None, {"type": "text", "text": "x"}]) == "x"  # type: ignore[list-item]

@@ -1,1 +1,8 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/05-27-mcp-resources-prompts/prd.md", "reason": "PR3 自身 PRD：每 server 注入 resource_list + resource_read 两个工具；prompts 走 /mcp:server:prompt key=value REPL 路由；capability 门控；复用 PR2 _flatten_content 模式；Out of Scope 严格遵守"}
+{"file": ".trellis/tasks/05-27-mcp/prd.md", "reason": "父 PRD 总框架：resources v1 暴露为工具 (LLM 主动调) + 预留 inject_to_system flag 给 v2；prompts 暴露为 /mcp:<server>:<prompt> 由用户触发；命名空间 mcp__<server>__<tool>"}
+{"file": ".trellis/tasks/05-27-mcp/research/mcp-protocol-spec.md", "reason": "resources/list、resources/read、prompts/list、prompts/get 的完整 schema；initialize 返回的 capabilities 字段格式（tools/resources/prompts/logging 各 sub-object）"}
+{"file": ".trellis/tasks/05-27-mcp/research/popular-mcp-servers.md", "reason": "server 端 resources / prompts 暴露习惯；resource URI 自定义 scheme；prompts/get 返回的 messages 结构（role + content array）"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新工具仍走 src/mcp/registry.py 注入路径不在 src/core/handlers/ 加文件；REPL 命令分支沿 main.py 现有 /resume / /log 模式"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "resources/read 与 prompts/get 复用 PR2 双层错误模型（JSON-RPC error 抛 MCPCallError、isError:true 拍平为 Error: 前缀字符串、unhealthy server 返回 Error: 字符串不抛）"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "REPL 反馈走 UIProtocol，capability 缺失 warn 走 logger，非法 prompt name warn 不污染 console"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "from __future__ import annotations + 完整类型注解 + ruff/pytest 全绿；新增测试覆盖 capability 门控 / kwargs 解析 / resource read 错误降级 / prompts 注入 transcript"}

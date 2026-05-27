@@ -240,3 +240,244 @@ def test_close_is_idempotent() -> None:
     client.close()
     client.close()  # second call must not raise
     assert client.is_alive() is False
+
+
+# --- PR3: capability parsing + prompts + resources -------------------------
+
+
+def test_capability_parsing_records_prompts_and_resources() -> None:
+    transport = FakeTransport()
+    transport.queue_response_for(
+        "initialize",
+        _ok_init_response(capabilities={"prompts": {}, "resources": {}}),
+    )
+    transport.queue_response_for(
+        "prompts/list",
+        Response(id=0, result={"prompts": []}),
+    )
+    client = MCPClient(_make_config(), transport)
+    client.start(timeout=1.0)
+
+    assert client.has_capability("prompts") is True
+    assert client.has_capability("resources") is True
+    assert client.has_capability("tools") is False
+
+
+def test_start_skips_prompts_list_when_capability_absent() -> None:
+    transport = FakeTransport()
+    transport.queue_response_for(
+        "initialize", _ok_init_response(capabilities={"tools": {}})
+    )
+    client = MCPClient(_make_config(), transport)
+    client.start(timeout=1.0)
+
+    # _prompts stays None — server did not opt into prompts.
+    assert client._prompts is None  # noqa: SLF001
+    methods = [decode_message(line) for line in transport.sent]
+    assert all(
+        not (isinstance(m, Request) and m.method == "prompts/list") for m in methods
+    )
+
+
+def test_start_caches_prompts_list_when_capability_present() -> None:
+    transport = FakeTransport()
+    transport.queue_response_for(
+        "initialize",
+        _ok_init_response(capabilities={"prompts": {"listChanged": True}}),
+    )
+    transport.queue_response_for(
+        "prompts/list",
+        Response(
+            id=0,
+            result={
+                "prompts": [
+                    {
+                        "name": "summarize",
+                        "description": "Summarize a URL",
+                        "arguments": [{"name": "url", "required": True}],
+                    }
+                ]
+            },
+        ),
+    )
+    client = MCPClient(_make_config(), transport)
+    client.start(timeout=1.0)
+
+    assert client.list_prompts() == [
+        {
+            "name": "summarize",
+            "description": "Summarize a URL",
+            "arguments": [{"name": "url", "required": True}],
+        }
+    ]
+
+
+def test_start_filters_prompts_with_illegal_names(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Prompt names outside [a-zA-Z0-9_-] would break the /mcp: REPL syntax."""
+    transport = FakeTransport()
+    transport.queue_response_for(
+        "initialize", _ok_init_response(capabilities={"prompts": {}})
+    )
+    transport.queue_response_for(
+        "prompts/list",
+        Response(
+            id=0,
+            result={
+                "prompts": [
+                    {"name": "good_name"},
+                    {"name": "also-fine"},
+                    {"name": "bad name"},  # space — illegal
+                    {"name": "bad:name"},  # colon — illegal (clashes with /mcp:)
+                ]
+            },
+        ),
+    )
+    client = MCPClient(_make_config(), transport)
+
+    import logging as _logging
+
+    with caplog.at_level(_logging.WARNING, logger="src.mcp.client"):
+        client.start(timeout=1.0)
+
+    names = {p["name"] for p in client.list_prompts()}
+    assert names == {"good_name", "also-fine"}
+    warnings = [rec.getMessage() for rec in caplog.records if rec.levelno >= 30]
+    assert any("bad name" in msg for msg in warnings)
+    assert any("bad:name" in msg for msg in warnings)
+
+
+def test_start_swallows_prompts_list_error_without_failing_handshake() -> None:
+    transport = FakeTransport()
+    transport.queue_response_for(
+        "initialize", _ok_init_response(capabilities={"prompts": {}})
+    )
+    transport.queue_response_for(
+        "prompts/list",
+        Response(id=0, error=ErrorObject(code=-32603, message="boom")),
+    )
+    client = MCPClient(_make_config(), transport)
+
+    client.start(timeout=1.0)
+
+    # Handshake still succeeded; cache fell back to empty so list_prompts works.
+    assert client.is_alive() is True
+    assert client.list_prompts() == []
+
+
+def test_get_prompt_success_returns_raw_messages() -> None:
+    transport = FakeTransport()
+    transport.queue_response_for(
+        "initialize", _ok_init_response(capabilities={"prompts": {}})
+    )
+    transport.queue_response_for(
+        "prompts/list",
+        Response(id=0, result={"prompts": [{"name": "summarize"}]}),
+    )
+    transport.queue_response_for(
+        "prompts/get",
+        Response(
+            id=0,
+            result={
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": {"type": "text", "text": "Summarize https://x"},
+                    }
+                ],
+            },
+        ),
+    )
+    client = MCPClient(_make_config(), transport)
+    client.start(timeout=1.0)
+
+    result = client.get_prompt("summarize", {"url": "https://x"})
+    assert result["messages"][0]["role"] == "user"
+    assert result["messages"][0]["content"]["text"] == "Summarize https://x"
+
+
+def test_get_prompt_jsonrpc_error_raises_mcp_call_error() -> None:
+    transport = FakeTransport()
+    transport.queue_response_for(
+        "initialize", _ok_init_response(capabilities={"prompts": {}})
+    )
+    transport.queue_response_for("prompts/list", Response(id=0, result={"prompts": []}))
+    transport.queue_response_for(
+        "prompts/get",
+        Response(id=0, error=ErrorObject(code=-32602, message="missing arg")),
+    )
+    client = MCPClient(_make_config(), transport)
+    client.start(timeout=1.0)
+
+    with pytest.raises(MCPCallError) as info:
+        client.get_prompt("summarize", {})
+    assert "-32602" in str(info.value)
+    assert "missing arg" in str(info.value)
+
+
+def test_list_resources_success_returns_array() -> None:
+    transport = FakeTransport()
+    transport.queue_response_for(
+        "initialize", _ok_init_response(capabilities={"resources": {}})
+    )
+    transport.queue_response_for(
+        "resources/list",
+        Response(
+            id=0,
+            result={
+                "resources": [
+                    {"uri": "file:///a.txt", "name": "A", "mimeType": "text/plain"},
+                    {"uri": "file:///b.bin", "name": "B"},
+                ]
+            },
+        ),
+    )
+    client = MCPClient(_make_config(), transport)
+    client.start(timeout=1.0)
+
+    resources = client.list_resources()
+    assert len(resources) == 2
+    assert resources[0]["uri"] == "file:///a.txt"
+
+
+def test_list_resources_jsonrpc_error_raises_mcp_call_error() -> None:
+    transport = FakeTransport()
+    transport.queue_response_for(
+        "initialize", _ok_init_response(capabilities={"resources": {}})
+    )
+    transport.queue_response_for(
+        "resources/list",
+        Response(id=0, error=ErrorObject(code=-32603, message="server kaput")),
+    )
+    client = MCPClient(_make_config(), transport)
+    client.start(timeout=1.0)
+
+    with pytest.raises(MCPCallError) as info:
+        client.list_resources()
+    assert "server kaput" in str(info.value)
+
+
+def test_read_resource_returns_is_error_payload_without_raising() -> None:
+    transport = FakeTransport()
+    transport.queue_response_for(
+        "initialize", _ok_init_response(capabilities={"resources": {}})
+    )
+    transport.queue_response_for(
+        "resources/read",
+        Response(
+            id=0,
+            result={
+                "contents": [
+                    {"type": "text", "text": "boom: file is missing"},
+                ],
+                "isError": True,
+            },
+        ),
+    )
+    client = MCPClient(_make_config(), transport)
+    client.start(timeout=1.0)
+
+    result = client.read_resource("file:///gone.txt")
+    assert result["isError"] is True
+    assert result["contents"][0]["text"] == "boom: file is missing"
