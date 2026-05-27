@@ -143,3 +143,36 @@ PR3 落地 MCP resources/prompts：MCPClient 解析 server_capabilities + 按 ca
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: PR4: MCP 权限 + 子代理隔离 + REPL 命令
+
+**Date**: 2026-05-27
+**Task**: PR4: MCP 权限 + 子代理隔离 + REPL 命令
+**Branch**: `main`
+
+### Summary
+
+PR4 落地 MCP 权限治理三件套：PermissionGuard MCP 工具四模式分支（DEFAULT 必 ask / AUTO 通过 / PLAN 拒绝 / BYPASS 放行），is_dangerous 对 mcp__ 短路返回 False（DANGEROUS_PATTERNS 不应用于 JSON args），format_preview 输出格式化 JSON + 单字段 >256 字符截断；AgentType 加 mcp_tools_enabled: bool = True 字段，explore/plan/code-review 三只读子代理设 False，filter_tools 双层防御剔除 mcp__*；MCPManager 抽 _build_client 私有方法，reload(name) 失败丢旧 client 标 UNHEALTHY，summarize() 给 /mcp status 用；main.py REPL /mcp status|list|reload 命令（空格前缀与 PR3 /mcp: 冒号互不冲突）。trellis-check 发现并修复 1 个安全漏洞：PLAN 模式被 allow_rules 绕过——确立结构性约定 "safe modes 必须短路于 allow_rules 之前" 并沉淀到 .trellis/spec/backend/error-handling.md。32 个新测试，pytest 412 passed / 3 skipped / ruff 全绿。父任务 mcp 进度 [3/6 done]，剩 PR5（multimodal）+ PR6（hardening/E2E/docs）。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ba7d0f5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
