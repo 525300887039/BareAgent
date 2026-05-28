@@ -266,6 +266,51 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
 ]
 
 
+def _build_diagnostics_hook(
+    lsp_manager: LanguageServerManager | None,
+) -> Callable[[str, Any], Any] | None:
+    """Construct the Hybrid auto-diagnostics callback for file edit/write.
+
+    Returns ``None`` when no manager is wired (LSP disabled). When wired,
+    the returned closure is invoked twice by the handler:
+
+    * ``hook(file_path, None)`` — snapshot the current diagnostics so the
+      handler can pass them back for diffing. Returns ``list[Diagnostic]``
+      or ``None`` if the snapshot is unusable.
+    * ``hook(file_path, before)`` — post-edit; returns the formatted
+      ``"\\n\\n…"`` appendix or ``None`` (caller appends only on non-None).
+
+    Heavy lifting is delegated to :func:`src.lsp.diagnostics.snapshot_diagnostics`
+    and :func:`src.lsp.diagnostics.maybe_diagnostics_appendix`. Both swallow
+    their own errors so the handler never fails because of an LSP hiccup.
+    """
+    if lsp_manager is None:
+        return None
+
+    from src.lsp.diagnostics import (
+        maybe_diagnostics_appendix,
+        snapshot_diagnostics,
+    )
+
+    def _hook(file_path: str, before: Any) -> Any:
+        # Cheap config gate before touching the manager so disabled mode
+        # exits in ~one attribute access.
+        try:
+            cfg = lsp_manager.config
+        except Exception:
+            return None
+        if not cfg.auto_diagnostics_on_edit:
+            return None
+        if before is None:
+            try:
+                return snapshot_diagnostics(lsp_manager, file_path)
+            except Exception:
+                return None
+        return maybe_diagnostics_appendix(lsp_manager, cfg, file_path, before)
+
+    return _hook
+
+
 def _make_lazy_task_handlers(task_file: Path) -> dict[str, Callable[..., Any]]:
     state: dict[str, dict[str, Callable[..., Any]] | None] = {"handlers": None}
 
@@ -407,11 +452,22 @@ def get_handlers(
     mcp_manager: MCPManager | None = None,
     lsp_manager: LanguageServerManager | None = None,
 ) -> dict[str, Callable[..., Any]]:
+    # Hybrid auto-diagnostics hook: built once per ``get_handlers`` call so
+    # edit_file / write_file share the same closure. ``None`` when LSP isn't
+    # wired in — handlers will then skip the snapshot/diff entirely. Importing
+    # the hook here (rather than in the handler modules) keeps src/core/
+    # free of any direct dependency on src/lsp/.
+    diagnostics_hook = _build_diagnostics_hook(lsp_manager)
+
     handlers: dict[str, Callable[..., Any]] = {
         "bash": partial(run_bash, cwd=workspace),
         "read_file": partial(run_read, workspace=workspace),
-        "write_file": partial(run_write, workspace=workspace),
-        "edit_file": partial(run_edit, workspace=workspace),
+        "write_file": partial(
+            run_write, workspace=workspace, diagnostics_hook=diagnostics_hook
+        ),
+        "edit_file": partial(
+            run_edit, workspace=workspace, diagnostics_hook=diagnostics_hook
+        ),
         "glob": partial(run_glob, workspace=workspace),
         "grep": partial(run_grep, workspace=workspace),
         "web_fetch": run_web_fetch,

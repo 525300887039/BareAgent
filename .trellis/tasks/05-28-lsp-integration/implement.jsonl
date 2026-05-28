@@ -1,1 +1,8 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/05-28-lsp-integration/prd.md", "reason": "本 PR 自身 PRD：diagnostics.py + Hybrid hook (默认 OFF) + atexit/SIGTERM + on_disconnect 接通 + REPL /lsp + pyright E2E + 文档同步 + child A 遗留清理"}
+{"file": ".trellis/tasks/05-27-lsp-client/prd.md", "reason": "父 PRD：17 项 AC 总框架，本 PR 闭合剩余 8 项（#7/#8/#11-15/#17）"}
+{"file": ".trellis/tasks/05-27-lsp-client/research/lsp-agent-integration-patterns.md", "reason": "Hybrid 暴露策略（Serena+Cline 行业共识）+ getNewDiagnostics 算法参考（Cline apps/vscode/src/integrations/diagnostics/index.ts）+ pyright analysis_complete race condition（Serena threading.Event 模式）+ multilspy 0.0.15 不暴露 pull diagnostics → push cache fallback"}
+{"file": ".trellis/tasks/05-27-lsp-client/research/lsp-vs-mcp-protocol.md", "reason": "shutdown→exit 两阶段 lifecycle；server-initiated request 由 multilspy 处理；Windows file URI 走 multilspy path_utils"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "long-lived readers 区分 graceful/unexpected (MCP PR6 沉淀) 应用到 LSP on_disconnect；tool handler 错误降级 string；fail-closed 不被 allow-rule 穿透"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "src/lsp/ 改动落点：diagnostics.py 新建 + manager.py/main.py 增 atexit/notifier/on_disconnect + edit/write handler 接 hook；ui/concurrency 通过依赖注入；本 PR 同时往文档自身写新内容（src/lsp/ 段 + decision tree）"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "_on_disconnect 路径走 logger.warning + console.print_error；BackgroundManager.notify 推送；不 print()"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "from __future__ + 类型注解 + ruff 全绿；新增 ≥ 8 unit case + 4 case E2E；不退化现有 508 个 case"}

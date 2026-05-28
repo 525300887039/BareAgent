@@ -15,6 +15,7 @@ Handlers convert to LSP's 0-based form internally before calling multilspy.
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -25,6 +26,8 @@ from .coord import line_col_0_to_1, line_col_1_to_0, to_repo_relative
 
 if TYPE_CHECKING:
     from .manager import LanguageServerManager
+
+_log = logging.getLogger(__name__)
 
 LSP_TOOL_NAMES = (
     "lsp_outline",
@@ -206,29 +209,85 @@ def _make_diagnostics_handler(
             return prelude
         server, relpath = prelude
 
-        # Try pull-diagnostics first (LSP 3.17+). multilspy >= 0.0.15 does
-        # not expose this on SyncLanguageServer; fall through to the push
-        # cache when the method is missing.
+        # Try pull-diagnostics first (LSP 3.17+). multilspy 0.0.15 does not
+        # expose this on ``SyncLanguageServer``; fall through to the manager-
+        # side push cache when the method is missing or raises. Per-call pull
+        # errors land in debug logs only — they're expected on stock multilspy.
         diagnostics: list[Any] | None = None
         pull = getattr(server, "request_text_document_diagnostics", None)
         if callable(pull):
             try:
                 diagnostics = list(pull(relpath))
             except Exception as exc:
-                # Pull failed; we still try the push cache below before
-                # giving up.
-                pull_error = f"{type(exc).__name__}: {exc}"
+                _log.debug(
+                    "lsp_diagnostics pull failed for %r: %s: %s",
+                    relpath,
+                    type(exc).__name__,
+                    exc,
+                )
                 diagnostics = None
-                _ = pull_error
 
         if not diagnostics:
-            diagnostics = _read_push_diagnostics(server, relpath)
+            # Push-cache path. The manager installs a publishDiagnostics
+            # handler at handshake — multilspy itself registers ``do_nothing``
+            # for that notification on every bundled adapter (verified
+            # against 0.0.15 source).  Pyright only publishes once the file
+            # is opened (``textDocument/didOpen``), and multilspy's
+            # ``request_*`` paths auto-open via ``with self.open_file(...)``
+            # but ``lsp_diagnostics`` has no analogue. We invoke ``open_file``
+            # explicitly here so pyright analyses the document before we read
+            # the cache. ``wait_for_diagnostics`` then gives the server up to
+            # a few seconds to push.
+            _trigger_open_and_wait(server, manager, file, relpath)
+            diagnostics = manager.get_diagnostics_snapshot(file)
 
         if not diagnostics:
             return "(no diagnostics)"
         return _format_diagnostics(diagnostics)
 
     return _handler
+
+
+def _trigger_open_and_wait(
+    server: Any,
+    manager: LanguageServerManager,
+    file: str,
+    relpath: str,
+) -> None:
+    """Force pyright/etc. to analyse ``file`` so its diagnostics land in the cache.
+
+    multilspy's ``open_file`` is a context manager that sends ``didOpen`` on
+    entry and ``didClose`` on exit. We need to keep the file open long
+    enough for the server to respond with a publishDiagnostics notification.
+    Pattern: open in a worker thread + wait for the manager-side Event with
+    a short budget. Best-effort — any exception swallowed and the caller
+    falls back to whatever the cache holds (possibly empty).
+    """
+    import threading as _threading
+
+    open_file = getattr(server, "open_file", None)
+    if not callable(open_file):
+        return
+
+    holder: dict[str, Any] = {"done": _threading.Event()}
+
+    def _hold() -> None:
+        try:
+            with open_file(relpath):
+                # Block briefly while pyright analyses and publishes. The
+                # outer wait_for_diagnostics is the primary signal; this is
+                # a safety net so the context exits even if no publish lands.
+                holder["done"].wait(timeout=4.0)
+        except Exception:  # pragma: no cover — best-effort
+            pass
+
+    worker = _threading.Thread(target=_hold, daemon=True, name="lsp-open-hold")
+    worker.start()
+    try:
+        manager.wait_for_diagnostics(file, timeout=4.0)
+    finally:
+        holder["done"].set()
+        worker.join(timeout=1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -419,33 +478,6 @@ def _format_locations(
     if not rendered:
         return "(no location data)"
     return "\n".join(rendered)
-
-
-def _read_push_diagnostics(server: Any, relpath: str) -> list[Any]:
-    """Best-effort read of multilspy's published-diagnostics cache.
-
-    multilspy stashes the latest ``publishDiagnostics`` payload on the
-    underlying ``LanguageServer`` instance. We probe the attributes it has
-    historically exposed without crashing if they are absent — diagnostics
-    is a soft feature on top of multilspy's public API.
-    """
-    candidates = (
-        server,
-        getattr(server, "language_server", None),
-    )
-    keys = (relpath, relpath.replace("\\", "/"))
-    for candidate in candidates:
-        if candidate is None:
-            continue
-        cache = getattr(candidate, "diagnostics", None)
-        if not isinstance(cache, dict):
-            cache = getattr(candidate, "_diagnostics", None)
-        if isinstance(cache, dict):
-            for key in keys:
-                value = cache.get(key)
-                if value is not None:
-                    return list(value) if isinstance(value, list) else [value]
-    return []
 
 
 def _format_diagnostics(diagnostics: list[Any]) -> str:

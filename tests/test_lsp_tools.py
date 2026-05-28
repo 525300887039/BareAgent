@@ -76,6 +76,10 @@ class _StubManager:
         self._servers = servers or {}
         self._statuses = statuses or {}
         self._ext_map = ext_map or {}
+        # Stand-in for the diagnostics push cache the real manager builds
+        # via its publishDiagnostics handler. Keyed by *relative* path the
+        # same way the manager does.
+        self.diagnostics_cache: dict[str, list[dict]] = {}
 
     def language_for_file(self, path: str) -> str | None:
         _, ext = os.path.splitext(path)
@@ -88,6 +92,12 @@ class _StubManager:
         if self._statuses.get(language) != ServerStatus.RUNNING:
             return None
         return self._servers.get(language)
+
+    def get_diagnostics_snapshot(self, path: str) -> list[dict]:
+        # Mirror the real manager — look up by repo-relative path.
+        abs_path = path if os.path.isabs(path) else os.path.abspath(path)
+        rel = os.path.relpath(abs_path, start=self.repository_root)
+        return list(self.diagnostics_cache.get(rel, []))
 
 
 @pytest.fixture
@@ -274,26 +284,25 @@ def test_diagnostics_pull_path(fake_setup) -> None:
 
 
 def test_diagnostics_falls_back_to_push_cache(fake_setup) -> None:
-    # Pull raises (e.g. NotImplementedError) → handler reads push cache.
+    # Pull raises (e.g. NotImplementedError) → handler reads push cache via
+    # the manager-side ``get_diagnostics_snapshot``. multilspy 0.0.15 in
+    # practice never exposes pull diagnostics, so the push-cache path is the
+    # one users hit on real pyright.
     fake_setup["server"].diagnostics_pull_raises = NotImplementedError()
-    # Manager stores ``diagnostics`` indexed by the same relative path the
-    # handler uses (``os.path.relpath(abs_path, repo_root)``).
     rel = os.path.relpath(
         str(fake_setup["sample"]),
         start=fake_setup["manager"].repository_root,
     )
-    fake_setup["server"].diagnostics = {
-        rel: [
-            {
-                "severity": 2,
-                "message": "deprecated import",
-                "range": {
-                    "start": {"line": 1, "character": 0},
-                    "end": {"line": 1, "character": 1},
-                },
-            }
-        ]
-    }
+    fake_setup["manager"].diagnostics_cache[rel] = [
+        {
+            "severity": 2,
+            "message": "deprecated import",
+            "range": {
+                "start": {"line": 1, "character": 0},
+                "end": {"line": 1, "character": 1},
+            },
+        }
+    ]
     output = fake_setup["handlers"]["lsp_diagnostics"](file=str(fake_setup["sample"]))
     assert "[Warning] Line 2" in output
     assert "deprecated import" in output

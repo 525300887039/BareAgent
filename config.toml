@@ -61,3 +61,40 @@ pretty = true
 # url = "https://mcp.example.com/mcp"
 # headers = { Authorization = "Bearer ${KNOWLEDGE_TOKEN}" }
 # # transport 也可设为 "http_legacy"（MCP 2024-11-05 双端点）以兼容旧 server。
+
+# --- LSP (Language Server Protocol) --------------------------------------
+# 通过 multilspy 接入成熟 Language Server。MVP 暴露 4 个 Tier-1 工具：
+# `lsp_outline` / `lsp_definition` / `lsp_references` / `lsp_diagnostics`。需安装可选 extra：
+#   uv pip install -e ".[lsp]"
+# multilspy 0.0.15 内置语言适配：Python → jedi-language-server（非 pyright；jedi 走
+# 符号导航强、类型诊断弱），TypeScript → typescript-language-server，Rust → rust-analyzer。
+# REPL 命令：`/lsp status|list|reload <language>`。
+[lsp]
+# Hybrid auto-diagnostics-on-edit：edit_file / write_file 成功后自动调 LSP
+# 拿最新诊断，与编辑前的快照按 (file, line, col, severity, message) 五元组
+# 做 diff，将**新增**诊断追加到 tool result 末尾，格式：
+#   Newly introduced diagnostics in <file>:
+#   - [pyright Error] Line N:C — <message>
+# 默认 OFF：保持 edit/write 体验与原版一致；启用前请确认 LSP server 已正常
+# 起来（pyright 第一次全项目分析 5-15s）。
+# auto_diagnostics_on_edit = false
+# 单个 server handshake + initial analysis 超时（秒）。超时标 UNHEALTHY 并跳过，
+# 不阻塞 REPL boot。pyright 通常 5-15s，rust-analyzer 项目较大时可能更久。
+# start_timeout = 15.0
+
+# 示例 1：Python（multilspy 默认走 jedi-language-server，不是 pyright）。
+# [[lsp.servers]]
+# language = "python"                # multilspy code_language（→ JediServer）
+# extensions = [".py", ".pyi"]       # 文件扩展名 → 路由到此 server
+# # initialization_options 透传给 LSP server（透传 LSP-specific 配置）：
+# # initialization_options = { python = { pythonPath = ".venv/bin/python" } }
+
+# 示例 2：TypeScript / JavaScript（typescript-language-server）。
+# [[lsp.servers]]
+# language = "typescript"
+# extensions = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"]
+
+# 示例 3：Rust（rust-analyzer）。
+# [[lsp.servers]]
+# language = "rust"
+# extensions = [".rs"]

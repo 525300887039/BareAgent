@@ -1,1 +1,7 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/05-28-lsp-integration/prd.md", "reason": "验收：17 项 AC（diff 五元组 + 实测 multilspy cache 路径 + 遗留 dead code 清掉 + hook 默认 OFF + atexit/SIGTERM + on_disconnect 推送 + /lsp 命令 + pyright E2E + 文档 + ≥ 8 新 case）"}
+{"file": ".trellis/tasks/05-27-lsp-client/prd.md", "reason": "校验父 PRD 17 项 AC 全部勾选 + DoD 收齐（包结构 / pytest 累计 / 文档同步 / [lsp] extra / pyright E2E 跑通）"}
+{"file": ".trellis/tasks/05-27-lsp-client/research/lsp-agent-integration-patterns.md", "reason": "校验：diff 算法参考 Cline 实现；race condition 处理参考 Serena；hybrid 默认 OFF（Serena 评注：单步编辑常有临时错误 noisy）"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "校验 on_disconnect 区分 graceful (close_all) / unexpected (server crash)；handler 错误 string 降级；fail-closed 不破坏"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "校验改动范围：src/lsp/diagnostics.py + src/lsp/manager.py + src/main.py + src/core/handlers/{edit,write}_file.py + CLAUDE.md + directory-structure.md + config.toml；不动 src/mcp/* / src/permission/* / src/core/loop.py / src/provider/*"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "校验启动 / 崩溃日志走 logger.warning + console.print_error；BackgroundManager.notify 路径"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "校验 ruff/pytest 全绿；类型注解齐全；测试达标"}

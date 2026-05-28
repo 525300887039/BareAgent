@@ -476,6 +476,7 @@ _SLASH_COMMANDS = [
     "/team",
     "/mcp",
     "/mcp:",
+    "/lsp",
 ]
 _HELP_TEXT = (
     "Available commands:\n"
@@ -495,7 +496,8 @@ _HELP_TEXT = (
     "  /log       Debug log viewer (status|serve|open|<seq>)\n"
     "  /team      Manage team agents (list | spawn | send)\n"
     "  /mcp       Manage MCP servers (status | list | reload <name>)\n"
-    "  /mcp:      Invoke an MCP prompt (e.g. /mcp:server:prompt key=value)"
+    "  /mcp:      Invoke an MCP prompt (e.g. /mcp:server:prompt key=value)\n"
+    "  /lsp       Manage LSP servers (status | list | reload <language>)"
 )
 
 
@@ -1445,6 +1447,95 @@ def _install_mcp_cleanup(mcp_manager: MCPManager) -> None:
         pass
 
 
+def _install_lsp_cleanup(lsp_manager: LanguageServerManager) -> None:
+    """Register an idempotent atexit hook for the LSP manager.
+
+    Deliberately decoupled from :func:`_install_mcp_cleanup`: ``atexit`` fires
+    callbacks LIFO regardless of registration order, and
+    ``lsp_manager.close_all`` is guaranteed idempotent (see manager docstring)
+    so duplicate registration from a future caller is safe. The SIGTERM
+    handler is already installed by the MCP path; we rely on that to convert
+    the signal into ``sys.exit(130)`` so this atexit hook actually fires.
+    """
+    atexit.register(lsp_manager.close_all)
+
+
+_LSP_COMMAND_USAGE = "Usage: /lsp <status|list|reload <language>>"
+
+
+def _dispatch_lsp_command(
+    text: str,
+    *,
+    lsp_manager: LanguageServerManager,
+    ui_console: AgentConsole,
+) -> None:
+    """Handle the space-prefixed ``/lsp <subcommand>`` REPL command.
+
+    Mirrors the ``/mcp`` command shape: ``status`` shows per-server health,
+    ``list`` enumerates the ``lsp_*`` tools available right now (only for
+    RUNNING servers), and ``reload <language>`` rebuilds one server.
+    Feedback flows through ``ui_console``; the routine never raises.
+    """
+    tokens = text.split()
+    if len(tokens) <= 1:
+        ui_console.print_status(_LSP_COMMAND_USAGE)
+        return
+    sub = tokens[1]
+    if sub == "status":
+        rows = lsp_manager.summarize()
+        if not rows:
+            ui_console.print_status("(no LSP servers configured)")
+            return
+        for row in rows:
+            extensions = ", ".join(row["extensions"]) or "-"
+            line = (
+                f"{row['language']}: {row['status']} "
+                f"[{row['tool_count']} tools, ext={extensions}]"
+            )
+            reason = row.get("reason") or ""
+            if reason:
+                line = f"{line} — {reason}"
+            ui_console.print_status(line)
+        return
+    if sub == "list":
+        any_server = False
+        for language, _server in lsp_manager.iter_running():
+            any_server = True
+            ui_console.print_status(f"[{language}]")
+            # The four Tier-1 tools are uniform across servers; list them so
+            # users see exactly what the LLM has access to right now.
+            for tool in (
+                "lsp_outline",
+                "lsp_definition",
+                "lsp_references",
+                "lsp_diagnostics",
+            ):
+                ui_console.print_status(f"  {tool}")
+        if not any_server:
+            ui_console.print_status("(no LSP servers running)")
+        return
+    if sub == "reload":
+        if len(tokens) < 3:
+            ui_console.print_error("Usage: /lsp reload <language>")
+            return
+        target = tokens[2]
+        try:
+            lsp_manager.reload(target)
+        except LSPError as exc:
+            ui_console.print_error(f"reload {target!r} failed: {exc}")
+            ui_console.print_error(f"LSP server {target!r} is now UNHEALTHY.")
+            return
+        except Exception as exc:
+            ui_console.print_error(f"reload {target!r} failed: {exc}")
+            ui_console.print_error(f"LSP server {target!r} is now UNHEALTHY.")
+            return
+        ui_console.print_status(f"LSP server {target!r} reloaded.")
+        return
+    ui_console.print_error(
+        f"Unknown /lsp subcommand: {sub}. Use status, list, or reload."
+    )
+
+
 def _run_stdio_session(
     config: Config,
     provider: BaseLLMProvider,
@@ -1492,8 +1583,10 @@ def _run_stdio_session(
         config.lsp,
         console=ui_console,
         repository_root=str(workspace_path),
+        notifier=bg_manager,
     )
     lsp_manager.start_all()
+    _install_lsp_cleanup(lsp_manager)
     tools = get_tools(mcp_manager, lsp_manager)
     permission = _build_permission_guard(config)
     _install_stdio_permission_prompt(permission, ui_console)
@@ -1730,6 +1823,13 @@ def _run_stdio_session(
                     ui_console=ui_console,
                 )
                 continue
+            if text == "/lsp" or text.startswith("/lsp "):
+                _dispatch_lsp_command(
+                    text,
+                    lsp_manager=lsp_manager,
+                    ui_console=ui_console,
+                )
+                continue
             if text.startswith("/mcp:"):
                 snapshot_len = len(messages)
                 appended = _dispatch_mcp_prompt(
@@ -1806,6 +1906,10 @@ def _run_stdio_session(
     finally:
         try:
             mcp_manager.close_all()
+        except Exception:
+            pass
+        try:
+            lsp_manager.close_all()
         except Exception:
             pass
 

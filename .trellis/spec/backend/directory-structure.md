@@ -38,6 +38,14 @@ src/
 │   ├── config.py      #   [[mcp.servers]] parsing + per-call payload thresholds
 │   ├── errors.py      #   MCP*Error hierarchy
 │   └── transport/     #   Transport ABC + stdio.py + http_legacy.py + http_streamable.py
+├── lsp/               # LSP client — multi-language server orchestration + 4 Tier-1 tools
+│   ├── manager.py     #   LanguageServerManager: concurrent start, push-diagnostics cache,
+│   │                  #   watchdog, on_disconnect → console + BackgroundManager.notify
+│   ├── tools.py       #   lsp_outline / lsp_definition / lsp_references / lsp_diagnostics
+│   ├── diagnostics.py #   Hybrid auto-diagnostics: snapshot + diff (5-tuple) + appendix
+│   ├── config.py      #   [[lsp.servers]] parsing (language + extensions + init options)
+│   ├── coord.py       #   1-based ↔ 0-based + file URI helpers (multilspy delegation)
+│   └── errors.py      #   LSP*Error hierarchy
 └── ui/                # AgentConsole (rich), StreamPrinter, prompt.py (prompt-toolkit), theme.py
 ```
 
@@ -60,7 +68,8 @@ Use this in order — stop at the first match:
 9. **Debug payload capture / inspector UI?** → `src/debug/`.
 10. **Terminal rendering / input?** → `src/ui/`. **Never** print directly from non-ui packages.
 11. **New MCP-server integration / transport / schema-injection rule?** → `src/mcp/`. New transport implementation → `transport/<name>.py` subclassing `Transport` (ABC in `transport/base.py`). Cross-server orchestration / lifecycle / disconnect handling → `manager.py`. Tool / resource / prompt name-mangling and handler closures → `registry.py`. Config keys → `config.py`. Per-call thresholds (text / binary size caps) live in `MCPConfig` and are applied at the `registry.py` normalization boundary, never inside `provider/*` adapters.
-12. **REPL command, config plumbing, top-level wiring?** → `src/main.py`.
+12. **New LSP integration related?** → `src/lsp/`. Cross-language orchestration / handshake lifecycle / subprocess watchdog / on_disconnect / `publishDiagnostics` cache → `manager.py`. New tool exposed to the LLM → `tools.py` (Tier-1 tools currently: `lsp_outline` / `lsp_definition` / `lsp_references` / `lsp_diagnostics`). Diff algorithm / Hybrid auto-diagnostics appendix / `maybe_diagnostics_appendix` helper → `diagnostics.py`. Config keys (`auto_diagnostics_on_edit`, `start_timeout`, `[[lsp.servers]]`) → `config.py`. Transport / framing is **owned by multilspy** — do NOT recreate `src/jsonrpc/` or hand-roll Content-Length parsing here; if multilspy is missing a feature, file a patch upstream or wrap it. The edit/write handler Hybrid hook is wired through a callable injected by `src/core/tools.py::_build_diagnostics_hook` (handlers never `import src.lsp` directly — reverse-dependency keeps `src/core/handlers/` independent of LSP).
+13. **REPL command, config plumbing, top-level wiring?** → `src/main.py`.
 
 If a change touches more than one of the above, decompose it. A handler that needs persistence calls into `planning/`; it does not put a JSON file alongside itself.
 
