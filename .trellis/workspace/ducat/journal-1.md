@@ -275,3 +275,36 @@ LSP 客户端集成 2-PR 大任务的 child A。新建 src/lsp/ 6 文件骨架 (
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: LSP child B: 集成 + UX + E2E + 文档（LSP 大任务收尾）
+
+**Date**: 2026-05-28
+**Task**: LSP child B: 集成 + UX + E2E + 文档（LSP 大任务收尾）
+**Branch**: `main`
+
+### Summary
+
+LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Diagnostic + DiagnosticKey 五元组等价 + snapshot/diff/format + maybe_diagnostics_appendix 4 个 short-circuit）；manager.py 接通（notifier 注入 + _on_disconnect + watchdog 0.5s poll subprocess.returncode + monkey-patch multilspy on_notification_handlers 覆盖 do_nothing 捕获 publishDiagnostics + summarize + close_all 幂等）；tools.py 清 child A 遗留 + _read_push_diagnostics 改走 manager；core/handlers/{file_edit,file_write} 接 diagnostics_hook partial（反向依赖：handler 不 import src.lsp）；main.py atexit + SIGTERM + REPL /lsp status|list|reload；CLAUDE.md + directory-structure.md + config.toml 文档同步；46 新 unit + 4 E2E（jedi-language-server）；554 passed / 0 failed；ruff 全绿。multilspy 0.0.15 实测：on_notification_handlers 是 dict[method, handler] 单值覆盖；9 个内置 adapter 把 publishDiagnostics 接 do_nothing 必须 monkey-patch；Language.PYTHON → JediServer（不是 pyright）。父任务 05-27-lsp-client 17 项 AC 全闭环（17/17），父任务一并 archive。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `776b7f5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
