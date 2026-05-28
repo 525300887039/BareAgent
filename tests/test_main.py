@@ -22,6 +22,7 @@ from src.main import (
 )
 from src.core.fileutil import is_tool_result_message
 from src.debug.interaction_log import InteractionLogger
+from src.lsp import LSPConfig
 from src.mcp import MCPConfig
 from src.memory.transcript import TranscriptManager
 from src.permission.guard import PermissionGuard, PermissionMode
@@ -297,6 +298,7 @@ def test_make_teammate_provider_factory_inherits_custom_api_key_env(
         debug=DebugConfig(),
         tracing=TracingConfig(),
         mcp=MCPConfig(),
+        lsp=LSPConfig(),
     )
 
     factory = main_module._make_teammate_provider_factory(config)

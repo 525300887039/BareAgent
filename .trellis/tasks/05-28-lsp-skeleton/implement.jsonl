@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/05-28-lsp-skeleton/prd.md", "reason": "本 PR 自身 PRD：src/lsp/ 6 文件骨架 + 4 工具 handler + AgentType.lsp_tools_enabled + 坐标 1↔0 转换 + multilspy 可选导入 + LanguageServerManager（无 atexit / 无 REPL / 无 hybrid hook / 无 E2E / 无文档）"}
+{"file": ".trellis/tasks/05-27-lsp-client/prd.md", "reason": "父 PRD：17 项 AC 总目标 + multilspy + Hybrid + REPL + 子代理隔离 + Tier 1 工具集；本 PR 只做骨架 + 单元测试，UX 路径全部归 child B"}
+{"file": ".trellis/tasks/05-27-lsp-client/research/lsp-vs-mcp-protocol.md", "reason": "framing 委托 multilspy；id 不强约束；shutdown→exit 两阶段；Windows URI 走 pathlib + 不做 %3A 编码；server-initiated request 由 multilspy 处理（本 PR 不动）"}
+{"file": ".trellis/tasks/05-27-lsp-client/research/lsp-agent-integration-patterns.md", "reason": "multilspy SyncLanguageServer 单实例单语言 → LanguageServerManager wrapper 必须；Tier 1 工具集（documentSymbol/definition/references/diagnostics）；pyright analysis_complete race 处理参考；hover 不在 MVP"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "src/lsp/ 模块布局参考 src/mcp/ 现有结构；不动 src/mcp/ / src/permission/ / src/core/loop.py / src/provider/* / src/core/handlers/{edit,write}_file.py（本 PR 严格）"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "tool handler 错误降级 string + 'Error:' 前缀（PR5 沉淀）；本 PR 不引入 on_disconnect 链路（接口预留 + child B 接通）"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "LanguageServerManager 启动 / 失败走 logger.warning + console.print_error；multilspy 内部 logger 接 stdlib logging.getLogger('src.lsp.multilspy')"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "from __future__ + 类型注解 + ruff/pytest 全绿；新增 ≥ 12 unit case；不退化现有 461 个"}

@@ -26,6 +26,11 @@ class AgentType:
     # effects out of subagent contexts. Defaults to True for backwards
     # compatibility with custom user-defined agent types.
     mcp_tools_enabled: bool = True
+    # When False, ``filter_tools`` strips every ``lsp_*`` tool. The four
+    # Tier-1 LSP tools are read-only (outline / definition / references /
+    # diagnostics), so read-only agent types keep them enabled by default —
+    # this flag exists for tighter sandboxes that want a strict allow-list.
+    lsp_tools_enabled: bool = True
 
 
 _READ_ONLY_DEFAULTS: dict[str, Any] = {
@@ -34,6 +39,7 @@ _READ_ONLY_DEFAULTS: dict[str, Any] = {
     "allow_nesting": False,
     "permission_mode": PermissionMode.PLAN,
     "mcp_tools_enabled": False,
+    "lsp_tools_enabled": True,
 }
 
 BUILTIN_AGENT_TYPES: dict[str, AgentType] = {
@@ -116,6 +122,8 @@ def filter_tools(
         if strip_nesting and name == "subagent":
             return False
         if not agent_type.mcp_tools_enabled and name.startswith("mcp__"):
+            return False
+        if not agent_type.lsp_tools_enabled and name.startswith("lsp_"):
             return False
         return True
 

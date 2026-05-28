@@ -16,6 +16,8 @@ from src.core.handlers.grep_search import run_grep
 from src.core.handlers.web_fetch import run_web_fetch
 from src.core.handlers.web_search import run_web_search
 from src.core.schema import tool_schema as _schema
+from src.lsp.manager import LanguageServerManager
+from src.lsp.tools import LSP_TOOL_SCHEMAS, build_lsp_tools
 from src.mcp.manager import MCPManager
 from src.mcp.registry import build_mcp_handlers, build_mcp_tool_schemas
 from src.planning.skills import (
@@ -51,6 +53,10 @@ DEFERRED_TOOLS = {
     "team_spawn",
     "team_send",
     "team_list",
+    "lsp_outline",
+    "lsp_definition",
+    "lsp_references",
+    "lsp_diagnostics",
 }
 
 
@@ -118,6 +124,7 @@ DEFERRED_TOOL_SCHEMAS: list[dict[str, Any]] = [
     *TASK_TOOL_SCHEMAS,
     *BACKGROUND_TOOL_SCHEMAS,
     *TEAM_TOOL_SCHEMAS,
+    *LSP_TOOL_SCHEMAS,
 ]
 
 TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -330,6 +337,16 @@ _TEAM_FALLBACK_HANDLERS: dict[str, Callable[..., Any]] = {
 }
 
 
+_LSP_UNAVAILABLE_MESSAGE = "Error: LSP manager unavailable."
+
+_LSP_FALLBACK_HANDLERS: dict[str, Callable[..., Any]] = {
+    "lsp_outline": lambda **_kw: _LSP_UNAVAILABLE_MESSAGE,
+    "lsp_definition": lambda **_kw: _LSP_UNAVAILABLE_MESSAGE,
+    "lsp_references": lambda **_kw: _LSP_UNAVAILABLE_MESSAGE,
+    "lsp_diagnostics": lambda **_kw: _LSP_UNAVAILABLE_MESSAGE,
+}
+
+
 TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     "bash": _unbound_stub("bash"),
     "read_file": _unbound_stub("read_file"),
@@ -352,10 +369,20 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
         )
     ),
     **_TEAM_FALLBACK_HANDLERS,
+    **_LSP_FALLBACK_HANDLERS,
 }
 
 
-def get_tools(mcp_manager: MCPManager | None = None) -> list[dict[str, Any]]:
+def get_tools(
+    mcp_manager: MCPManager | None = None,
+    lsp_manager: LanguageServerManager | None = None,
+) -> list[dict[str, Any]]:
+    # LSP tool schemas are already part of TOOL_SCHEMAS (registered via
+    # ``DEFERRED_TOOL_SCHEMAS``) so they show up even when no manager is
+    # available. ``lsp_manager`` is still required for the handlers — that is
+    # bound by ``get_handlers``. We accept the parameter here for forward
+    # symmetry with ``mcp_manager`` and so callers can supply both in one go.
+    _ = lsp_manager
     schemas = list(TOOL_SCHEMAS)
     if mcp_manager is not None:
         schemas.extend(build_mcp_tool_schemas(mcp_manager))
@@ -378,6 +405,7 @@ def get_handlers(
     team_handlers: dict[str, Callable[..., Any]] | None = None,
     subagent_depth: int = 0,
     mcp_manager: MCPManager | None = None,
+    lsp_manager: LanguageServerManager | None = None,
 ) -> dict[str, Callable[..., Any]]:
     handlers: dict[str, Callable[..., Any]] = {
         "bash": partial(run_bash, cwd=workspace),
@@ -408,7 +436,13 @@ def get_handlers(
     if mcp_manager is not None:
         handlers.update(build_mcp_handlers(mcp_manager))
 
-    available_tools = tools or get_tools(mcp_manager)
+    if lsp_manager is not None:
+        _, lsp_handlers = build_lsp_tools(lsp_manager)
+        handlers.update(lsp_handlers)
+    else:
+        handlers.update(_LSP_FALLBACK_HANDLERS)
+
+    available_tools = tools or get_tools(mcp_manager, lsp_manager)
     if provider is None:
         handlers["subagent"] = lambda task, agent_type=None, run_in_background=False: (
             "Subagent unavailable: provider is not configured."

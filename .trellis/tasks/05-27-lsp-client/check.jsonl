@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/05-27-lsp-client/prd.md", "reason": "验收：17 项 AC 全闭环；Out of Scope 守住（无 v2 工具 / 无自写 framing / 无 Java/C++ / 无 jsonrpc 抽象层）；2 child PR 全部完成"}
+{"file": ".trellis/tasks/05-27-lsp-client/research/lsp-vs-mcp-protocol.md", "reason": "校验：Content-Length framing 委托 multilspy；id 类型不强约束 int；Windows URI 走 multilspy path_utils；shutdown → exit 两阶段而非 close pipe"}
+{"file": ".trellis/tasks/05-27-lsp-client/research/lsp-agent-integration-patterns.md", "reason": "校验：multilspy 是单实例单语言 → LanguageServerManager wrapper 正确做了路由；Hybrid 默认 OFF；4 个 Tier 1 工具齐全；pyright race condition 已处理"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "校验改动范围：src/lsp/* + src/main.py + src/core/tools.py + src/core/handlers/{edit,write}_file.py + src/planning/agent_types.py + tests/test_lsp_* + 文档；不动 src/mcp/* / src/permission/* / src/core/loop.py / src/provider/*"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "校验：LSP 工具错误路径降级 string；on_disconnect 区分 graceful/unexpected；fail-closed 默认应用到 LSP 工具（虽然只读，但保持一致）"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "校验启动日志 / 崩溃日志走 logger.warning + console.print_error；无 print()"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "校验 ruff/pytest 全绿；类型注解齐全；累计测试达标"}

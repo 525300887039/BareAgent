@@ -13,6 +13,7 @@ from src.main import (
     TracingConfig,
     UIConfig,
 )
+from src.lsp import LSPConfig
 from src.mcp import MCPConfig
 from src.provider.base import ThinkingConfig
 
@@ -33,4 +34,5 @@ def make_test_config(tmp_path: Path) -> Config:
         debug=DebugConfig(),
         tracing=TracingConfig(),
         mcp=MCPConfig(),
+        lsp=LSPConfig(),
     )

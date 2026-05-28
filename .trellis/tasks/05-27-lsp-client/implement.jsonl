@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/05-27-lsp-client/prd.md", "reason": "父 PRD：MVP 工具集（lsp_outline/definition/references/diagnostics）+ multilspy 集成边界 + LanguageServerManager wrapper + Hybrid auto-diagnostics（默认 OFF）+ subagent 集成（lsp_tools_enabled）+ REPL /lsp 命令 + 拆 2 child PR 建议"}
+{"file": ".trellis/tasks/05-27-lsp-client/research/lsp-vs-mcp-protocol.md", "reason": "LSP 3.17 framing (Content-Length) / lifecycle (initialize → initialized → shutdown → exit) / 与 MCP 协议层差异矩阵 / 4 个 language server 启动配置速查表 / Windows file URI 大小写陷阱 / 抽象提层 vs 独立新建建议（v1 独立）"}
+{"file": ".trellis/tasks/05-27-lsp-client/research/lsp-agent-integration-patterns.md", "reason": "multilspy 是 MVP 唯一 client 库推荐；Hybrid 暴露策略是 Serena/Cline 行业共识；Tier 1 方法 = documentSymbol + definition + references + diagnostics（hover 推 v2）；pyright analysis_complete race condition；diff 算法参考 Cline getNewDiagnostics"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "src/lsp/ 模块布局参考 src/mcp/ 现有结构；package 边界：lsp 不依赖 mcp；ui/concurrency/permission 通过依赖注入"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "handler 错误降级为 string 不抛异常（PR5 沉淀）；'long-lived readers 区分 graceful/unexpected'（PR6 沉淀）应用到 LSP server 崩溃链路；fail-closed 不被 allow-rule 穿透（PR4 沉淀）"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "LanguageServerManager 启动 / 崩溃路径走 logger.warning + console.print_error；不直接 print()；multilspy 内部日志不污染 console"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "from __future__ + 完整类型注解 + ruff 全绿；新增 ≥ 15 单元 case + 1 manual E2E；不退化现有 461 个 case"}

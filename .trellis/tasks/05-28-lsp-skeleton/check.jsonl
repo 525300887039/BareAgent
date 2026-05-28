@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/05-28-lsp-skeleton/prd.md", "reason": "验收：15 项 AC（包结构 / extra 隔离 / multilspy 缺失降级 / config 解析 / 4 个工具 happy + error path / 1↔0 坐标 / agent_type 双开关独立 / main 最小集成 / 12+ test / ruff）；DoD 守住禁动文件清单"}
+{"file": ".trellis/tasks/05-27-lsp-client/prd.md", "reason": "父 PRD：本 PR 闭合的子集 — AC #1（extra） / #2（boot 注入） / #3-6（4 工具 happy path） / #9-10（subagent 双开关）；其余 AC 留 child B"}
+{"file": ".trellis/tasks/05-27-lsp-client/research/lsp-agent-integration-patterns.md", "reason": "校验：multilspy 路径正确（不是 pylspclient / sansio）；LanguageServerManager 多语言路由按 extensions；4 个工具齐全且坐标系约定明文"}
+{"file": ".trellis/tasks/05-27-lsp-client/research/lsp-vs-mcp-protocol.md", "reason": "校验：framing 不重新写；shutdown 不简化为 close pipe；URI 兼容 Windows；server-initiated request 委托 multilspy"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "校验改动只在 src/lsp/ + src/core/tools.py + src/planning/agent_types.py + src/main.py（最小集成）+ pyproject.toml + tests/test_lsp_*；不动禁动文件"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "校验所有 LSP handler 错误降级 string + 'Error:' 前缀；不引入 on_disconnect callback 接通（留 child B）"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "校验启动 / 崩溃日志走 logger.warning；无 print()"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "校验 ruff/pytest 全绿；类型注解齐全；测试达标"}

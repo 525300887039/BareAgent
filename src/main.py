@@ -24,6 +24,12 @@ from src.core.context import assemble_system_prompt
 from src.core.loop import LLMCallError, agent_loop
 from src.core.tools import get_handlers, get_tools
 from src.debug.interaction_log import InteractionLogger
+from src.lsp import (
+    LanguageServerManager,
+    LSPConfig,
+    LSPError,
+    parse_lsp_config,
+)
 from src.mcp import MCPCallError, MCPConfig, MCPError, MCPManager, parse_mcp_config
 from src.mcp.registry import _flatten_content as _mcp_flatten_content
 from src.memory.compact import Compactor
@@ -115,6 +121,7 @@ class Config:
     tracing: TracingConfig
     path: Path
     mcp: MCPConfig
+    lsp: LSPConfig
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -353,6 +360,15 @@ def load_config(
         print(f"Warning: invalid [mcp] config, MCP disabled ({exc})")
         mcp_config = MCPConfig()
 
+    lsp_raw = raw_config.get("lsp", {})
+    try:
+        lsp_config = parse_lsp_config(
+            {"lsp": lsp_raw} if isinstance(lsp_raw, dict) else {}
+        )
+    except LSPError as exc:
+        print(f"Warning: invalid [lsp] config, LSP disabled ({exc})")
+        lsp_config = LSPConfig()
+
     return Config(
         provider=provider,
         permission=permission,
@@ -363,6 +379,7 @@ def load_config(
         tracing=tracing,
         path=config_path.resolve(),
         mcp=mcp_config,
+        lsp=lsp_config,
     )
 
 
@@ -806,6 +823,7 @@ def _build_handlers(
     spawned_agents: dict[str, AutonomousAgent],
     agent_name: str,
     mcp_manager: MCPManager | None = None,
+    lsp_manager: LanguageServerManager | None = None,
     system_prompt_override: str | None = None,
 ) -> dict[str, object]:
     system_prompt = system_prompt_override or _extract_system_prompt(messages)
@@ -838,6 +856,7 @@ def _build_handlers(
         subagent_default_type=config.subagent.default_type,
         team_handlers=team_handlers,
         mcp_manager=mcp_manager,
+        lsp_manager=lsp_manager,
     )
 
 
@@ -1469,7 +1488,13 @@ def _run_stdio_session(
     mcp_manager = MCPManager(config.mcp, console=ui_console, notifier=bg_manager)
     mcp_manager.start_all()
     _install_mcp_cleanup(mcp_manager)
-    tools = get_tools(mcp_manager)
+    lsp_manager = LanguageServerManager(
+        config.lsp,
+        console=ui_console,
+        repository_root=str(workspace_path),
+    )
+    lsp_manager.start_all()
+    tools = get_tools(mcp_manager, lsp_manager)
     permission = _build_permission_guard(config)
     _install_stdio_permission_prompt(permission, ui_console)
     read_fn = _build_stdio_read_fn(workspace_path, permission)
@@ -1496,6 +1521,7 @@ def _run_stdio_session(
         spawned_agents=spawned_agents,
         agent_name=MAIN_AGENT_NAME,
         mcp_manager=mcp_manager,
+        lsp_manager=lsp_manager,
     )
 
     ui_console.console.print(
@@ -1567,6 +1593,7 @@ def _run_stdio_session(
                     spawned_agents=spawned_agents,
                     agent_name=MAIN_AGENT_NAME,
                     mcp_manager=mcp_manager,
+                    lsp_manager=lsp_manager,
                 )
                 ui_console.print_status("New conversation started.")
                 continue
@@ -1591,6 +1618,7 @@ def _run_stdio_session(
                     spawned_agents=spawned_agents,
                     agent_name=MAIN_AGENT_NAME,
                     mcp_manager=mcp_manager,
+                    lsp_manager=lsp_manager,
                 )
                 continue
             if text == "/sessions":
@@ -1642,6 +1670,7 @@ def _run_stdio_session(
                     spawned_agents=spawned_agents,
                     agent_name=MAIN_AGENT_NAME,
                     mcp_manager=mcp_manager,
+                    lsp_manager=lsp_manager,
                 )
                 _replay_stdio_transcript(messages, ui_console)
                 ui_console.print_status(f"Resumed session: {resumed_session}")
