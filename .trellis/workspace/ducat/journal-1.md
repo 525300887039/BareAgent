@@ -242,3 +242,36 @@ PR5 落地 MCP image 端到端通路：_tool_result 双签名（str | list[dict]
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: LSP child A: src/lsp/ 骨架 + 4 工具 + agent_types 集成
+
+**Date**: 2026-05-28
+**Task**: LSP child A: src/lsp/ 骨架 + 4 工具 + agent_types 集成
+**Branch**: `main`
+
+### Summary
+
+LSP 客户端集成 2-PR 大任务的 child A。新建 src/lsp/ 6 文件骨架 (config/manager/tools/coord/errors/__init__) + multilspy>=0.0.15 作 [lsp] optional extra + 4 个 Tier 1 工具 (lsp_outline/definition/references/diagnostics) + 坐标 1↔0 转换 + LanguageServerManager 并发启动 + extension 路由 + multilspy 缺失 graceful + AgentType.lsp_tools_enabled (与 mcp_tools_enabled 独立开关) + src/core/tools.py DEFERRED_TOOL_SCHEMAS 注入 + src/main.py 最小集成。multilspy API 实测：SyncLanguageServer.create(MultilspyConfig, MultilspyLogger, repo_root) + request_document_symbols/definition/references 接受 0-based + 不暴露 pull diagnostics (走 push cache fallback)。47 新单元 case；508 passed / 3 skipped / 0 failed；ruff 全绿。父任务 17 项 AC 闭环 9 项 (#1-6, #9, #10, #16)；child B 待开 (hybrid auto-diagnostics + REPL /lsp + atexit + E2E + 文档)。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3b427aa` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
