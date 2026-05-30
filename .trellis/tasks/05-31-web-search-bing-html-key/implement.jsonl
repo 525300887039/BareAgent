@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "R3 反爬/空结果要返回结构化 tool error 字符串而非静默；需对齐本仓库的 structured tool errors / fail-closed 报错风格"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "纯 stdlib + 正则、避免过度设计（删 DDG dead code）、pytest mock 网络的既有风格、仅格式化改动文件"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "确认 handler 在 src/core/handlers/ 的放置与在 tools.py 的注册约定，新增后端函数保持一致"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用 web_fetch.html_to_text 清洗 snippet、复用现有后端 list[dict] 返回契约，避免重复造轮子"}
