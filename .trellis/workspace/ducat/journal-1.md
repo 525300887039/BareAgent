@@ -341,3 +341,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: 持久化记忆系统（文件式 agent 记忆 + 召回层）
+
+**Date**: 2026-05-30
+**Task**: 持久化记忆系统（文件式 agent 记忆 + 召回层）
+**Branch**: `main`
+
+### Summary
+
+实现 ROADMAP 2.2 持久化记忆：对齐 Anthropic memory tool 契约的单一 memory client tool（view/create/str_replace/insert/delete/rename 六命令，普通 client tool 故全 provider 通用），一条记忆=带 frontmatter 的 .md + MEMORY.md 索引，会话开局注入索引+协议。补齐逐轮词法召回层（仿 Claude Code，零额外 LLM 调用，按 frontmatter 跨语言相关性 top-K 以 <memory-recall> 注入）。路径经 safe_path 沙箱+atomic_write_text；memory 入 SAFE_TOOLS；子代理只读隔离（AgentType.memory_writable + 子代理边界 handler 包装）；/remember、/forget 命令 + [memory] 配置。走完整 trellis 流程：brainstorm→implement→check→commit。75 新测试，全量 587 passed/0 failed。向量召回留作 system_prompt_section/recall 升级位。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9216b78` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
