@@ -1,0 +1,31 @@
+{
+  "id": "eng-guardrails",
+  "name": "eng-guardrails",
+  "title": "工程化护栏修复（健康体检收尾）",
+  "description": "健康体检收尾：固化工具链配置、修正依赖、新增 CI、清理类型错误（T1-T4）",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "ducat",
+  "assignee": "ducat",
+  "createdAt": "2026-05-30",
+  "completedAt": "2026-05-30",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "05-30-toolchain-config",
+    "05-30-deps-fix",
+    "05-30-ci-workflow",
+    "05-30-type-cleanup"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
