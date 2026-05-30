@@ -374,3 +374,37 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: 交互式初始化向导 bareagent init（多 provider 配置）
+
+**Date**: 2026-05-30
+**Task**: 交互式初始化向导 bareagent init（多 provider 配置）
+**Branch**: `main`
+
+### Summary
+
+新增 bareagent init 交互式向导 + 首次无 key 自动触发，零手动编辑配置即可配置 DeepSeek/OpenAI/Anthropic/Qwen/GLM/第三方 6 类渠道，写入 git-ignored config.local.toml。新增 ProviderConfig.api_key 字段并修复非 sk- 前缀 key 被误判坑；预设表(presets.py)驱动路由；stdlib-only 文本写盘仅替换 [provider] 段保留其余 section（零新依赖，遵守禁 tomlkit 规范）。trellis-check 自修 1 个 TOMLDecodeError 未捕获缺口。621 passed。期间踩 ruff format 全树 churn 坑（本机 0.15.8 vs 仓库旧版漂移），逐一回退 66 个范围外文件保证 commit 干净，并把教训沉淀进 quality-guidelines.md + 持久记忆。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `55da9c8` | (see git log) |
+| `7fd0e85` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

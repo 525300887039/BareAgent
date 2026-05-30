@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
+- **Total Sessions**: 12
 - **Last Active**: 2026-05-30
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~376 | Active |
+| `journal-1.md` | ~410 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-05-30 | 交互式初始化向导 bareagent init（多 provider 配置） | `55da9c8`, `7fd0e85` | `main` |
 | 11 | 2026-05-30 | 持久化记忆系统（文件式 agent 记忆 + 召回层） | `9216b78` | `main` |
 | 10 | 2026-05-30 | 工程化护栏修复 (健康体检收尾 T1-T4) | `b568073` | `main` |
 | 9 | 2026-05-28 | LSP child B: 集成 + UX + E2E + 文档（LSP 大任务收尾） | `776b7f5` | `main` |
