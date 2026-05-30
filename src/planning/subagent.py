@@ -21,6 +21,31 @@ from src.tracing import tracer as global_tracer
 
 _SUBAGENT_COMPACT_THRESHOLD = 50_000
 
+# Memory commands that mutate the store. Read-only agent types may only
+# ``view``; the rest are rejected by ``_make_readonly_memory_handler``.
+_MEMORY_WRITE_COMMANDS = frozenset({"create", "str_replace", "insert", "delete", "rename"})
+
+
+def _make_readonly_memory_handler(inner: Any) -> Any:
+    """Wrap a ``memory`` handler so write commands are refused.
+
+    The ``memory`` tool is a single tool with a ``command`` enum, so it cannot
+    be removed by name-filtering the way ``mcp__*`` / ``lsp_*`` tools are.
+    Instead we downgrade it here, at the boundary where the child agent type is
+    known, leaving ``view`` available for recall.
+    """
+
+    def _wrapped(**kwargs: Any) -> Any:
+        command = str(kwargs.get("command", "")).strip()
+        if command in _MEMORY_WRITE_COMMANDS:
+            return (
+                "Error: memory is read-only for this agent type; only the "
+                "'view' command is permitted."
+            )
+        return inner(**kwargs)
+
+    return _wrapped
+
 
 def _build_subagent_description() -> str:
     lines = [
@@ -87,8 +112,7 @@ def run_subagent(
     if run_in_background:
         if bg_manager is None:
             return (
-                "Subagent background execution unavailable: "
-                "background manager is not configured."
+                "Subagent background execution unavailable: background manager is not configured."
             )
         task_id = _generate_subagent_task_id()
         bg_manager.submit(
@@ -140,6 +164,8 @@ def _run_subagent_sync(
 ) -> str:
     filtered_tools = filter_tools(tools, resolved_type)
     child_handlers = filter_handlers(handlers, filtered_tools)
+    if not resolved_type.memory_writable and "memory" in child_handlers:
+        child_handlers["memory"] = _make_readonly_memory_handler(child_handlers["memory"])
     resolved_system_prompt = _compose_system_prompt(
         parent_prompt=system_prompt,
         agent_prompt=resolved_type.system_prompt,
@@ -151,8 +177,8 @@ def _run_subagent_sync(
     )
 
     if "subagent" in child_handlers:
-        child_handlers["subagent"] = (
-            lambda task, agent_type=None, run_in_background=False: run_subagent(
+        child_handlers["subagent"] = lambda task, agent_type=None, run_in_background=False: (
+            run_subagent(
                 provider=provider,
                 task=task,
                 tools=filtered_tools,

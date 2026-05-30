@@ -84,6 +84,7 @@ def assemble_system_prompt(
     workspace: Path,
     skill_summary: str = "",
     nag_reminder: str = "",
+    memory_context: str = "",
 ) -> str:
     """Assemble the full system prompt from dynamic context fragments."""
     workspace = _normalize_workspace(workspace)
@@ -96,6 +97,9 @@ def assemble_system_prompt(
     user_context = get_user_context(workspace)
     if user_context:
         sections.append(f"<user-instructions>\n{user_context}\n</user-instructions>")
+
+    if memory_context.strip():
+        sections.append(memory_context.strip())
 
     if skill_summary.strip():
         sections.append(f"<skill-summary>\n{skill_summary.strip()}\n</skill-summary>")

@@ -98,3 +98,20 @@ pretty = true
 # [[lsp.servers]]
 # language = "rust"
 # extensions = [".rs"]
+
+# --- Persistent Memory ---------------------------------------------------
+# 文件式跨会话记忆：一条记忆 = 一个带 frontmatter 的 .md 文件，MEMORY.md 作索引。
+# 智能体通过单个 `memory` 工具（命令 view/create/str_replace/insert/delete/rename，
+# 契约对齐 Anthropic memory tool，但注册为普通 client tool，全 provider 可用）读写受限的
+# 记忆目录；会话开局把 MEMORY.md 索引 + MEMORY PROTOCOL 注入 system prompt。
+# REPL 命令：`/remember <文本>`、`/forget <文本>`。子代理（explore/plan/code-review）只读。
+[memory]
+# 关闭后不注入记忆、不暴露可用的 memory 工具（调用返回 disabled 错误）。
+enabled = true
+# 记忆根目录。留空 = 每个项目独立目录 ~/.bareagent/projects/<workspace-slug>/memory/
+# （不污染项目 git）。相对路径相对 workspace，绝对路径原样使用。
+# dir = ""
+# 会话开局注入 system prompt 的 MEMORY.md 索引最大行数。
+# max_index_lines = 200
+# 每轮按用户消息词法相关性召回并注入的记忆条数（0 = 关闭召回，仅保留开局索引注入）。
+# recall_k = 5

@@ -10,7 +10,7 @@ import sys
 import tomllib
 from collections.abc import Callable
 from collections.abc import Set as AbstractSet
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,6 +37,12 @@ from src.lsp import (
 from src.mcp import MCPCallError, MCPConfig, MCPError, MCPManager, parse_mcp_config
 from src.mcp.registry import _flatten_content as _mcp_flatten_content
 from src.memory.compact import Compactor
+from src.memory.persistent import (
+    MemoryManager,
+    build_forget_instruction,
+    build_remember_instruction,
+    resolve_memory_root,
+)
 from src.memory.transcript import TranscriptManager
 from src.permission.guard import (
     PermissionGuard,
@@ -115,6 +121,18 @@ class TracingConfig:
 
 
 @dataclass(slots=True)
+class MemoryConfig:
+    enabled: bool = True
+    # Memory root. Empty -> per-project default under ~/.bareagent/projects/.
+    dir: str = ""
+    # Max lines of MEMORY.md injected into the system prompt at session start.
+    max_index_lines: int = 200
+    # Number of lexically-relevant memories recalled and injected each turn
+    # (0 = disable recall, keeping only the session-start index injection).
+    recall_k: int = 5
+
+
+@dataclass(slots=True)
 class Config:
     provider: ProviderConfig
     permission: PermissionConfig
@@ -126,6 +144,9 @@ class Config:
     path: Path
     mcp: MCPConfig
     lsp: LSPConfig
+    # Defaulted so existing Config(...) constructions (tests, fixtures) keep
+    # working without passing memory explicitly.
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -136,8 +157,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--config",
         type=Path,
         help=(
-            "Path to the TOML config file. Defaults to BAREAGENT_CONFIG "
-            "or the bundled config.toml."
+            "Path to the TOML config file. Defaults to BAREAGENT_CONFIG or the bundled config.toml."
         ),
     )
     return parser.parse_args(argv)
@@ -213,9 +233,7 @@ def _validate_mode(name: str, value: str, allowed: AbstractSet[str]) -> str:
 
 
 def _default_api_key_env(provider_name: str) -> str:
-    return DEFAULT_API_KEY_ENV_BY_PROVIDER.get(
-        provider_name.lower(), "ANTHROPIC_API_KEY"
-    )
+    return DEFAULT_API_KEY_ENV_BY_PROVIDER.get(provider_name.lower(), "ANTHROPIC_API_KEY")
 
 
 def resolve_config_path(config_path: Path | None) -> Path:
@@ -360,21 +378,37 @@ def load_config(
 
     mcp_raw = raw_config.get("mcp", {})
     try:
-        mcp_config = parse_mcp_config(
-            {"mcp": mcp_raw} if isinstance(mcp_raw, dict) else {}
-        )
+        mcp_config = parse_mcp_config({"mcp": mcp_raw} if isinstance(mcp_raw, dict) else {})
     except MCPError as exc:
         print(f"Warning: invalid [mcp] config, MCP disabled ({exc})")
         mcp_config = MCPConfig()
 
     lsp_raw = raw_config.get("lsp", {})
     try:
-        lsp_config = parse_lsp_config(
-            {"lsp": lsp_raw} if isinstance(lsp_raw, dict) else {}
-        )
+        lsp_config = parse_lsp_config({"lsp": lsp_raw} if isinstance(lsp_raw, dict) else {})
     except LSPError as exc:
         print(f"Warning: invalid [lsp] config, LSP disabled ({exc})")
         lsp_config = LSPConfig()
+
+    memory_raw = raw_config.get("memory", {})
+    memory_config = MemoryConfig(
+        enabled=_resolve_bool(
+            bool(memory_raw.get("enabled", True)),
+            "BAREAGENT_MEMORY_ENABLED",
+        ),
+        dir=_resolve_string(
+            str(memory_raw.get("dir", "")),
+            "BAREAGENT_MEMORY_DIR",
+        ),
+        max_index_lines=_resolve_int(
+            int(memory_raw.get("max_index_lines", 200)),
+            "BAREAGENT_MEMORY_MAX_INDEX_LINES",
+        ),
+        recall_k=_resolve_int(
+            int(memory_raw.get("recall_k", 5)),
+            "BAREAGENT_MEMORY_RECALL_K",
+        ),
+    )
 
     return Config(
         provider=provider,
@@ -387,19 +421,49 @@ def load_config(
         path=config_path.resolve(),
         mcp=mcp_config,
         lsp=lsp_config,
+        memory=memory_config,
     )
 
 
 _NAG_REMINDER_PREFIX = "<nag-reminder>"
+_MEMORY_RECALL_PREFIX = "<memory-recall>"
 
 
-def _initial_messages(workspace: Path, skill_summary: str = "") -> list[dict[str, Any]]:
+def _initial_messages(
+    workspace: Path,
+    skill_summary: str = "",
+    memory_context: str = "",
+) -> list[dict[str, Any]]:
     return [
         {
             "role": "system",
-            "content": assemble_system_prompt(workspace, skill_summary=skill_summary),
+            "content": assemble_system_prompt(
+                workspace,
+                skill_summary=skill_summary,
+                memory_context=memory_context,
+            ),
         }
     ]
+
+
+def _build_memory_manager(
+    config: Config,
+    workspace_path: Path,
+    ui_console: AgentConsole,
+) -> MemoryManager | None:
+    """Build the persistent memory manager, or None when disabled/unavailable."""
+    if not config.memory.enabled:
+        return None
+    try:
+        root = resolve_memory_root(workspace_path, config.memory.dir)
+        return MemoryManager(root, max_index_lines=config.memory.max_index_lines)
+    except OSError as exc:
+        ui_console.print_error(f"Persistent memory disabled (cannot open store): {exc}")
+        return None
+
+
+def _memory_context(memory_manager: MemoryManager | None) -> str:
+    return memory_manager.system_prompt_section() if memory_manager is not None else ""
 
 
 def _refresh_nag_reminder(
@@ -431,12 +495,62 @@ def _refresh_nag_reminder(
     messages.append(nag_message)
 
 
-def _build_loop_compact(compact_fn: object, todo_manager: TodoManager):
+def _refresh_memory_recall(
+    messages: list[dict[str, Any]],
+    memory_manager: MemoryManager | None,
+    recall_k: int,
+) -> None:
+    """Drop the stale recall block and inject one for the latest user turn.
+
+    Mirrors :func:`_refresh_nag_reminder`: a single ``<memory-recall>`` system
+    message lives just after the most recent genuine user message, refreshed on
+    every agent-loop iteration so ``/remember``, ``/forget`` and ordinary turns
+    all pick up the latest lexically-relevant memories.
+    """
+    messages[:] = [
+        message
+        for message in messages
+        if not (
+            message.get("role") == "system"
+            and isinstance(message.get("content"), str)
+            and str(message["content"]).startswith(_MEMORY_RECALL_PREFIX)
+        )
+    ]
+    if memory_manager is None or recall_k <= 0:
+        return
+
+    query: str | None = None
+    insert_index: int | None = None
+    for index in range(len(messages) - 1, -1, -1):
+        msg = messages[index]
+        if msg.get("role") == "user" and not is_tool_result_message(msg):
+            content = msg.get("content")
+            if isinstance(content, str):
+                query = content
+                insert_index = index
+            break
+    if query is None or insert_index is None:
+        return
+
+    section = memory_manager.recall_section(query, recall_k)
+    if not section:
+        return
+
+    messages.insert(insert_index + 1, {"role": "system", "content": section})
+
+
+def _build_loop_compact(
+    compact_fn: object,
+    todo_manager: TodoManager,
+    memory_manager: MemoryManager | None = None,
+    recall_k: int = 0,
+):
     def _compact(
         messages: list[dict[str, Any]],
         force: bool = False,
     ) -> None:
         _refresh_nag_reminder(messages, todo_manager.get_nag_reminder())
+        _refresh_memory_recall(messages, memory_manager, recall_k)
         compact_fn(messages, force=force)  # type: ignore[misc]
 
     get_session_id = getattr(compact_fn, "get_session_id", None)
@@ -484,6 +598,8 @@ _SLASH_COMMANDS = [
     "/mcp",
     "/mcp:",
     "/lsp",
+    "/remember",
+    "/forget",
 ]
 _HELP_TEXT = (
     "Available commands:\n"
@@ -504,7 +620,9 @@ _HELP_TEXT = (
     "  /team      Manage team agents (list | spawn | send)\n"
     "  /mcp       Manage MCP servers (status | list | reload <name>)\n"
     "  /mcp:      Invoke an MCP prompt (e.g. /mcp:server:prompt key=value)\n"
-    "  /lsp       Manage LSP servers (status | list | reload <language>)"
+    "  /lsp       Manage LSP servers (status | list | reload <language>)\n"
+    "  /remember  Save information to persistent memory (/remember <text>)\n"
+    "  /forget    Remove information from persistent memory (/forget <text>)"
 )
 
 
@@ -593,14 +711,11 @@ def _generate_session_id(
 ) -> str:
     known_session_ids = set(transcript_mgr.list_sessions())
     if reserved_ids:
-        known_session_ids.update(
-            session_id for session_id in reserved_ids if session_id
-        )
+        known_session_ids.update(session_id for session_id in reserved_ids if session_id)
 
     while True:
         candidate = (
-            f"{datetime.now().strftime(_SESSION_ID_TIMESTAMP_FORMAT)}"
-            f"-{generate_random_id(6)}"
+            f"{datetime.now().strftime(_SESSION_ID_TIMESTAMP_FORMAT)}-{generate_random_id(6)}"
         )
         if candidate not in known_session_ids:
             return candidate
@@ -698,8 +813,7 @@ def _format_log_status(
 ) -> str:
     interactions = interaction_logger.list_interactions(interaction_logger.session_id)
     total_tokens = sum(
-        int(interaction.get("input_tokens", 0) or 0)
-        + int(interaction.get("output_tokens", 0) or 0)
+        int(interaction.get("input_tokens", 0) or 0) + int(interaction.get("output_tokens", 0) or 0)
         for interaction in interactions
     )
     lines = [
@@ -833,6 +947,7 @@ def _build_handlers(
     agent_name: str,
     mcp_manager: MCPManager | None = None,
     lsp_manager: LanguageServerManager | None = None,
+    memory_manager: MemoryManager | None = None,
     system_prompt_override: str | None = None,
 ) -> dict[str, Callable[..., Any]]:
     system_prompt = system_prompt_override or _extract_system_prompt(messages)
@@ -866,6 +981,7 @@ def _build_handlers(
         team_handlers=team_handlers,
         mcp_manager=mcp_manager,
         lsp_manager=lsp_manager,
+        memory_manager=memory_manager,
     )
 
 
@@ -982,9 +1098,7 @@ def _make_team_handlers(
             poll_interval=1.0,
         )
         try:
-            bg_manager.submit(
-                f"team:{runtime_id}:{teammate_name}", autonomous_agent.run
-            )
+            bg_manager.submit(f"team:{runtime_id}:{teammate_name}", autonomous_agent.run)
         except ValueError:
             return f"Teammate {teammate_name} is already running."
         spawned_agents[teammate_name] = autonomous_agent
@@ -999,9 +1113,7 @@ def _make_team_handlers(
 
 def _make_teammate_provider_factory(config: Config):
     def _factory(provider_overrides: dict[str, object]) -> BaseLLMProvider:
-        provider_name = str(
-            provider_overrides.get("name", config.provider.name)
-        ).strip()
+        provider_name = str(provider_overrides.get("name", config.provider.name)).strip()
         resolved_provider_name = provider_name or config.provider.name
         inherited_api_key_env = (
             config.provider.api_key_env
@@ -1083,9 +1195,7 @@ def _handle_team_command(
         ui_console.print_error(str(exc))
         return
 
-    ui_console.print_status(
-        "Usage: /team list | /team spawn <name> | /team send <name> <message>"
-    )
+    ui_console.print_status("Usage: /team list | /team spawn <name> | /team send <name> <message>")
 
 
 _MCP_PROMPT_USAGE = "Usage: /mcp:<server>:<prompt> [key=value ...]"
@@ -1162,9 +1272,7 @@ def _dispatch_mcp_command(
             return
         ui_console.print_status(f"Server {target!r} reloaded.")
         return
-    ui_console.print_error(
-        f"Unknown /mcp subcommand: {sub}. Use status, list, or reload."
-    )
+    ui_console.print_error(f"Unknown /mcp subcommand: {sub}. Use status, list, or reload.")
 
 
 def _parse_mcp_prompt_command(text: str) -> tuple[str, str, dict[str, str]] | None:
@@ -1187,9 +1295,7 @@ def _parse_mcp_prompt_command(text: str) -> tuple[str, str, dict[str, str]] | No
     arguments: dict[str, str] = {}
     for tok in tail.split():
         if "=" not in tok:
-            _log.warning(
-                "Ignoring malformed /mcp: argument %r (expected key=value)", tok
-            )
+            _log.warning("Ignoring malformed /mcp: argument %r (expected key=value)", tok)
             continue
         k, _sep, v = tok.partition("=")
         if not k:
@@ -1223,9 +1329,7 @@ def _dispatch_mcp_prompt(
         ui_console.print_error(f"Error: MCP server {server_name!r} is not running")
         return False
     if not client.has_capability("prompts"):
-        ui_console.print_error(
-            f"Error: server {server_name!r} does not support prompts"
-        )
+        ui_console.print_error(f"Error: server {server_name!r} does not support prompts")
         return False
 
     try:
@@ -1430,9 +1534,7 @@ def _handle_mode_selection_stdio(
     if choice in valid_choices:
         old = permission.mode
         permission.mode = _MODE_CYCLE[int(choice) - 1]
-        ui_console.print_status(
-            f"Permission mode: {old.value} → {permission.mode.value}"
-        )
+        ui_console.print_status(f"Permission mode: {old.value} → {permission.mode.value}")
         return
 
     ui_console.print_status("Invalid choice, mode unchanged.")
@@ -1496,8 +1598,7 @@ def _dispatch_lsp_command(
         for row in rows:
             extensions = ", ".join(row["extensions"]) or "-"
             line = (
-                f"{row['language']}: {row['status']} "
-                f"[{row['tool_count']} tools, ext={extensions}]"
+                f"{row['language']}: {row['status']} [{row['tool_count']} tools, ext={extensions}]"
             )
             reason = row.get("reason") or ""
             if reason:
@@ -1538,9 +1639,7 @@ def _dispatch_lsp_command(
             return
         ui_console.print_status(f"LSP server {target!r} reloaded.")
         return
-    ui_console.print_error(
-        f"Unknown /lsp subcommand: {sub}. Use status, list, or reload."
-    )
+    ui_console.print_error(f"Unknown /lsp subcommand: {sub}. Use status, list, or reload.")
 
 
 def _run_stdio_session(
@@ -1574,6 +1673,7 @@ def _run_stdio_session(
     bg_manager = BackgroundManager()
     teammate_manager = _load_teammate_manager(workspace_path, ui_console)
     skill_loader = SkillLoader(resolve_skills_dir())
+    memory_manager = _build_memory_manager(config, workspace_path, ui_console)
     message_bus, main_mailbox_cursor = _switch_session_mailbox(
         workspace_path,
         session_id,
@@ -1582,6 +1682,7 @@ def _run_stdio_session(
     messages = _initial_messages(
         workspace_path,
         skill_summary=skill_loader.get_skill_list_prompt(),
+        memory_context=_memory_context(memory_manager),
     )
     mcp_manager = MCPManager(config.mcp, console=ui_console, notifier=bg_manager)
     mcp_manager.start_all()
@@ -1603,7 +1704,12 @@ def _run_stdio_session(
         transcript_mgr=transcript_mgr,
         session_id=session_id,
     )
-    compact_fn = _build_loop_compact(base_compact_fn, todo_manager)
+    compact_fn = _build_loop_compact(
+        base_compact_fn,
+        todo_manager,
+        memory_manager=memory_manager,
+        recall_k=config.memory.recall_k,
+    )
     handlers = _build_handlers(
         workspace_path=workspace_path,
         todo_manager=todo_manager,
@@ -1622,6 +1728,7 @@ def _run_stdio_session(
         agent_name=MAIN_AGENT_NAME,
         mcp_manager=mcp_manager,
         lsp_manager=lsp_manager,
+        memory_manager=memory_manager,
     )
 
     ui_console.console.print(
@@ -1662,6 +1769,7 @@ def _run_stdio_session(
                 messages[:] = _initial_messages(
                     workspace_path,
                     skill_summary=skill_loader.get_skill_list_prompt(),
+                    memory_context=_memory_context(memory_manager),
                 )
                 todo_manager.reset()
                 new_session_id = _generate_session_id(
@@ -1694,6 +1802,7 @@ def _run_stdio_session(
                     agent_name=MAIN_AGENT_NAME,
                     mcp_manager=mcp_manager,
                     lsp_manager=lsp_manager,
+                    memory_manager=memory_manager,
                 )
                 ui_console.print_status("New conversation started.")
                 continue
@@ -1719,6 +1828,7 @@ def _run_stdio_session(
                     agent_name=MAIN_AGENT_NAME,
                     mcp_manager=mcp_manager,
                     lsp_manager=lsp_manager,
+                    memory_manager=memory_manager,
                 )
                 continue
             if text == "/sessions":
@@ -1738,9 +1848,7 @@ def _run_stdio_session(
                     ui_console.print_error(str(exc))
                     continue
                 messages[:] = restored_messages
-                resumed_session = (
-                    requested_session or transcript_mgr.get_latest_session()
-                )
+                resumed_session = requested_session or transcript_mgr.get_latest_session()
                 if resumed_session is not None:
                     _set_compact_session_id(compact_fn, resumed_session)
                     _set_interaction_logger_session(
@@ -1771,6 +1879,7 @@ def _run_stdio_session(
                     agent_name=MAIN_AGENT_NAME,
                     mcp_manager=mcp_manager,
                     lsp_manager=lsp_manager,
+                    memory_manager=memory_manager,
                 )
                 _replay_stdio_transcript(messages, ui_console)
                 ui_console.print_status(f"Resumed session: {resumed_session}")
@@ -1787,9 +1896,7 @@ def _run_stdio_session(
             if text in _PERMISSION_SLASH:
                 old = permission.mode
                 permission.mode = _PERMISSION_SLASH[text]
-                ui_console.print_status(
-                    f"Permission mode: {old.value} → {permission.mode.value}"
-                )
+                ui_console.print_status(f"Permission mode: {old.value} → {permission.mode.value}")
                 continue
             if text == "/mode":
                 _handle_mode_selection_stdio(permission, ui_console)
@@ -1821,9 +1928,7 @@ def _run_stdio_session(
                     team_handlers=handlers,
                 )
                 continue
-            if text == "/mcp" or (
-                text.startswith("/mcp ") and not text.startswith("/mcp:")
-            ):
+            if text == "/mcp" or (text.startswith("/mcp ") and not text.startswith("/mcp:")):
                 _dispatch_mcp_command(
                     text,
                     mcp_manager=mcp_manager,
@@ -1852,9 +1957,7 @@ def _run_stdio_session(
                 _replay_stdio_transcript(messages[snapshot_len:], ui_console)
                 if messages[-1].get("role") != "user":
                     # Trailing assistant message — no LLM call needed; prompt for input.
-                    ui_console.print_status(
-                        "Prompt injected. Type your follow-up to continue."
-                    )
+                    ui_console.print_status("Prompt injected. Type your follow-up to continue.")
                     continue
                 try:
                     agent_loop(
@@ -1882,6 +1985,24 @@ def _run_stdio_session(
                     del messages[snapshot_len:]
                     ui_console.print_status("Agent loop interrupted.")
                 continue
+            if text == "/remember" or text.startswith("/remember "):
+                if memory_manager is None:
+                    ui_console.print_error(
+                        "Persistent memory is disabled (enable [memory] in config)."
+                    )
+                    continue
+                _, _, remember_arg = text.partition(" ")
+                # Rewrite into an LLM instruction and fall through to the
+                # normal user-turn handling below, which runs agent_loop.
+                text = build_remember_instruction(remember_arg.strip())
+            elif text == "/forget" or text.startswith("/forget "):
+                if memory_manager is None:
+                    ui_console.print_error(
+                        "Persistent memory is disabled (enable [memory] in config)."
+                    )
+                    continue
+                _, _, forget_arg = text.partition(" ")
+                text = build_forget_instruction(forget_arg.strip())
 
             messages.append({"role": "user", "content": text})
             snapshot_len = len(messages) - 1

@@ -31,6 +31,13 @@ class AgentType:
     # diagnostics), so read-only agent types keep them enabled by default —
     # this flag exists for tighter sandboxes that want a strict allow-list.
     lsp_tools_enabled: bool = True
+    # The ``memory`` tool is a single tool with a ``command`` enum, so it
+    # cannot be downgraded to read-only by name-filtering like mcp/lsp. When
+    # False, the subagent layer wraps the handler to reject the write commands
+    # (create/str_replace/insert/delete/rename) while still allowing ``view``.
+    # Read-only agent types default to False so they can recall but not mutate
+    # shared memory.
+    memory_writable: bool = True
 
 
 _READ_ONLY_DEFAULTS: dict[str, Any] = {
@@ -40,6 +47,7 @@ _READ_ONLY_DEFAULTS: dict[str, Any] = {
     "permission_mode": PermissionMode.PLAN,
     "mcp_tools_enabled": False,
     "lsp_tools_enabled": True,
+    "memory_writable": False,
 }
 
 BUILTIN_AGENT_TYPES: dict[str, AgentType] = {
@@ -92,9 +100,7 @@ def resolve_agent_type(
     if name is None:
         return resolved_default
     if name not in BUILTIN_AGENT_TYPES:
-        _log.warning(
-            "Unknown agent type %r, falling back to %r", name, resolved_default.name
-        )
+        _log.warning("Unknown agent type %r, falling back to %r", name, resolved_default.name)
         return resolved_default
     return BUILTIN_AGENT_TYPES[name]
 
@@ -106,11 +112,7 @@ def filter_tools(
     """Apply whitelist, blacklist, and nesting controls to a tool schema list."""
 
     allowed = set(agent_type.tools) if agent_type.tools is not None else None
-    denied = (
-        set(agent_type.disallowed_tools)
-        if agent_type.disallowed_tools is not None
-        else None
-    )
+    denied = set(agent_type.disallowed_tools) if agent_type.disallowed_tools is not None else None
     strip_nesting = not agent_type.allow_nesting
 
     def _keep(tool: dict[str, Any]) -> bool:
@@ -137,6 +139,4 @@ def filter_handlers(
     """Keep only handlers that still have a matching tool schema."""
 
     allowed_names = {str(tool.get("name")) for tool in filtered_tools}
-    return {
-        name: handler for name, handler in all_handlers.items() if name in allowed_names
-    }
+    return {name: handler for name, handler in all_handlers.items() if name in allowed_names}

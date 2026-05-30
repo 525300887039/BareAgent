@@ -32,8 +32,7 @@ def is_tool_result_message(msg: dict[str, Any]) -> bool:
     """Check whether a message contains tool_result blocks."""
     content = msg.get("content")
     return isinstance(content, list) and any(
-        isinstance(block, dict) and block.get("type") == "tool_result"
-        for block in content
+        isinstance(block, dict) and block.get("type") == "tool_result" for block in content
     )
 
 
@@ -44,6 +43,28 @@ def atomic_write_json(file_path: Path, payload: Any) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, str(file_path))
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def atomic_write_text(file_path: Path, text: str) -> None:
+    """Atomically write *text* to *file_path* via tempfile + rename.
+
+    Text counterpart of :func:`atomic_write_json` for persistent Markdown
+    state (memory files, MEMORY.md). ``newline="\\n"`` keeps line endings
+    stable across platforms so ``str_replace`` / ``insert`` matching is
+    deterministic on Windows and POSIX alike.
+    """
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=str(file_path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
         os.replace(tmp_path, str(file_path))
     except BaseException:
         try:

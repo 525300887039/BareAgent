@@ -14,6 +14,7 @@ from src.core.handlers.file_read import run_read
 from src.core.handlers.file_write import run_write
 from src.core.handlers.glob_search import run_glob
 from src.core.handlers.grep_search import run_grep
+from src.core.handlers.memory import run_memory
 from src.core.handlers.web_fetch import run_web_fetch
 from src.core.handlers.web_search import run_web_search
 from src.core.schema import tool_schema as _schema
@@ -21,6 +22,7 @@ from src.lsp.manager import LanguageServerManager
 from src.lsp.tools import LSP_TOOL_SCHEMAS, build_lsp_tools
 from src.mcp.manager import MCPManager
 from src.mcp.registry import build_mcp_handlers, build_mcp_tool_schemas
+from src.memory.persistent import MemoryManager
 from src.planning.skills import (
     LOAD_SKILL_TOOL_SCHEMAS,
     SkillLoader,
@@ -58,6 +60,7 @@ DEFERRED_TOOLS = {
     "lsp_definition",
     "lsp_references",
     "lsp_diagnostics",
+    "memory",
 }
 
 
@@ -118,6 +121,76 @@ TEAM_TOOL_SCHEMAS: list[dict[str, Any]] = [
         [],
     ),
 ]
+MEMORY_TOOL_SCHEMAS: list[dict[str, Any]] = [
+    _schema(
+        "memory",
+        (
+            "Read and maintain your persistent cross-session memory: a private "
+            "directory of Markdown files plus a MEMORY.md index. Paths are "
+            'relative to the memory root (e.g. "MEMORY.md", "user/role.md"). '
+            "Sub-agents (explore/plan/code-review) may only use the 'view' command."
+        ),
+        {
+            "command": {
+                "type": "string",
+                "enum": [
+                    "view",
+                    "create",
+                    "str_replace",
+                    "insert",
+                    "delete",
+                    "rename",
+                ],
+                "description": "Operation to perform.",
+            },
+            "path": {
+                "type": "string",
+                "description": (
+                    "Target path for view/create/str_replace/insert/delete. "
+                    "Omit (or '.') to view the memory root directory."
+                ),
+            },
+            "file_text": {
+                "type": "string",
+                "description": "For create: the full file content to write.",
+            },
+            "old_str": {
+                "type": "string",
+                "description": "For str_replace: existing text to replace (must be unique).",
+            },
+            "new_str": {
+                "type": "string",
+                "description": "For str_replace: replacement text.",
+            },
+            "insert_line": {
+                "type": "integer",
+                "description": "For insert: line number to insert after (0 = file start).",
+                "minimum": 0,
+            },
+            "insert_text": {
+                "type": "string",
+                "description": "For insert: text to insert.",
+            },
+            "old_path": {
+                "type": "string",
+                "description": "For rename: existing path.",
+            },
+            "new_path": {
+                "type": "string",
+                "description": "For rename: destination path.",
+            },
+            "view_range": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": (
+                    "For view: optional [start, end] 1-based inclusive line "
+                    "range (end -1 = to end of file)."
+                ),
+            },
+        },
+        ["command"],
+    ),
+]
 DEFERRED_TOOL_SCHEMAS: list[dict[str, Any]] = [
     *TODO_TOOL_SCHEMAS,
     *SUBAGENT_TOOL_SCHEMAS,
@@ -126,6 +199,7 @@ DEFERRED_TOOL_SCHEMAS: list[dict[str, Any]] = [
     *BACKGROUND_TOOL_SCHEMAS,
     *TEAM_TOOL_SCHEMAS,
     *LSP_TOOL_SCHEMAS,
+    *MEMORY_TOOL_SCHEMAS,
 ]
 
 TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -330,9 +404,7 @@ def _make_lazy_task_handlers(task_file: Path) -> dict[str, Callable[..., Any]]:
             description=description,
             depends_on=depends_on,
         ),
-        "task_update": lambda task_id, status=None, title=None: _get_handlers()[
-            "task_update"
-        ](
+        "task_update": lambda task_id, status=None, title=None: _get_handlers()["task_update"](
             task_id=task_id,
             status=status,
             title=title,
@@ -376,9 +448,7 @@ def _unbound_stub(tool_name: str) -> Callable[..., Any]:
 
 _TEAM_FALLBACK_HANDLERS: dict[str, Callable[..., Any]] = {
     "team_spawn": lambda name: f"Team spawning unavailable for {name}.",
-    "team_send": lambda to_agent, content: (
-        f"Team messaging unavailable for {to_agent}."
-    ),
+    "team_send": lambda to_agent, content: f"Team messaging unavailable for {to_agent}.",
     "team_list": lambda: [],
 }
 
@@ -392,6 +462,14 @@ _LSP_FALLBACK_HANDLERS: dict[str, Callable[..., Any]] = {
     "lsp_diagnostics": lambda **_kw: _LSP_UNAVAILABLE_MESSAGE,
 }
 
+_MEMORY_DISABLED_MESSAGE = (
+    "Error: persistent memory is disabled. Enable it under [memory] in config."
+)
+
+
+def _memory_disabled_handler(**_kw: Any) -> str:
+    return _MEMORY_DISABLED_MESSAGE
+
 
 TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     "bash": _unbound_stub("bash"),
@@ -403,9 +481,7 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     "web_fetch": run_web_fetch,
     "web_search": run_web_search,
     "todo_read": lambda: _get_default_todo_manager().list(),
-    "todo_write": lambda **kw: make_todo_handlers(_get_default_todo_manager())[
-        "todo_write"
-    ](**kw),
+    "todo_write": lambda **kw: make_todo_handlers(_get_default_todo_manager())["todo_write"](**kw),
     **_make_lazy_task_handlers(Path(".tasks.json")),
     "load_skill": lambda skill_name: _get_default_skill_loader().load(skill_name),
     "background_run": lambda **_: "Background manager unavailable.",
@@ -416,6 +492,7 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
     ),
     **_TEAM_FALLBACK_HANDLERS,
     **_LSP_FALLBACK_HANDLERS,
+    "memory": _memory_disabled_handler,
 }
 
 
@@ -452,6 +529,7 @@ def get_handlers(
     subagent_depth: int = 0,
     mcp_manager: MCPManager | None = None,
     lsp_manager: LanguageServerManager | None = None,
+    memory_manager: MemoryManager | None = None,
 ) -> dict[str, Callable[..., Any]]:
     # Hybrid auto-diagnostics hook: built once per ``get_handlers`` call so
     # edit_file / write_file share the same closure. ``None`` when LSP isn't
@@ -463,12 +541,8 @@ def get_handlers(
     handlers: dict[str, Callable[..., Any]] = {
         "bash": partial(run_bash, cwd=workspace),
         "read_file": partial(run_read, workspace=workspace),
-        "write_file": partial(
-            run_write, workspace=workspace, diagnostics_hook=diagnostics_hook
-        ),
-        "edit_file": partial(
-            run_edit, workspace=workspace, diagnostics_hook=diagnostics_hook
-        ),
+        "write_file": partial(run_write, workspace=workspace, diagnostics_hook=diagnostics_hook),
+        "edit_file": partial(run_edit, workspace=workspace, diagnostics_hook=diagnostics_hook),
         "glob": partial(run_glob, workspace=workspace),
         "grep": partial(run_grep, workspace=workspace),
         "web_fetch": run_web_fetch,
@@ -499,27 +573,30 @@ def get_handlers(
     else:
         handlers.update(_LSP_FALLBACK_HANDLERS)
 
+    if memory_manager is not None:
+        handlers["memory"] = partial(run_memory, manager=memory_manager)
+    else:
+        handlers["memory"] = _memory_disabled_handler
+
     available_tools = tools or get_tools(mcp_manager, lsp_manager)
     if provider is None:
         handlers["subagent"] = lambda task, agent_type=None, run_in_background=False: (
             "Subagent unavailable: provider is not configured."
         )
     else:
-        handlers["subagent"] = lambda task, agent_type=None, run_in_background=False: (
-            run_subagent(
-                provider=provider,
-                task=task,
-                tools=available_tools,
-                handlers=handlers,
-                permission=permission,
-                system_prompt=subagent_system_prompt,
-                max_depth=subagent_max_depth,
-                current_depth=subagent_depth + 1,
-                agent_type=agent_type,
-                bg_manager=bg_manager,
-                run_in_background=run_in_background,
-                default_agent_type=subagent_default_type,
-            )
+        handlers["subagent"] = lambda task, agent_type=None, run_in_background=False: run_subagent(
+            provider=provider,
+            task=task,
+            tools=available_tools,
+            handlers=handlers,
+            permission=permission,
+            system_prompt=subagent_system_prompt,
+            max_depth=subagent_max_depth,
+            current_depth=subagent_depth + 1,
+            agent_type=agent_type,
+            bg_manager=bg_manager,
+            run_in_background=run_in_background,
+            default_agent_type=subagent_default_type,
         )
 
     return handlers

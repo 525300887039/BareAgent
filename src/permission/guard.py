@@ -45,6 +45,11 @@ class PermissionGuard:
         "team_list",
         "web_fetch",
         "web_search",
+        # Memory is sandboxed to its own directory (never user code) and is
+        # agent bookkeeping; prompting on every recall/save would be noise.
+        # Read-only isolation for sub-agents is handled at the AgentType layer
+        # (memory_writable), not here.
+        "memory",
     }
     AUTO_SAFE_PATTERNS = [
         re.compile(r"^(ls|cat|head|tail|wc|echo|pwd|date|which|type)\b"),
@@ -186,8 +191,7 @@ class PermissionGuard:
         for key, value in tool_input.items():
             if isinstance(value, str) and len(value) > _MCP_PREVIEW_FIELD_LIMIT:
                 prepared[key] = (
-                    value[:_MCP_PREVIEW_FIELD_LIMIT]
-                    + f"... [truncated, {len(value)} chars]"
+                    value[:_MCP_PREVIEW_FIELD_LIMIT] + f"... [truncated, {len(value)} chars]"
                 )
             else:
                 prepared[key] = value
@@ -244,15 +248,11 @@ class PermissionGuard:
     ) -> PermissionGuard:
         """Clone the guard for child-agent execution."""
         resolved_mode = (
-            agent_type.permission_mode
-            if agent_type.permission_mode is not None
-            else self.mode
+            agent_type.permission_mode if agent_type.permission_mode is not None else self.mode
         )
         return self.clone(
             mode=resolved_mode,
-            fail_closed=self.fail_closed
-            or background
-            or resolved_mode == PermissionMode.PLAN,
+            fail_closed=self.fail_closed or background or resolved_mode == PermissionMode.PLAN,
         )
 
 
