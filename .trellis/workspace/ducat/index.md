@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
+- **Total Sessions**: 14
 - **Last Active**: 2026-05-31
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~444 | Active |
+| `journal-1.md` | ~478 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-05-31 | 修复 bash 工具 Windows 中文输出乱码（GBK→UTF-8） | `64f535a`, `35e85c1` | `main` |
 | 13 | 2026-05-31 | web_search 改用 Bing HTML 抓取（免 key 免费） | `49b8a8e`, `1ab14d6` | `main` |
 | 12 | 2026-05-30 | 交互式初始化向导 bareagent init（多 provider 配置） | `55da9c8`, `7fd0e85` | `main` |
 | 11 | 2026-05-30 | 持久化记忆系统（文件式 agent 记忆 + 召回层） | `9216b78` | `main` |

@@ -442,3 +442,37 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: 修复 bash 工具 Windows 中文输出乱码（GBK→UTF-8）
+
+**Date**: 2026-05-31
+**Task**: 修复 bash 工具 Windows 中文输出乱码（GBK→UTF-8）
+**Branch**: `main`
+
+### Summary
+
+定位 bash handler 乱码根因：bash.py 硬编码 encoding=utf-8 解码 PowerShell 输出，但 Windows PS 5.1 中文系统用 GBK(cp936) 写 stdout/stderr，含中文的 cmdlet 报错/输出被解成 U+FFFD（ASCII 不受影响故此前未暴露）。修复（方案 A）：Windows 分支在 -Command 前置 try{[Console]::OutputEncoding=[System.Text.Encoding]::UTF8}catch{}，让 PS 以 UTF-8 写出与 Python 端对齐，try/catch 仅兜底编码设置不影响命令；非 Windows 路径不变。经 trellis-implement 实现 + trellis-check 独立评审，本机真实 E2E 验证 stdout 与中文 cmdlet 报错路径均零乱码、码点正确。补跨平台 argv 单测 + Windows-only 中文 round-trip 回归。ruff check 过、全量 pytest 绿；ruff format 因版本漂移有意跳过。优于方案 B（按 GBK 解码会让 curl 抓的 UTF-8 网页反而乱码）。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `64f535a` | (see git log) |
+| `35e85c1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
