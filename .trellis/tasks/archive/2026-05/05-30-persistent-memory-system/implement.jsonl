@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "记忆文件 + MEMORY.md 落盘的硬约束来源：atomic 写(os.replace)、safe_path 沙箱、hidden/git-ignored 目录约定、~/.bareagent/ 全局存储已有先例、新 config key 四步法(config.toml→dataclass→_resolve_*→文档)。memory 子系统全部持久化必须照此。"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "决定 MemoryManager / types / index 新模块在 src/memory 的落位，以及 memory 工具 handler 放 core/handlers 还是 src/memory 的判断依据。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "memory 工具六命令的错误处理范式：预期失败(缺文件 / str_replace 非唯一匹配 / 只读拒绝 / 路径穿越)返回 'Error:' 结构化字符串而非抛异常；safe_path 违例用 PermissionError；硬校验才 raise。boundary 校验 + fail-closed。"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "记忆子系统的用户通知 / 错误输出走 AgentConsole / StreamPrinter / tracer，不用标准库 logging —— 新增 /remember、/forget 反馈与工具错误需遵守。"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "强制复用既有件：sandbox.safe_path、schema.tool_schema、fileutil.atomic_write、context.get_user_context 注入模式、AgentType *_enabled 开关范式 —— 避免重造路径校验/原子写/注入逻辑。"}

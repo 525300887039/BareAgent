@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "验收门槛：ruff check/format 干净、pytest 覆盖新增行为、Python 3.12+ 习惯、反过度设计(不引向量库只留接口)、Conventional Commits。"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核对持久化是否落实 spec：atomic 写、safe_path、hidden+git-ignored 目录、新 config key 四步法、不引入数据库/KV store。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核对工具错误为 'Error:' 结构化字符串、只读隔离 fail-closed、异常类型正确(PermissionError/ValueError/FileNotFoundError)、不在内部散落防御式 isinstance。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核对跨层数据流一致：[memory] config → MemoryManager → handler 闭包注入 → system prompt 注入(get_memory_context) → AgentType.memory_writable 只读隔离，端到端不脱节。"}
