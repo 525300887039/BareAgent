@@ -55,6 +55,12 @@ No `black`, no `isort`, no `flake8`, no `mypy` (yet — pre-commit hooks may add
 
 **Rule**: a PR must pass `ruff check src tests` cleanly. Fix lints; don't add `# noqa` unless the rule is genuinely wrong for the context (then comment why).
 
+### Format only the files you changed — never `ruff format src tests`
+
+`ruff` is pinned loosely (`ruff>=0.11` in `pyproject.toml`), but the committed tree was last formatted with an older ruff. Newer ruff releases (e.g. 0.15.x) reflow code differently (collapsing multi-line calls that fit in 100 cols, etc.). Running `ruff format src tests` on a dev machine with a newer ruff therefore rewrites **dozens of untouched files** — pure version-drift churn that buries the real diff and, on Windows (`core.autocrlf=true`, no `.gitattributes`), compounds with LF↔CRLF noise.
+
+**Rule**: when formatting before a commit, pass `ruff format` **only the files your change actually touches** — e.g. `ruff format src/provider/setup.py tests/test_provider_setup.py` — not the whole `src tests` tree. Use `ruff format --check <those files>` (read-only) to verify. If `--check` flags an *existing* file you only added a couple of lines to, leave it in the repo's current style rather than reformatting the whole file (that would re-introduce the drift churn and clash with the rest of the tree). The repo-wide ruff-version drift is a separate hygiene task, not something a feature PR should absorb.
+
 ---
 
 ## Tests live in `tests/test_<module>.py`
