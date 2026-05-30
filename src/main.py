@@ -56,6 +56,7 @@ from src.planning.tasks import TaskManager
 from src.planning.todo import TodoManager
 from src.provider.base import VALID_THINKING_MODES, BaseLLMProvider, ThinkingConfig
 from src.provider.factory import create_provider
+from src.provider.setup import run_setup_wizard
 from src.team.autonomous import AutonomousAgent
 from src.team.mailbox import Message, MessageBus
 from src.team.manager import TeammateManager
@@ -82,6 +83,7 @@ class ProviderConfig:
     name: str
     model: str
     api_key_env: str
+    api_key: str | None = None
     base_url: str | None = None
     wire_api: str | None = None
 
@@ -149,8 +151,7 @@ class Config:
     memory: MemoryConfig = field(default_factory=MemoryConfig)
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="bareagent")
+def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--provider", help="Override the configured provider name.")
     parser.add_argument("--model", help="Override the configured model name.")
     parser.add_argument(
@@ -160,6 +161,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Path to the TOML config file. Defaults to BAREAGENT_CONFIG or the bundled config.toml."
         ),
     )
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="bareagent")
+    # Top-level flags stay usable with no subcommand so the existing
+    # ``bareagent --provider ... --model ...`` REPL invocation is unchanged.
+    _add_common_arguments(parser)
+    subparsers = parser.add_subparsers(dest="command")
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Interactively configure a provider and write config.local.toml.",
+    )
+    # Allow ``bareagent init --config <path>`` to target a specific config file.
+    _add_common_arguments(init_parser)
     return parser.parse_args(argv)
 
 
@@ -247,6 +262,21 @@ def resolve_config_path(config_path: Path | None) -> Path:
     return DEFAULT_CONFIG_PATH
 
 
+def _has_usable_key(provider: ProviderConfig) -> bool:
+    """Return whether *provider* can resolve an API key without the wizard.
+
+    Mirrors :func:`src.provider.factory._resolve_api_key`: an explicit
+    plaintext ``api_key`` wins, an ``sk-`` prefixed ``api_key_env`` is itself
+    the key, and otherwise the named environment variable must be populated.
+    """
+    if provider.api_key:
+        return True
+    api_key_env = provider.api_key_env or ""
+    if api_key_env.startswith("sk-"):
+        return True
+    return bool(api_key_env and os.getenv(api_key_env))
+
+
 def load_config(
     config_path: Path,
     *,
@@ -286,6 +316,10 @@ def load_config(
         api_key_env=_resolve_string(
             api_key_env_default,
             "BAREAGENT_API_KEY_ENV",
+        ),
+        api_key=_resolve_optional_string(
+            provider_raw.get("api_key"),
+            "BAREAGENT_API_KEY",
         ),
         base_url=_resolve_optional_string(
             provider_raw.get("base_url"),
@@ -2046,6 +2080,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     config_path = resolve_config_path(args.config)
 
+    if getattr(args, "command", None) == "init":
+        return 0 if run_setup_wizard(config_path=config_path) else 1
+
     try:
         config = load_config(
             config_path,
@@ -2058,6 +2095,28 @@ def main(argv: list[str] | None = None) -> int:
     except (tomllib.TOMLDecodeError, ValueError) as exc:
         print(f"Failed to load config: {exc}")
         return 1
+
+    # First-run convenience: when no usable API key is configured and we are on
+    # an interactive terminal, drop into the same setup wizard rather than
+    # failing later in ``create_provider``. Non-TTY runs keep the existing
+    # fail-fast behaviour below.
+    provider_config = getattr(config, "provider", None)
+    if (
+        isinstance(provider_config, ProviderConfig)
+        and not _has_usable_key(provider_config)
+        and sys.stdin.isatty()
+    ):
+        print("No usable API key detected. Entering interactive setup...")
+        if run_setup_wizard(config_path=config_path):
+            try:
+                config = load_config(
+                    config_path,
+                    provider_override=args.provider,
+                    model_override=args.model,
+                )
+            except (FileNotFoundError, tomllib.TOMLDecodeError, ValueError) as exc:
+                print(f"Failed to reload config after setup: {exc}")
+                return 1
 
     try:
         provider = create_provider(config)

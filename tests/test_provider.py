@@ -6,6 +6,7 @@ from src.provider import factory
 from src.provider.anthropic import AnthropicProvider
 from src.provider.base import LLMResponse, StreamEvent, ThinkingConfig, ToolCall
 from src.provider.openai import OpenAIProvider
+from src.provider.presets import resolve_preset
 
 
 def test_llm_response_has_tool_calls_and_to_message() -> None:
@@ -704,6 +705,6 @@ def test_factory_builds_deepseek_via_openai_provider(monkeypatch) -> None:
     assert captured == {
         "api_key": "secret",
         "model": "deepseek-chat",
-        "base_url": factory.DEEPSEEK_BASE_URL,
+        "base_url": resolve_preset("deepseek").default_base_url,
         "wire_api": None,
     }

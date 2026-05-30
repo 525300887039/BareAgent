@@ -7,8 +7,34 @@ from typing import Any, Literal, cast
 from src.provider.anthropic import AnthropicProvider
 from src.provider.base import VALID_THINKING_MODES, BaseLLMProvider, ThinkingConfig
 from src.provider.openai import OpenAIProvider
+from src.provider.presets import resolve_preset
 
-DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+
+def _resolve_api_key(provider_config: Any) -> str:
+    """Resolve the API key, preferring an explicit plaintext key.
+
+    Priority: ``provider_config.api_key`` (explicit plaintext, used as-is) ->
+    ``provider_config.api_key_env`` (an ``sk-`` value is treated as plaintext,
+    otherwise it names an environment variable). Fixes non-``sk-`` prefixed
+    keys (qwen/glm) being misread as env var names.
+    """
+    explicit_key = getattr(provider_config, "api_key", None)
+    if explicit_key:
+        return str(explicit_key)
+
+    api_key_env = getattr(provider_config, "api_key_env", "")
+    if not api_key_env:
+        raise ValueError(
+            "Provider config is missing both 'api_key' and 'api_key_env'. "
+            "Please provide the API key directly via 'api_key', or specify the "
+            "environment variable name that holds it via 'api_key_env'."
+        )
+    if api_key_env.startswith("sk-"):
+        return api_key_env
+    api_key = os.getenv(api_key_env)
+    if not api_key:
+        raise ValueError(f"Missing API key in environment variable: {api_key_env}")
+    return api_key
 
 
 def create_provider(config: Any) -> BaseLLMProvider:
@@ -18,42 +44,26 @@ def create_provider(config: Any) -> BaseLLMProvider:
 
     provider_name = str(getattr(provider_config, "name", "")).strip().lower()
     model = getattr(provider_config, "model", "")
-    api_key_env = getattr(provider_config, "api_key_env", "")
-    if not api_key_env:
-        raise ValueError(
-            "Provider config is missing 'api_key_env'. "
-            "Please specify the environment variable name that holds the API key, "
-            "or provide the API key directly (starting with 'sk-')."
-        )
-    if api_key_env.startswith("sk-"):
-        api_key = api_key_env
-    else:
-        api_key = os.getenv(api_key_env)
-        if not api_key:
-            raise ValueError(f"Missing API key in environment variable: {api_key_env}")
+    api_key = _resolve_api_key(provider_config)
 
-    if provider_name == "anthropic":
+    preset = resolve_preset(provider_name)
+    if preset is None:
+        raise ValueError(f"Unknown provider: {provider_name}")
+
+    if preset.route == "anthropic":
         return AnthropicProvider(
             api_key=api_key,
             model=model,
             thinking_config=_build_thinking_config(getattr(config, "thinking", None)),
         )
-    if provider_name == "openai":
-        return OpenAIProvider(
-            api_key=api_key,
-            model=model,
-            base_url=getattr(provider_config, "base_url", None),
-            wire_api=getattr(provider_config, "wire_api", None),
-        )
-    if provider_name == "deepseek":
-        return OpenAIProvider(
-            api_key=api_key,
-            model=model,
-            base_url=getattr(provider_config, "base_url", None) or DEEPSEEK_BASE_URL,
-            wire_api=getattr(provider_config, "wire_api", None),
-        )
 
-    raise ValueError(f"Unknown provider: {provider_name}")
+    base_url = getattr(provider_config, "base_url", None) or preset.default_base_url
+    return OpenAIProvider(
+        api_key=api_key,
+        model=model,
+        base_url=base_url,
+        wire_api=getattr(provider_config, "wire_api", None),
+    )
 
 
 def _validated_thinking_mode(mode: str) -> Literal["enabled", "adaptive", "disabled"]:

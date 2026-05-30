@@ -1,3 +1,5 @@
+# Tip: run `bareagent init` for an interactive provider setup wizard that writes
+# config.local.toml for you (DeepSeek / OpenAI / Anthropic / Qwen / GLM / custom).
 [provider]
 name = "openai"
 model = "gpt-4.1"

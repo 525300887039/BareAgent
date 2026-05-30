@@ -54,6 +54,36 @@ BareAgent 按以下顺序决定主配置文件路径：
 
 如果值格式不合法，`load_config()` 会直接报错，而不是静默忽略。
 
+## 3.1.5 交互式初始化（`bareagent init`）
+
+如果你不想手动编辑配置文件，可以用交互式向导一次性完成 provider 配置。它会引导你选择渠道、填入模型与 API Key，并把结果写入 `config.local.toml` 的 `[provider]` 段（保留文件内其余 section）。
+
+```bash
+bareagent init
+```
+
+向导提供 6 类渠道：
+
+| 序号 | 渠道 | 路由 | 默认 base_url |
+|------|------|------|---------------|
+| 1 | DeepSeek | `openai` 兼容 | `https://api.deepseek.com` |
+| 2 | ChatGPT (OpenAI) | `openai` 原生 | 默认 |
+| 3 | Claude (Anthropic) | `anthropic` 原生 | 默认 |
+| 4 | Qwen (DashScope) | `openai` 兼容 | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| 5 | GLM (Zhipu/BigModel) | `openai` 兼容 | `https://open.bigmodel.cn/api/paas/v4` |
+| 6 | 第三方 OpenAI 兼容 | `openai` 兼容 | 自定义输入 |
+
+前 5 类带默认 base_url、默认 Key 环境变量名和候选模型；模型可以输入编号选用候选，也可以直接输入自定义名称，base_url 直接回车采用默认。第 6 类需要你自行填写路由名（默认 `openai`）、`base_url`、模型与 Key。
+
+**API Key 落盘方式**有两个分支：
+
+- **明文（默认）**：Key 直接写入 `config.local.toml` 的 `api_key` 字段。由于 `config.local.toml` 已被 git-ignore，不会进入版本库；这也修复了 qwen/glm 这类非 `sk-` 前缀 Key 被误判为环境变量名的老问题。
+- **环境变量**：向导写入 `api_key_env` 而不是明文 Key，并提示你记得 `export` 对应变量。
+
+**首次无 Key 自动触发**：直接运行 `bareagent` 时，如果检测不到可用的 API Key（既没有明文 `api_key`，`api_key_env` 也不是 `sk-` 开头、对应环境变量也未设置）且当前是交互式终端，BareAgent 会自动进入同一向导；配完后重新加载配置继续启动。非交互式（管道 / CI）环境保持原有的 fail-fast 行为，不会卡住。
+
+向导写入的就是「`config.toml` → `config.local.toml`」分层里的本地覆盖层，因此与手动改配置、环境变量、CLI 覆盖完全兼容。
+
 ## 3.2 配置段详解
 
 ### 3.2.1 `[provider]`
@@ -62,9 +92,10 @@ BareAgent 按以下顺序决定主配置文件路径：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `name` | `string` | 提供商名称，当前支持 `openai`、`anthropic`、`deepseek` |
+| `name` | `string` | 提供商名称，支持 `openai`、`anthropic`、`deepseek`、`qwen`、`glm` |
 | `model` | `string` | 具体模型名，原样传给 provider |
-| `api_key_env` | `string` | 存放 API Key 的环境变量名 |
+| `api_key` | `string?` | 明文 API Key；设置后优先于 `api_key_env`（通常由 `bareagent init` 写入 `config.local.toml`） |
+| `api_key_env` | `string` | 存放 API Key 的环境变量名（`api_key` 未设置时回退到此） |
 | `base_url` | `string?` | OpenAI 兼容接口的基础地址，未设置时为 `None` |
 | `wire_api` | `string?` | OpenAI 兼容接口的传输协议选择，例如 `responses` |
 
@@ -108,7 +139,7 @@ wire_api = "responses"
 - 当前仓库自带的 `config.toml` 示例值是 `openai` + `gpt-4.1`
 - 如果你的配置文件根本没有 `[provider]`，源码兜底默认值是 `anthropic` + `claude-sonnet-4-20250514`
 
-`api_key_env` 只存“环境变量名”，真正的 API Key 仍然必须出现在运行环境中。若环境变量不存在，`create_provider()` 会直接报错。
+Key 的解析顺序是：先看明文 `api_key`，有就直接用；否则回退到 `api_key_env`——若该值以 `sk-` 开头则当作明文 Key，否则当作环境变量名去运行环境里取。`api_key_env` 这一支只存“环境变量名”，真正的 Key 仍必须出现在运行环境中；若两者都缺失或环境变量不存在，`create_provider()` 会直接报错。`bareagent init`（见 3.1.5）会帮你把 `api_key` 或 `api_key_env` 写进 `config.local.toml`。
 
 ### 3.2.2 `[permission]`
 
@@ -259,6 +290,7 @@ pretty = true
 | `BAREAGENT_CONFIG` | 指定主配置文件路径 | 未设置时使用项目自带 `config.toml` |
 | `BAREAGENT_PROVIDER` | 覆盖 provider 名称 | 未设置时取配置文件值 |
 | `BAREAGENT_MODEL` | 覆盖模型名 | 未设置时取配置文件值 |
+| `BAREAGENT_API_KEY` | 覆盖明文 API Key（优先于 `api_key_env`） | 未设置时取配置文件 `api_key` 值 |
 | `BAREAGENT_API_KEY_ENV` | 覆盖 API Key 环境变量名 | 未设置时取配置文件值或 provider 默认值 |
 | `BAREAGENT_BASE_URL` | 覆盖兼容接口基础地址 | 主要用于 OpenAI 兼容接口 |
 | `BAREAGENT_WIRE_API` | 覆盖 OpenAI 兼容接口协议 | 例如 `responses` |

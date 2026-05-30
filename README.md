@@ -107,6 +107,7 @@ default_type = "general-purpose"
 |---------|------|--------|
 | `BAREAGENT_PROVIDER` | 提供商名称 | `openai` |
 | `BAREAGENT_MODEL` | 模型名称 | `gpt-4.1` |
+| `BAREAGENT_API_KEY` | 明文 API 密钥（优先于 `api_key_env`） | — |
 | `BAREAGENT_API_KEY_ENV` | API 密钥环境变量名 | 按提供商自动设置 |
 | `BAREAGENT_BASE_URL` | 自定义 API 基础 URL | — |
 | `BAREAGENT_PERMISSION_MODE` | 权限模式 | `default` |
