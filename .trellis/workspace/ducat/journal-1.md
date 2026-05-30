@@ -408,3 +408,37 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: web_search 改用 Bing HTML 抓取（免 key 免费）
+
+**Date**: 2026-05-31
+**Task**: web_search 改用 Bing HTML 抓取（免 key 免费）
+**Branch**: `main`
+
+### Summary
+
+诊断出默认 web_search 失效根因：DuckDuckGo HTML 端点被反爬（HTTP 202 challenge/anomaly）全面拦截，静默返回 No results。调研 DeepSeek-Reasonix 的免 key 搜索：默认 Bing，实测验证 Bing 对非 JS UA（Lynx）返回服务端渲染的 b_algo 结果、对 Chrome UA 只给 JS 外壳。据此重写 web_search.py：新增 _search_bing_html（非 JS UA 抓 www.bing.com/search）+ _parse_bing_html + _decode_bing_url（解码 /ck/a 跳转的 base64 真实 URL），后端链路 Brave(有 key)->Bing(默认) env-var 自动探测，反爬/解析失败改为显式 Error 报错，移除已失效 DDG 抓取。测试 13 passed、全量 626 passed，真实网 E2E 验证中英文 query 均正确（UTF-8 完好、URL 正确解码）。ruff check 通过；ruff format 因本机版本漂移有意跳过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `49b8a8e` | (see git log) |
+| `1ab14d6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

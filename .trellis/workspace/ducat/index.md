@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
-- **Last Active**: 2026-05-30
+- **Total Sessions**: 13
+- **Last Active**: 2026-05-31
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~410 | Active |
+| `journal-1.md` | ~444 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 13 | 2026-05-31 | web_search 改用 Bing HTML 抓取（免 key 免费） | `49b8a8e`, `1ab14d6` | `main` |
 | 12 | 2026-05-30 | 交互式初始化向导 bareagent init（多 provider 配置） | `55da9c8`, `7fd0e85` | `main` |
 | 11 | 2026-05-30 | 持久化记忆系统（文件式 agent 记忆 + 召回层） | `9216b78` | `main` |
 | 10 | 2026-05-30 | 工程化护栏修复 (健康体检收尾 T1-T4) | `b568073` | `main` |
