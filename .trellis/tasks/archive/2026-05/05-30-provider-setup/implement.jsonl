@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "向导核心是写 config.local.toml；本 spec 规定配置分层（config.toml→local→env→CLI）、deep-merge、atomic 写入约定，tomlkit 保段写回必须遵守"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "本任务新增 src/provider/presets.py 与向导模块（src/setup/ 或 src/cli/），需按 src/ 布局约定决定新代码落位"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "factory key 优先级改造与向导输入校验涉及异常约定（自定义异常、ValueError 风格、fail-closed），需对齐现有 create_provider 报错风格"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "向导有大量用户可见输出；规定用 AgentConsole/StreamPrinter 而非裸 print 与 logging，CLI 层输出需对齐"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Python 3.12+ 特性、ruff、pytest 新行为必须补测、Conventional Commits、反过度设计——实现全程约束"}

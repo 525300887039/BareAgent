@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "质量门：核对 Python 3.12+ 用法、ruff check/format 通过、新行为有 pytest 覆盖、无过度设计"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核对向导写 config.local.toml 是否遵守配置分层与原子写、是否仅改 [provider] 段并保留其余 section"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核对 factory key 优先级与向导输入校验的异常处理是否符合项目约定"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "核对新增 presets.py / 向导模块是否落在约定目录、命名是否一致"}
