@@ -38,7 +38,7 @@ class Message:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "Message":
+    def from_dict(cls, payload: dict[str, Any]) -> Message:
         return cls(
             id=str(payload.get("id", "")),
             from_agent=str(payload.get("from_agent", "")),

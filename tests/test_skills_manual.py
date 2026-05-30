@@ -33,6 +33,6 @@ def test_skill_load_nonexistent():
     loader = SkillLoader(skills_dir=SKILLS_DIR)
     try:
         loader.load("nonexistent_skill_xyz")
-        assert False, "Should have raised ValueError"
+        raise AssertionError("Should have raised ValueError")
     except ValueError:
         pass

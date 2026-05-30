@@ -1,7 +1,8 @@
 """三、权限系统验证 — 3.2 危险命令检测
 
 适配：无 _is_dangerous 方法，改用 requires_confirm()。
-DEFAULT 模式下 bash 命令：危险命令 → requires_confirm=True，安全命令可能也 True（因为 DEFAULT 对未匹配 bash 也需确认）。
+DEFAULT 模式下 bash 命令：危险命令 → requires_confirm=True，
+安全命令可能也 True（因为 DEFAULT 对未匹配 bash 也需确认）。
 改用 AUTO 模式：安全命令自动放行（False），危险命令仍需确认（True）。
 """
 

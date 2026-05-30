@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
-from typing import Iterator
 
 IGNORED_PATH_NAMES = {
     ".git",

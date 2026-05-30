@@ -74,7 +74,7 @@ class LangfuseTracer(Tracer):
         session_id: str = "default",
         **langfuse_kwargs: Any,
     ) -> None:
-        from langfuse import Langfuse
+        from langfuse import Langfuse  # type: ignore
 
         self._langfuse = Langfuse(**langfuse_kwargs)
         self._session_id = session_id

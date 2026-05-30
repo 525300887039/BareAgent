@@ -3,7 +3,7 @@
 适配：get_tools() 返回 schema list，DEFERRED_TOOLS 是 set。
 """
 
-from src.core.tools import get_tools, BASE_TOOLS, DEFERRED_TOOLS
+from src.core.tools import BASE_TOOLS, DEFERRED_TOOLS, get_tools
 
 
 def test_base_tools_registered():

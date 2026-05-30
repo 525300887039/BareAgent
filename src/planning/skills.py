@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from src.core.schema import tool_schema as _schema
-
 
 LOAD_SKILL_TOOL_SCHEMAS: list[dict[str, Any]] = [
     _schema(

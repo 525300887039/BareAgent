@@ -217,7 +217,8 @@ def _make_diagnostics_handler(
         pull = getattr(server, "request_text_document_diagnostics", None)
         if callable(pull):
             try:
-                diagnostics = list(pull(relpath))
+                pull_result: Any = pull(relpath)
+                diagnostics = list(pull_result)
             except Exception as exc:
                 _log.debug(
                     "lsp_diagnostics pull failed for %r: %s: %s",
@@ -273,7 +274,8 @@ def _trigger_open_and_wait(
 
     def _hold() -> None:
         try:
-            with open_file(relpath):
+            cm: Any = open_file(relpath)
+            with cm:
                 # Block briefly while pyright analyses and publishes. The
                 # outer wait_for_diagnostics is the primary signal; this is
                 # a safety net so the context exits even if no publish lands.

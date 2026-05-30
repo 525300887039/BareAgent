@@ -9,6 +9,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
+
 from src.ui.theme import ThemeManager, get_theme
 
 if TYPE_CHECKING:

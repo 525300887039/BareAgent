@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections.abc import Callable
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.planning.agent_types import AgentType
@@ -237,7 +238,7 @@ class PermissionGuard:
 
     def for_subagent(
         self,
-        agent_type: "AgentType",
+        agent_type: AgentType,
         *,
         background: bool = False,
     ) -> PermissionGuard:

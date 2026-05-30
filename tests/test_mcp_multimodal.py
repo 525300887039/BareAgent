@@ -26,7 +26,6 @@ from src.mcp.registry import _to_content_blocks, build_mcp_handlers
 from src.provider.anthropic import AnthropicProvider
 from src.provider.openai import OpenAIProvider
 
-
 # --- _to_content_blocks: unit coverage of every MCP content kind ------------
 
 

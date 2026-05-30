@@ -7,7 +7,6 @@ without a live manager so the LLM always sees a stable surface) and that
 
 from __future__ import annotations
 
-
 from src.core.tools import LSP_TOOL_SCHEMAS, get_handlers, get_tools
 from src.lsp.config import LSPConfig, LSPServerConfig
 from src.lsp.manager import LanguageServerManager

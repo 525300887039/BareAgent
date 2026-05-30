@@ -11,7 +11,6 @@ from src.planning.agent_types import (
     filter_tools,
 )
 
-
 _TOOLS = [
     {"name": "bash"},
     {"name": "read_file"},

@@ -4,7 +4,7 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
-from src.memory.compact import _micro_compact, Compactor
+from src.memory.compact import Compactor, _micro_compact
 from src.memory.token_counter import estimate_tokens
 from src.memory.transcript import TranscriptManager
 from src.provider.base import BaseLLMProvider, LLMResponse

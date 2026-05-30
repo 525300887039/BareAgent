@@ -424,8 +424,10 @@ def test_openai_parse_responses_api_payload_extracts_tool_calls() -> None:
             (
                 'data: {"type":"response.completed","response":{"status":"completed",'
                 '"usage":{"input_tokens":13,"output_tokens":6},"output":['
-                '{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Checking now."}]},'
-                '{"type":"function_call","call_id":"call_1","name":"grep","arguments":"{\\"pattern\\": \\"TODO\\"}"}'
+                '{"type":"message","role":"assistant",'
+                '"content":[{"type":"output_text","text":"Checking now."}]},'
+                '{"type":"function_call","call_id":"call_1","name":"grep",'
+                '"arguments":"{\\"pattern\\": \\"TODO\\"}"}'
                 "]}}"
             ),
             "",
@@ -528,7 +530,7 @@ def test_openai_create_stream_via_responses_accumulates_text_and_tool_calls(
     assert response.output_tokens == 6
 
 
-def test_openai_create_stream_via_responses_preserves_streamed_tool_calls_when_completed_payload_omits_them(
+def test_openai_create_stream_via_responses_preserves_streamed_tool_calls_when_completed_payload_omits_them(  # noqa: E501
     monkeypatch,
 ) -> None:
     completed_response = SimpleNamespace(

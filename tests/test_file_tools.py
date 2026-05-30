@@ -4,9 +4,9 @@
       run_edit(file_path, old_text, new_text, workspace=...)
 """
 
+from src.core.handlers.file_edit import run_edit
 from src.core.handlers.file_read import run_read
 from src.core.handlers.file_write import run_write
-from src.core.handlers.file_edit import run_edit
 
 
 def test_write_then_read(tmp_path):
@@ -35,7 +35,7 @@ def test_edit_file_not_found(tmp_path):
             new_text="replacement",
             workspace=tmp_path,
         )
-        assert False, "Should have raised ValueError"
+        raise AssertionError("Should have raised ValueError")
     except ValueError as e:
         assert "not found" in str(e).lower()
 
@@ -44,7 +44,7 @@ def test_read_file_not_found(tmp_path):
     """读取不存在的文件应报错"""
     try:
         run_read(file_path="nonexistent.txt", workspace=tmp_path)
-        assert False, "Should have raised"
+        raise AssertionError("Should have raised")
     except (FileNotFoundError, OSError, ValueError):
         pass
 

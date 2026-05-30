@@ -7,7 +7,6 @@ import time
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
-
 _DEFAULT_EVENT_QUEUE_SIZE = 256
 
 

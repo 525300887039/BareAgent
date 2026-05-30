@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import cast
 from urllib.parse import unquote, urlparse
 
 
@@ -112,6 +113,6 @@ def _multilspy_path_to_uri():  # pragma: no cover — exercised only when multil
         return None
 
     def _bound(path: str) -> str:
-        return helper(str(Path(path).resolve()))
+        return cast(str, helper(str(Path(path).resolve())))
 
     return _bound

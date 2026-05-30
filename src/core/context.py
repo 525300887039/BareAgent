@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import subprocess
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
-import subprocess
 
 BASE_SYSTEM_PROMPT = "You are BareAgent, a terminal-based coding assistant."
 

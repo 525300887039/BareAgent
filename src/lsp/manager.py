@@ -35,10 +35,10 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
 from .config import LSPConfig, LSPServerConfig
 from .coord import to_repo_relative
@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 
-class ServerStatus(str, Enum):
+class ServerStatus(StrEnum):
     """Lifecycle states a managed language server moves through."""
 
     STARTING = "starting"

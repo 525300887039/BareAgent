@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.core.sandbox import safe_path
 from src.core.handlers.search_utils import (
     iter_search_files,
     matches_glob_pattern,
 )
+from src.core.sandbox import safe_path
 
 
 def run_glob(pattern: str, path: str = ".", *, workspace: Path) -> list[str]:

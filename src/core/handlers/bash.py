@@ -52,11 +52,13 @@ def run_bash(
     return output
 
 
-def _join_output(stdout: str | None, stderr: str | None) -> str:
+def _join_output(stdout: str | bytes | None, stderr: str | bytes | None) -> str:
     parts: list[str] = []
     for value in (stdout, stderr):
         if value is None:
             continue
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", errors="replace")
         text = value.rstrip()
         if text:
             parts.append(text)

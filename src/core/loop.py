@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any, cast
 
 from src.concurrency.notification import inject_notifications
 from src.core.fileutil import stringify
@@ -184,7 +185,7 @@ def _fallback_to_non_stream(
     tools: list[dict[str, Any]],
     *,
     console: UIProtocol | None,
-    exc: Exception,
+    exc: BaseException,
 ) -> tuple[LLMResponse, bool, set[str]]:
     if console is not None:
         console.print_status(
@@ -216,7 +217,9 @@ def _consume_stream(
                 streamed_text = printer.finish()
                 response = stop.value
                 if response is None:
-                    raise RuntimeError("Streaming provider did not return a response.")
+                    raise RuntimeError(
+                        "Streaming provider did not return a response."
+                    ) from None
                 return (
                     response,
                     streamed_any_text or bool(streamed_text),
@@ -266,7 +269,7 @@ def _get_stream_printer(console: UIProtocol | None) -> StreamProtocol:
 
     get_stream_printer = getattr(console, "get_stream_printer", None)
     if callable(get_stream_printer):
-        return get_stream_printer()
+        return cast(StreamProtocol, get_stream_printer())
 
     # Backward compatibility for older console duck types that exposed `.console`
     # but not a `get_stream_printer()` hook.

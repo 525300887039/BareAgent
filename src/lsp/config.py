@@ -93,7 +93,8 @@ def _parse_server(entry: dict[str, Any], index: int) -> LSPServerConfig:
     extensions_raw = entry.get("extensions")
     if not isinstance(extensions_raw, list) or not extensions_raw:
         raise LSPError(
-            f"lsp.servers[{language}].extensions is required and must be a non-empty list of strings"
+            f"lsp.servers[{language}].extensions is required and must be a "
+            "non-empty list of strings"
         )
     if not all(isinstance(ext, str) and ext for ext in extensions_raw):
         raise LSPError(

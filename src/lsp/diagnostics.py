@@ -66,7 +66,7 @@ class DiagnosticKey:
     message: str
 
     @classmethod
-    def from_diag(cls, diag: Diagnostic) -> "DiagnosticKey":
+    def from_diag(cls, diag: Diagnostic) -> DiagnosticKey:
         return cls(
             file=diag.file,
             line=diag.line,

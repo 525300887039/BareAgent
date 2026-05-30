@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
+import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from queue import Empty
 from socketserver import ThreadingMixIn
-import threading
 from typing import Any
 from urllib.parse import unquote, urlparse
 
@@ -104,7 +104,7 @@ class DebugViewerHandler(BaseHTTPRequestHandler):
 
         subscribe = getattr(self.server.logger, "subscribe_events", None)
         unsubscribe = getattr(self.server.logger, "unsubscribe_events", None)
-        event_queue = (
+        event_queue: Any = (
             subscribe() if callable(subscribe) else self.server.logger.event_queue
         )
 
@@ -113,7 +113,7 @@ class DebugViewerHandler(BaseHTTPRequestHandler):
                 try:
                     event = event_queue.get(timeout=30)
                     payload = json.dumps(event, ensure_ascii=False, default=str)
-                    self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+                    self.wfile.write(f"data: {payload}\n\n".encode())
                 except Empty:
                     self.wfile.write(b": heartbeat\n\n")
                 self.wfile.flush()

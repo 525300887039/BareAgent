@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import importlib
 import os
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 

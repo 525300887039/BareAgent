@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from src.permission.guard import PermissionGuard, PermissionMode
 from src.planning.agent_types import (
-    AgentType,
     BUILTIN_AGENT_TYPES,
     DEFAULT_AGENT_TYPE,
+    AgentType,
     filter_handlers,
     filter_tools,
     resolve_agent_type,

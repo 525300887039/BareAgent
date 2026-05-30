@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from src.core.loop import agent_loop, LLMCallError
+from src.core.loop import LLMCallError, agent_loop
 from src.permission.guard import PermissionGuard, PermissionMode
 from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
 
@@ -46,8 +46,7 @@ class MockProvider(BaseLLMProvider):
         events, response = payload
 
         def _generator():
-            for event in events:
-                yield event
+            yield from events
             return response
 
         return _generator()
@@ -108,7 +107,7 @@ class LegacyConsole:
 
 
 class FakeStreamPrinter:
-    instances: list["FakeStreamPrinter"] = []
+    instances: list[FakeStreamPrinter] = []
 
     def __init__(self, *args, **kwargs) -> None:
         _ = kwargs
@@ -522,7 +521,8 @@ def test_agent_loop_does_not_retry_after_partial_stream_failure(monkeypatch) -> 
 
 
 def test_agent_loop_terminates_after_max_iterations() -> None:
-    """Bug #12: agent_loop should stop after max_iterations even if LLM keeps returning tool calls."""
+    """Bug #12: agent_loop should stop after max_iterations even if LLM keeps
+    returning tool calls."""
     tool_response = LLMResponse(
         text="Calling tool.",
         tool_calls=[ToolCall(id="toolu_1", name="echo", input={"value": "hi"})],

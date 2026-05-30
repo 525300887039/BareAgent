@@ -5,7 +5,6 @@ from typing import Any
 
 from src.core.schema import tool_schema as _schema
 
-
 VALID_TODO_STATUSES = {"pending", "in_progress", "done"}
 
 

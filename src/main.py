@@ -8,19 +8,23 @@ import os
 import signal
 import sys
 import tomllib
+from collections.abc import Callable
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Callable
+from typing import Any, Literal, cast
 
 from src.concurrency.background import BackgroundManager
+from src.core.context import assemble_system_prompt
 from src.core.fileutil import (
     generate_random_id,
     is_tool_result_message,
+)
+from src.core.fileutil import (
     optional_string as _coerce_optional_string,
 )
-from src.core.context import assemble_system_prompt
 from src.core.loop import LLMCallError, agent_loop
 from src.core.tools import get_handlers, get_tools
 from src.debug.interaction_log import InteractionLogger
@@ -39,12 +43,12 @@ from src.permission.guard import (
     PermissionMode,
     permission_rule_subject,
 )
+from src.permission.rules import parse_permission_rules
 from src.planning.agent_types import BUILTIN_AGENT_TYPES, DEFAULT_AGENT_TYPE
 from src.planning.skills import SkillLoader, resolve_skills_dir
 from src.planning.tasks import TaskManager
 from src.planning.todo import TodoManager
-from src.permission.rules import parse_permission_rules
-from src.provider.base import BaseLLMProvider, ThinkingConfig, VALID_THINKING_MODES
+from src.provider.base import VALID_THINKING_MODES, BaseLLMProvider, ThinkingConfig
 from src.provider.factory import create_provider
 from src.team.autonomous import AutonomousAgent
 from src.team.mailbox import Message, MessageBus
@@ -201,7 +205,7 @@ def _resolve_optional_string(file_value: str | None, env_name: str) -> str | Non
     return value
 
 
-def _validate_mode(name: str, value: str, allowed: set[str]) -> str:
+def _validate_mode(name: str, value: str, allowed: AbstractSet[str]) -> str:
     if value not in allowed:
         allowed_values = ", ".join(sorted(allowed))
         raise ValueError(f"{name} must be one of: {allowed_values}")
@@ -305,13 +309,16 @@ def load_config(
         ),
     )
     thinking = ThinkingConfig(
-        mode=_validate_mode(
-            "thinking.mode",
-            _resolve_string(
-                thinking_raw.get("mode", "adaptive"),
-                "BAREAGENT_THINKING_MODE",
+        mode=cast(
+            Literal["enabled", "adaptive", "disabled"],
+            _validate_mode(
+                "thinking.mode",
+                _resolve_string(
+                    thinking_raw.get("mode", "adaptive"),
+                    "BAREAGENT_THINKING_MODE",
+                ),
+                VALID_THINKING_MODES,
             ),
-            VALID_THINKING_MODES,
         ),
         budget_tokens=_resolve_int(
             int(thinking_raw.get("budget_tokens", 10000)),
@@ -386,7 +393,7 @@ def load_config(
 _NAG_REMINDER_PREFIX = "<nag-reminder>"
 
 
-def _initial_messages(workspace: Path, skill_summary: str = "") -> list[dict[str, str]]:
+def _initial_messages(workspace: Path, skill_summary: str = "") -> list[dict[str, Any]]:
     return [
         {
             "role": "system",
@@ -396,7 +403,7 @@ def _initial_messages(workspace: Path, skill_summary: str = "") -> list[dict[str
 
 
 def _refresh_nag_reminder(
-    messages: list[dict[str, str | list[dict[str, str]]]],
+    messages: list[dict[str, Any]],
     nag_reminder: str | None,
 ) -> None:
     messages[:] = [
@@ -426,7 +433,7 @@ def _refresh_nag_reminder(
 
 def _build_loop_compact(compact_fn: object, todo_manager: TodoManager):
     def _compact(
-        messages: list[dict[str, str | list[dict[str, str]]]],
+        messages: list[dict[str, Any]],
         force: bool = False,
     ) -> None:
         _refresh_nag_reminder(messages, todo_manager.get_nag_reminder())
@@ -628,7 +635,7 @@ def _set_compact_session_id(compact_fn: object, session_id: str) -> None:
 
 def _save_transcript_snapshot(
     transcript_mgr: TranscriptManager,
-    messages: list[dict[str, object]],
+    messages: list[dict[str, Any]],
     compact_fn: object,
 ) -> None:
     transcript_mgr.save(messages, _get_compact_session_id(compact_fn))
@@ -817,7 +824,7 @@ def _build_handlers(
     tools: list[dict[str, object]],
     permission: PermissionGuard,
     bg_manager: BackgroundManager,
-    messages: list[dict[str, object]],
+    messages: list[dict[str, Any]],
     config: Config,
     runtime_id: str,
     teammate_manager: TeammateManager,
@@ -827,7 +834,7 @@ def _build_handlers(
     mcp_manager: MCPManager | None = None,
     lsp_manager: LanguageServerManager | None = None,
     system_prompt_override: str | None = None,
-) -> dict[str, object]:
+) -> dict[str, Callable[..., Any]]:
     system_prompt = system_prompt_override or _extract_system_prompt(messages)
     team_handlers = _make_team_handlers(
         config=config,
@@ -887,7 +894,7 @@ def _load_teammate_manager(
         return TeammateManager.create_empty(team_file)
 
 
-def _extract_system_prompt(messages: list[dict[str, object]]) -> str:
+def _extract_system_prompt(messages: list[dict[str, Any]]) -> str:
     for message in messages:
         if message.get("role") != "system":
             continue
@@ -912,7 +919,7 @@ def _make_team_handlers(
     message_bus: MessageBus,
     spawned_agents: dict[str, AutonomousAgent],
     agent_name: str,
-) -> dict[str, object]:
+) -> dict[str, Callable[..., Any]]:
     provider_factory = _make_teammate_provider_factory(config)
 
     def _team_list() -> list[dict[str, object]]:
@@ -1040,7 +1047,7 @@ def _handle_team_command(
     ui_console: AgentConsole,
     *,
     teammate_manager: TeammateManager,
-    team_handlers: dict[str, object],
+    team_handlers: dict[str, Callable[..., Any]],
 ) -> None:
     _, _, raw_args = text.partition(" ")
     parts = raw_args.split(" ", 2) if raw_args else []

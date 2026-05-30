@@ -86,7 +86,10 @@ def run_subagent(
 
     if run_in_background:
         if bg_manager is None:
-            return "Subagent background execution unavailable: background manager is not configured."
+            return (
+                "Subagent background execution unavailable: "
+                "background manager is not configured."
+            )
         task_id = _generate_subagent_task_id()
         bg_manager.submit(
             task_id,

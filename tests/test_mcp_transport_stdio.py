@@ -31,7 +31,8 @@ for raw in sys.stdin:
     if line == "EXIT":
         break
     if line == "NOTIFY":
-        print(json.dumps({"jsonrpc": "2.0", "method": "ping/note", "params": {"hi": 1}}), flush=True)
+        payload = {"jsonrpc": "2.0", "method": "ping/note", "params": {"hi": 1}}
+        print(json.dumps(payload), flush=True)
         continue
     msg = json.loads(line)
     if "id" in msg:

@@ -49,10 +49,11 @@ class Tracer(abc.ABC):
     def current_span(self) -> Span | None:
         """Return the currently active span, if any."""
 
-    def flush(self) -> None:
+    # flush/shutdown are optional no-op hooks; subclasses override as needed.
+    def flush(self) -> None:  # noqa: B027
         """Flush pending data to the backend. No-op by default."""
 
-    def shutdown(self) -> None:
+    def shutdown(self) -> None:  # noqa: B027
         """Release resources. No-op by default."""
 
 

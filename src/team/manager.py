@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from src.core.fileutil import atomic_write_json
 
@@ -39,7 +40,7 @@ class TeammateManager:
         self._load()
 
     @classmethod
-    def create_empty(cls, config_file: str | Path) -> "TeammateManager":
+    def create_empty(cls, config_file: str | Path) -> TeammateManager:
         instance = cls.__new__(cls)
         instance.config_file = Path(config_file)
         instance.teammates = {}

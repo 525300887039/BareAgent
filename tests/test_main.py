@@ -5,8 +5,12 @@ from io import StringIO
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
-import src.main as main_module
 from rich.console import Console
+
+import src.main as main_module
+from src.core.fileutil import is_tool_result_message
+from src.debug.interaction_log import InteractionLogger
+from src.lsp import LSPConfig
 from src.main import (
     DEFAULT_CONFIG_PATH,
     Config,
@@ -20,9 +24,6 @@ from src.main import (
     load_config,
     resolve_config_path,
 )
-from src.core.fileutil import is_tool_result_message
-from src.debug.interaction_log import InteractionLogger
-from src.lsp import LSPConfig
 from src.mcp import MCPConfig
 from src.memory.transcript import TranscriptManager
 from src.permission.guard import PermissionGuard, PermissionMode

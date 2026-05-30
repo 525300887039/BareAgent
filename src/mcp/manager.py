@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from enum import Enum
+from enum import StrEnum
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 
-class ServerStatus(str, Enum):
+class ServerStatus(StrEnum):
     """Lifecycle states a managed MCP server moves through."""
 
     STARTING = "starting"

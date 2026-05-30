@@ -1,6 +1,6 @@
 """Planning modules for BareAgent."""
 
-from src.planning.agent_types import AgentType, BUILTIN_AGENT_TYPES, DEFAULT_AGENT_TYPE
+from src.planning.agent_types import BUILTIN_AGENT_TYPES, DEFAULT_AGENT_TYPE, AgentType
 from src.planning.skills import SkillLoader, SkillMeta
 from src.planning.subagent import run_subagent
 from src.planning.tasks import Task, TaskManager

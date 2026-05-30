@@ -18,7 +18,6 @@ from src.lsp import manager as manager_module
 from src.lsp.config import LSPConfig, LSPServerConfig
 from src.lsp.manager import LanguageServerManager, ServerStatus
 
-
 # ---------------------------------------------------------------------------
 # Fake multilspy.SyncLanguageServer
 # ---------------------------------------------------------------------------
@@ -31,7 +30,7 @@ class FakeSyncLanguageServer:
     manager wiring stays exercised end-to-end without spawning a subprocess.
     """
 
-    instances: list["FakeSyncLanguageServer"] = []
+    instances: list[FakeSyncLanguageServer] = []
 
     def __init__(
         self, language: str, *, start_delay: float = 0.0, raise_on_enter: bool = False

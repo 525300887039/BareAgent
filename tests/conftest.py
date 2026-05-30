@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from src.lsp import LSPConfig
 from src.main import (
     Config,
     DebugConfig,
@@ -13,7 +16,6 @@ from src.main import (
     TracingConfig,
     UIConfig,
 )
-from src.lsp import LSPConfig
 from src.mcp import MCPConfig
 from src.provider.base import ThinkingConfig
 
@@ -36,3 +38,33 @@ def make_test_config(tmp_path: Path) -> Config:
         mcp=MCPConfig(),
         lsp=LSPConfig(),
     )
+
+
+# Fixtures that bind a real localhost ``ThreadingHTTPServer``. Tests using them
+# are flaky on local machines (port/timeout sensitivity) and must be excluded
+# from the default run — same class as the web-viewer suite. Tests in the same
+# files that take no fixture (e.g. ``*_is_transport_subclass``) stay in default.
+_SOCKET_SERVER_FIXTURES = {"json_server", "sse_server", "legacy_server"}
+
+
+def pytest_collection_modifyitems(config, items):
+    """Auto-mark unstable/manual tests so they are excluded by default.
+
+    ``*_manual.py`` files, the web-viewer suite, and any test bound to a real
+    localhost socket fixture rely on real sockets / external services and are
+    flaky on local machines; tag them ``manual`` + ``slow`` so the default
+    ``-m 'not manual'`` selection skips them. Run them explicitly with
+    ``pytest -m manual``.
+    """
+    for item in items:
+        path = str(item.fspath).replace("\\", "/")
+        uses_socket_fixture = bool(
+            _SOCKET_SERVER_FIXTURES.intersection(getattr(item, "fixturenames", ()))
+        )
+        if (
+            path.endswith("_manual.py")
+            or "test_web_viewer" in path
+            or uses_socket_fixture
+        ):
+            item.add_marker(pytest.mark.manual)
+            item.add_marker(pytest.mark.slow)

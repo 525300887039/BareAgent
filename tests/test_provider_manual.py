@@ -8,8 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.provider.factory import create_provider
 from src.provider.base import BaseLLMProvider
+from src.provider.factory import create_provider
 
 
 def _make_config(name, model, api_key_env):

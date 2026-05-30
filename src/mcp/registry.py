@@ -385,7 +385,8 @@ def _to_content_blocks(
     Conversions:
 
     - ``{type: "text", text}``                       → ``{type: "text", text}``
-    - ``{type: "image", data, mimeType}``            → ``{type: "image", source: {type: "base64", media_type, data}}``
+    - ``{type: "image", data, mimeType}``
+      → ``{type: "image", source: {type: "base64", media_type, data}}``
       (only when ``mimeType`` is in the Anthropic-supported whitelist and
       ``data`` is non-empty; otherwise degraded to a text placeholder.)
     - ``{type: "audio", ...}``                       → text placeholder
@@ -411,7 +412,8 @@ def _to_content_blocks(
             continue
         block_type = block.get("type")
         if block_type == "text":
-            text = block.get("text") if isinstance(block.get("text"), str) else ""
+            raw_text = block.get("text")
+            text = raw_text if isinstance(raw_text, str) else ""
             if max_text_bytes > 0:
                 text = _truncate_text(text, max_text_bytes)
             blocks.append({"type": "text", "text": text})
@@ -423,7 +425,8 @@ def _to_content_blocks(
             continue
         if block_type == "audio":
             _log.warning(
-                "MCP audio content block degraded to text placeholder (not supported by current providers)"
+                "MCP audio content block degraded to text placeholder "
+                "(not supported by current providers)"
             )
             blocks.append(
                 {

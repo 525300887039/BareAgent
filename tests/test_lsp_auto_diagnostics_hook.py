@@ -12,7 +12,6 @@ from src.core.handlers.file_write import run_write
 from src.core.tools import _build_diagnostics_hook
 from src.lsp.config import LSPConfig
 
-
 # ---------------------------------------------------------------------------
 # Hook factory: config gate + happy path
 # ---------------------------------------------------------------------------
@@ -172,7 +171,10 @@ def test_write_file_appends_appendix(workspace: Path) -> None:
     def _hook(path: str, before: Any) -> Any:
         if before is None:
             return []
-        return "\n\nNewly introduced diagnostics in new.py:\n- [pyright Error] Line 2:1 — missing return"
+        return (
+            "\n\nNewly introduced diagnostics in new.py:\n"
+            "- [pyright Error] Line 2:1 — missing return"
+        )
 
     result = run_write(
         "new.py",

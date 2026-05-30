@@ -3,7 +3,7 @@
 适配：bus.send(Message(...))，bus.receive() 返回 list[Message]。
 """
 
-from src.team.mailbox import MessageBus, Message
+from src.team.mailbox import Message, MessageBus
 
 
 def test_mailbox_send_receive(tmp_path):
@@ -66,6 +66,6 @@ def test_mailbox_agent_name_validation(tmp_path):
                 timestamp="",
             )
         )
-        assert False, "Should reject path traversal"
+        raise AssertionError("Should reject path traversal")
     except (ValueError, Exception):
         pass

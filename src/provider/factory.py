@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import Any, Literal, cast
 
 from src.provider.anthropic import AnthropicProvider
-from src.provider.base import BaseLLMProvider, ThinkingConfig, VALID_THINKING_MODES
+from src.provider.base import VALID_THINKING_MODES, BaseLLMProvider, ThinkingConfig
 from src.provider.openai import OpenAIProvider
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
@@ -56,11 +56,11 @@ def create_provider(config: Any) -> BaseLLMProvider:
     raise ValueError(f"Unknown provider: {provider_name}")
 
 
-def _validated_thinking_mode(mode: str) -> str:
+def _validated_thinking_mode(mode: str) -> Literal["enabled", "adaptive", "disabled"]:
     if mode not in VALID_THINKING_MODES:
         logging.warning("Invalid thinking mode %r, falling back to 'adaptive'", mode)
         return "adaptive"
-    return mode
+    return cast(Literal["enabled", "adaptive", "disabled"], mode)
 
 
 def _build_thinking_config(raw_config: Any) -> ThinkingConfig:

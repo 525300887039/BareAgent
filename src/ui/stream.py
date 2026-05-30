@@ -4,6 +4,7 @@ import sys
 from typing import TextIO
 
 from rich.console import Console
+
 from src.ui.theme import get_theme
 
 

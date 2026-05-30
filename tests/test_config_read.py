@@ -18,7 +18,7 @@ def test_read_config_file_nonexistent():
     """不存在的文件应抛出异常（底层直接 open）"""
     try:
         _read_config_file(Path("/nonexistent/config.toml"))
-        assert False, "Should have raised"
+        raise AssertionError("Should have raised")
     except (FileNotFoundError, OSError):
         pass
 
@@ -29,6 +29,6 @@ def test_read_config_file_invalid_toml(tmp_path):
     bad_file.write_text("invalid [[[toml syntax", encoding="utf-8")
     try:
         _read_config_file(bad_file)
-        assert False, "Should have raised"
+        raise AssertionError("Should have raised")
     except Exception:
         pass

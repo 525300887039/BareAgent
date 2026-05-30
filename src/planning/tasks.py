@@ -151,7 +151,8 @@ class TaskManager:
                 self._validate_status(normalized_expected_status)
                 if task.status != normalized_expected_status:
                     raise ValueError(
-                        f"Task {task.id} status is {task.status}, expected {normalized_expected_status}"
+                        f"Task {task.id} status is {task.status}, "
+                        f"expected {normalized_expected_status}"
                     )
 
             changed = False
