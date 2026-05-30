@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "校验 ruff check 过、默认 pytest 全绿、真实 subprocess 测试用平台 skip 守卫、仅格式化改动文件、Conventional Commits"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "校验 bash handler 的 Error:/退出码文本返回契约未被编码改动破坏，乱码 error 文本现可正确读出"}
