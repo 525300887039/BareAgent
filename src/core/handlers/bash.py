@@ -13,11 +13,25 @@ def run_bash(
     raise_on_error: bool = False,
 ) -> str:
     """Run a shell command and return combined stdout/stderr."""
-    completed_command = (
-        ["powershell", "-NoProfile", "-Command", command]
-        if os.name == "nt"
-        else ["bash", "-lc", command]
-    )
+    if os.name == "nt":
+        # Windows PowerShell 5.1 on a Chinese locale writes stdout/stderr as
+        # GBK(cp936) by default; the Python side decodes as UTF-8 below, so we
+        # force the console output encoding to UTF-8 to keep both ends aligned
+        # (otherwise Chinese cmdlet output/errors decode into U+FFFD). The setter
+        # is wrapped in try/catch so an environment that rejects it never blocks
+        # the actual command from running.
+        windows_prefix = (
+            "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } "
+            "catch {}; "
+        )
+        completed_command = [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            windows_prefix + command,
+        ]
+    else:
+        completed_command = ["bash", "-lc", command]
 
     try:
         result = subprocess.run(

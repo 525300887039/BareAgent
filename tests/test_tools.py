@@ -273,6 +273,41 @@ def test_bash_handler_decodes_binary_output_without_crashing(
     assert run_bash("echo ok") == "ok\ufffd"
 
 
+def test_bash_handler_argv_per_platform(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list[str]] = {}
+
+    def fake_run(args, **kwargs):
+        _ = kwargs
+        captured["args"] = args
+        return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+    monkeypatch.setattr("src.core.handlers.bash.subprocess.run", fake_run)
+
+    monkeypatch.setattr("src.core.handlers.bash.os.name", "nt")
+    run_bash("Write-Output hi")
+    win_args = captured["args"]
+    assert win_args[:3] == ["powershell", "-NoProfile", "-Command"]
+    assert "[Console]::OutputEncoding" in win_args[3]
+    assert "[System.Text.Encoding]::UTF8" in win_args[3]
+    assert win_args[3].endswith("Write-Output hi")
+
+    monkeypatch.setattr("src.core.handlers.bash.os.name", "posix")
+    run_bash("echo hi")
+    posix_args = captured["args"]
+    assert posix_args == ["bash", "-lc", "echo hi"]
+    assert not any("[Console]::OutputEncoding" in part for part in posix_args)
+
+
+@pytest.mark.skipif(
+    os.name != "nt", reason="round-trip exercises the real Windows PowerShell path"
+)
+def test_bash_handler_windows_chinese_output_round_trip() -> None:
+    output = run_bash('Write-Output "\u4e2d\u6587\u6d4b\u8bd5"')
+
+    assert "\u4e2d\u6587\u6d4b\u8bd5" in output
+    assert "\ufffd" not in output
+
+
 def test_parse_permission_rules_reads_allow_and_deny_lists() -> None:
     allow, deny = parse_permission_rules(
         {
