@@ -308,3 +308,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: 工程化护栏修复 (健康体检收尾 T1-T4)
+
+**Date**: 2026-05-30
+**Task**: 工程化护栏修复 (健康体检收尾 T1-T4)
+**Branch**: `main`
+
+### Summary
+
+建 1 父 + 4 子 Trellis 任务并实现验证。T1: pyproject 固化 ruff/pytest/pyright 配置 + conftest 钩子自动把 manual/web_viewer/localhost-socket 夹具测试标 manual 默认排除; ruff --fix 全仓 + 剩余 lint 手修。T2: 加 httpx 依赖, 删与 dev extra 重复的 dependency-groups, uv lock 同步。T3: 新增 .github/workflows/ci.yml (push/PR -> ruff+pytest, setup-uv@v8)。T4: pyright 30 -> 0 error (messages/handlers 统一 dict[str,Any]/dict[str,Callable], Literal+cast, bytes->str decode, multilspy cast)。验证: ruff 全绿 / pytest 512 passed,0 failed,46 deselected / pyright 0 errors。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b568073` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

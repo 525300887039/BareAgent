@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 9
-- **Last Active**: 2026-05-28
+- **Total Sessions**: 10
+- **Last Active**: 2026-05-30
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~310 | Active |
+| `journal-1.md` | ~343 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 10 | 2026-05-30 | 工程化护栏修复 (健康体检收尾 T1-T4) | `b568073` | `main` |
 | 9 | 2026-05-28 | LSP child B: 集成 + UX + E2E + 文档（LSP 大任务收尾） | `776b7f5` | `main` |
 | 8 | 2026-05-28 | LSP child A: src/lsp/ 骨架 + 4 工具 + agent_types 集成 | `3b427aa` | `main` |
 | 7 | 2026-05-27 | PR6: MCP 生命周期硬化 + E2E + 文档（收尾） | `ebb1f3c` | `main` |
