@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "审查基线:线程安全(Lock/Timer 生命周期)、测试充分性(不依赖墙钟)、避免过度设计"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核对非法输入处理、Timer 回调异常隔离、cancel_all 幂等、命令解析边界"}
