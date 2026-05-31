@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核验各错误路径文案（损坏文件/非白名单 mime/超限/PDF 库缺失）友好且不崩、Error: 前缀结构化返回"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核验 ruff/pytest/pyright 全绿、测试覆盖（图片块/白名单/超限/notebook 截断/PDF 页范围+库缺失/文本回归）、无过度设计、[pdf] extra 依赖正确"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "核验扩展名分派、图片块为 Anthropic 内部 shape 复用 MCP 约定、handler 返回 list[dict] 直通正确、未改 loop/provider"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核验路径沙箱 safe_path 在多模态读取分支仍生效、二进制读取无越界"}

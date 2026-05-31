@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "run_read 扩展放在 src/core/handlers/、read_file schema 在 src/core/schema.py 的既有组织；handler 返回 list[dict] 直通 _tool_result 的分层约定"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "结构化 tool error 文案（损坏文件/非白名单 mime/超限/PDF 库缺失 graceful），错误以 Error: 前缀返回不抛穿透"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Python 3.12+/类型注解/ruff/pytest、反过度设计（不做 Pillow 缩放/vision 探测）；optional extra 依赖策略；新行为补 pytest"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "沙箱 safe_path 读取约定、二进制读取与 atomic 写法边界（本任务只读但需遵守路径沙箱）"}
