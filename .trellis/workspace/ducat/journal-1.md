@@ -509,3 +509,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: Token 用量追踪与成本展示（/cost 命令）
+
+**Date**: 2026-06-01
+**Task**: Token 用量追踪与成本展示（/cost 命令）
+**Branch**: `main`
+
+### Summary
+
+实现 ROADMAP 2.3 Token 用量追踪 + /cost。尽调确认全仓无 prompt caching（cache_control 0 处）故 input/output 两个 token 即可算准成本，无需扩 provider cache 字段；token 在 agent_loop 内部一个 user turn 多次消耗，最干净的汇总注入点是 loop.py:78 tracer-tag 之后（流式与非流式都经 _invoke_provider 单点覆盖）。新建 src/memory/token_tracker.py：TokenTracker 累计 total_input/output/call_count + per-model 细分（record/reset/estimate_cost/summary，纯逻辑可单测），混合定价层 resolve_price 优先级 精确→config 最长前缀→内置最长前缀，内置 DEFAULT_PRICES 仅项目默认 Claude Opus/Sonnet/Haiku 4.x 家族前缀价（旁注价格可能变动以 [cost.prices] 覆盖为准），未知且未配置 model 只显 token 不臆造 $，每百万 token 换算。loop.py agent_loop 加可选 token_tracker 参数单点 record。main.py 加 CostConfig + Config.cost(defaulted) + _parse_cost_config 接 [cost]；建 tracker 传两个 agent_loop 调用点（注入式 prompt + 普通 user turn）；/cost 注册到 _SLASH_COMMANDS+_HELP_TEXT+分发；/new·/clear·/resume reset、/compact 不 reset。config.toml 加注释版 [cost]/[cost.prices] 示例（单位每百万 token）；CLAUDE.md 加段。决策 D1 混合定价/D2 不做 bottom_toolbar 实时显示/D3 重置对齐会话边界/D4 不拆 cache token。走完整 trellis brainstorm→implement→check 流程，check 对两个高风险点（每百万换算系数 _PER_MILLION=1e6、价格匹配优先级）做独立数值验证，0 问题。新增测试 token_tracker 16 + loop 3 + cost_config 5；pytest 677 passed/3 skipped/47 deselected、ruff check 净、pyright 0 error，无新增依赖。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e6f9589` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
