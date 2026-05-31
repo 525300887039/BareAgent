@@ -117,3 +117,15 @@ enabled = true
 # max_index_lines = 200
 # 每轮按用户消息词法相关性召回并注入的记忆条数（0 = 关闭召回，仅保留开局索引注入）。
 # recall_k = 5
+
+[cost]
+# Token 用量与成本估算（/cost 命令展示当前会话累计）。
+# 默认内置 Claude Opus/Sonnet/Haiku 4.x 的参考价；其余 model 只显 token 不显 $。
+# [cost.prices] 可覆盖内置价或为任意 model 新增价，单位均为「每百万 token 美元」。
+# 价格可能变动，以 [cost.prices] 覆盖为准。
+# [cost.prices."claude-opus-4-8"]
+# input = 15.0
+# output = 75.0
+# [cost.prices."deepseek-chat"]
+# input = 0.27
+# output = 1.10

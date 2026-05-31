@@ -76,6 +76,9 @@ ruff format src tests               # 格式化
 ### 会话管理
 `TranscriptManager`（memory/transcript.py）：会话转录持久化。REPL 支持 `/sessions` 列出历史会话、`/resume` 恢复会话、`/new` 开始新会话、`/clear` 清屏并重置。每个会话有唯一 ID（时间戳格式）。
 
+### Token 用量与成本 (`src/memory/token_tracker.py`)
+`TokenTracker`：进程级累计 LLM token 用量（`total_input`/`total_output`/`call_count` + 按 model 细分），`record(response, model)` 在 `agent_loop`（`loop.py`）每次 LLM 响应后调用（流式+非流式单点覆盖，可选 `token_tracker` 参数）。REPL `/cost` 命令展示当前会话累计：**总是**显 token 计数 + per-model 细分，有定价的 model 额外显 $ 估算，无价的标 `(no price)`。定价为**混合策略**：内置 Claude Opus/Sonnet/Haiku 4.x 参考价（`DEFAULT_PRICES`，前缀匹配，价格可能漂移），`[cost.prices."<model-id>"]`（单位每百万 token）可覆盖内置价或为任意 model 新增价；未知且未配价的 model 只显 token 不显 $。重置语义：`/new`·`/clear`·`/resume` 归零，`/compact` 不重置（同会话压缩）。配置见 `config.toml [cost]`。
+
 ### 追踪 (`src/tracing/`)
 统一 Tracer 接口（`_api.py`）+ 代理（`_proxy.py`）+ 配置入口（`setup.py`）。后端：`JsonFileTracer`（始终启用，写入 `.logs/` 供 `/log` 与 web viewer 使用）、`LangfuseTracer`（设 `LANGFUSE_PUBLIC_KEY` 或 `[tracing] langfuse=true` 启用）、`OpenTelemetryTracer`（设 `OTEL_EXPORTER_OTLP_ENDPOINT` 或 `[tracing] opentelemetry=true` 启用）。多后端时通过 `CompositeTracer` 扇出。Langfuse/OTel 为可选依赖，需安装额外 extras。
 

@@ -32,6 +32,7 @@ def agent_loop(
     console: UIProtocol | None = None,
     max_iterations: int = 200,
     interaction_logger: Any = None,
+    token_tracker: Any = None,
 ) -> str:
     compact = compact_fn or (lambda _messages: None)
 
@@ -76,6 +77,11 @@ def agent_loop(
             llm_span.set_tag("input_tokens", response.input_tokens)
             llm_span.set_tag("output_tokens", response.output_tokens)
             llm_span.set_content_tag("output", response.text)
+
+        # Aggregate token usage here so both streaming and non-streaming paths
+        # (both return through _invoke_provider) are covered at a single point.
+        if token_tracker is not None:
+            token_tracker.record(response, model_name)
 
         _safe_log_response(
             interaction_logger=interaction_logger,

@@ -520,6 +520,120 @@ def test_agent_loop_does_not_retry_after_partial_stream_failure(monkeypatch) -> 
     ]
 
 
+class _RecordingTracker:
+    def __init__(self) -> None:
+        self.records: list[tuple[Any, str]] = []
+
+    def record(self, response: Any, model: str) -> None:
+        self.records.append((response, model))
+
+
+def test_agent_loop_records_token_usage_non_stream() -> None:
+    provider = MockProvider(
+        [
+            LLMResponse(
+                text="Checking file.",
+                tool_calls=[ToolCall(id="toolu_1", name="echo", input={"value": "hi"})],
+                stop_reason="tool_use",
+                input_tokens=20,
+                output_tokens=10,
+            ),
+            LLMResponse(
+                text="Done.",
+                tool_calls=[],
+                stop_reason="end_turn",
+                input_tokens=10,
+                output_tokens=4,
+            ),
+        ]
+    )
+    provider.model = "test-model"  # type: ignore[attr-defined]
+    tracker = _RecordingTracker()
+
+    agent_loop(
+        provider=provider,
+        messages=[
+            {"role": "system", "content": "You are BareAgent."},
+            {"role": "user", "content": "Run the tool."},
+        ],
+        tools=[],
+        handlers={"echo": lambda value: f"handled {value}"},
+        permission=PermissionGuard(PermissionMode.BYPASS),
+        token_tracker=tracker,
+    )
+
+    # Both LLM round-trips inside the single user turn are recorded.
+    assert [model for _, model in tracker.records] == ["test-model", "test-model"]
+    assert [resp.input_tokens for resp, _ in tracker.records] == [20, 10]
+
+
+def test_agent_loop_records_token_usage_stream(monkeypatch) -> None:
+    FakeStreamPrinter.instances.clear()
+    monkeypatch.setattr("src.core.loop.StreamPrinter", FakeStreamPrinter)
+
+    provider = MockProvider(
+        [],
+        stream_payloads=[
+            (
+                [StreamEvent(type="text", text="Streamed.")],
+                LLMResponse(
+                    text="Streamed.",
+                    tool_calls=[],
+                    stop_reason="end_turn",
+                    input_tokens=8,
+                    output_tokens=3,
+                ),
+            ),
+        ],
+    )
+    provider.model = "stream-model"  # type: ignore[attr-defined]
+    tracker = _RecordingTracker()
+
+    agent_loop(
+        provider=provider,
+        messages=[
+            {"role": "system", "content": "You are BareAgent."},
+            {"role": "user", "content": "Say hi."},
+        ],
+        tools=[],
+        handlers={},
+        stream=True,
+        console=FakeConsole(),
+        token_tracker=tracker,
+    )
+
+    assert len(tracker.records) == 1
+    response, model = tracker.records[0]
+    assert model == "stream-model"
+    assert (response.input_tokens, response.output_tokens) == (8, 3)
+
+
+def test_agent_loop_without_tracker_does_not_crash() -> None:
+    provider = MockProvider(
+        [
+            LLMResponse(
+                text="Done.",
+                tool_calls=[],
+                stop_reason="end_turn",
+                input_tokens=10,
+                output_tokens=2,
+            )
+        ]
+    )
+
+    result = agent_loop(
+        provider=provider,
+        messages=[
+            {"role": "system", "content": "You are BareAgent."},
+            {"role": "user", "content": "Say hi."},
+        ],
+        tools=[],
+        handlers={},
+    )
+
+    assert result == "Done."
+
+
 def test_agent_loop_terminates_after_max_iterations() -> None:
     """Bug #12: agent_loop should stop after max_iterations even if LLM keeps
     returning tool calls."""

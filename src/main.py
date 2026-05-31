@@ -43,6 +43,7 @@ from src.memory.persistent import (
     build_remember_instruction,
     resolve_memory_root,
 )
+from src.memory.token_tracker import TokenTracker
 from src.memory.transcript import TranscriptManager
 from src.permission.guard import (
     PermissionGuard,
@@ -135,6 +136,14 @@ class MemoryConfig:
 
 
 @dataclass(slots=True)
+class CostConfig:
+    # Per-model price overrides keyed by model id. Each entry is a
+    # ``{"input": <usd-per-million>, "output": <usd-per-million>}`` dict that
+    # overrides/extends the built-in Claude default prices in token_tracker.py.
+    prices: dict[str, dict[str, float]] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class Config:
     provider: ProviderConfig
     permission: PermissionConfig
@@ -149,6 +158,7 @@ class Config:
     # Defaulted so existing Config(...) constructions (tests, fixtures) keep
     # working without passing memory explicitly.
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    cost: CostConfig = field(default_factory=CostConfig)
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
@@ -275,6 +285,30 @@ def _has_usable_key(provider: ProviderConfig) -> bool:
     if api_key_env.startswith("sk-"):
         return True
     return bool(api_key_env and os.getenv(api_key_env))
+
+
+def _parse_cost_config(cost_raw: dict) -> CostConfig:
+    """Parse the ``[cost]`` / ``[cost.prices]`` config section.
+
+    Each ``[cost.prices."<model-id>"]`` table is coerced into a
+    ``{"input": float, "output": float}`` dict (USD per million tokens).
+    Malformed or incomplete entries are skipped so a bad override never crashes
+    boot — the model simply shows token counts without a ``$`` estimate.
+    """
+    prices_raw = cost_raw.get("prices", {})
+    prices: dict[str, dict[str, float]] = {}
+    if isinstance(prices_raw, dict):
+        for model, entry in prices_raw.items():
+            if not isinstance(entry, dict):
+                continue
+            try:
+                prices[str(model)] = {
+                    "input": float(entry["input"]),
+                    "output": float(entry["output"]),
+                }
+            except (KeyError, TypeError, ValueError):
+                continue
+    return CostConfig(prices=prices)
 
 
 def load_config(
@@ -424,6 +458,9 @@ def load_config(
         print(f"Warning: invalid [lsp] config, LSP disabled ({exc})")
         lsp_config = LSPConfig()
 
+    cost_raw = raw_config.get("cost", {})
+    cost_config = _parse_cost_config(cost_raw if isinstance(cost_raw, dict) else {})
+
     memory_raw = raw_config.get("memory", {})
     memory_config = MemoryConfig(
         enabled=_resolve_bool(
@@ -456,6 +493,7 @@ def load_config(
         mcp=mcp_config,
         lsp=lsp_config,
         memory=memory_config,
+        cost=cost_config,
     )
 
 
@@ -627,6 +665,7 @@ _SLASH_COMMANDS = [
     "/theme",
     "/sessions",
     "/resume",
+    "/cost",
     "/log",
     "/team",
     "/mcp",
@@ -650,6 +689,7 @@ _HELP_TEXT = (
     "  /theme     Switch color theme (catppuccin-mocha, dracula, nord, tokyo-night, gruvbox)\n"
     "  /sessions  List saved sessions\n"
     "  /resume    Resume a previous session\n"
+    "  /cost      Show token usage and estimated cost for this session\n"
     "  /log       Debug log viewer (status|serve|open|<seq>)\n"
     "  /team      Manage team agents (list | spawn | send)\n"
     "  /mcp       Manage MCP servers (status | list | reload <name>)\n"
@@ -1702,6 +1742,7 @@ def _run_stdio_session(
         interaction_logger=interaction_logger,
     )
     viewer_server = None
+    token_tracker = TokenTracker()
     todo_manager = TodoManager()
     task_manager = _load_task_manager(workspace_path, ui_console)
     bg_manager = BackgroundManager()
@@ -1806,6 +1847,7 @@ def _run_stdio_session(
                     memory_context=_memory_context(memory_manager),
                 )
                 todo_manager.reset()
+                token_tracker.reset()
                 new_session_id = _generate_session_id(
                     transcript_mgr,
                     reserved_ids={_get_compact_session_id(compact_fn)},
@@ -1882,6 +1924,7 @@ def _run_stdio_session(
                     ui_console.print_error(str(exc))
                     continue
                 messages[:] = restored_messages
+                token_tracker.reset()
                 resumed_session = requested_session or transcript_mgr.get_latest_session()
                 if resumed_session is not None:
                     _set_compact_session_id(compact_fn, resumed_session)
@@ -1917,6 +1960,9 @@ def _run_stdio_session(
                 )
                 _replay_stdio_transcript(messages, ui_console)
                 ui_console.print_status(f"Resumed session: {resumed_session}")
+                continue
+            if text == "/cost":
+                ui_console.print_status(token_tracker.summary(config.cost.prices))
                 continue
             if text == "/log" or text.startswith("/log "):
                 viewer_server = _handle_log_command(
@@ -2005,6 +2051,7 @@ def _run_stdio_session(
                         stream=config.ui.stream,
                         console=ui_console,
                         interaction_logger=interaction_logger,
+                        token_tracker=token_tracker,
                     )
                     _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
                     main_mailbox_cursor = _drain_team_mailbox(
@@ -2052,6 +2099,7 @@ def _run_stdio_session(
                     stream=config.ui.stream,
                     console=ui_console,
                     interaction_logger=interaction_logger,
+                    token_tracker=token_tracker,
                 )
                 _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
                 main_mailbox_cursor = _drain_team_mailbox(
