@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 16
+- **Total Sessions**: 17
 - **Last Active**: 2026-06-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~544 | Active |
+| `journal-1.md` | ~577 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 17 | 2026-06-01 | 本地多模态文件读取（图片/PDF/notebook） | `291a12b` | `main` |
 | 16 | 2026-06-01 | Token 用量追踪与成本展示（/cost 命令） | `e6f9589` | `main` |
 | 15 | 2026-06-01 | 语义重命名工具 semantic_rename（基于 LSP textDocument/rename） | `bf700ed` | `main` |
 | 14 | 2026-05-31 | 修复 bash 工具 Windows 中文输出乱码（GBK→UTF-8） | `64f535a`, `35e85c1` | `main` |

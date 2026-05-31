@@ -542,3 +542,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: 本地多模态文件读取（图片/PDF/notebook）
+
+**Date**: 2026-06-01
+**Task**: 本地多模态文件读取（图片/PDF/notebook）
+**Branch**: `main`
+
+### Summary
+
+实现 ROADMAP 1.3 本地多模态读取，扩展 read_file。尽调发现 PR5（MCP 多模态）已铺好整条通路：loop.py:_tool_result 已支持 handler 返回 str|list[dict] 并原样直通，内部图片块是 Anthropic 原生 shape {type:image,source:{type:base64,media_type,data}}，OpenAI provider 已会 lift，故本地读图零改 loop/provider，只要 handler 产出同样的块。run_read 改为扩展名分派（safe_path 沙箱在所有分支最前不被绕过），新增 pages 参数（PDF 页范围），返回 str|list[dict]：图片(png/jpg/jpeg/gif/webp)→base64→[text,image] 块，mime 白名单+5MiB 上限镜像 MCP _SUPPORTED_IMAGE_MIME_TYPES/_DEFAULT_MAX_BINARY_BYTES，超限报错不缩放（D2 避 Pillow）；PDF→pypdf 提取文本+页范围，lazy import，未装 [pdf] extra 友好提示不崩（D1，与 lsp multilspy 缺失降级同构），_parse_page_range 1-based↔0-based+越界 clamp；notebook→json 解析 markdown/code cells+outputs（stream/execute_result/display_data/error traceback），长输出截断 2000+整体上限 200k；_read_text 字节级回归不变。tools.py read_file schema 加可选 pages+描述更新（vision 模型 caveat）。pyproject 加 pdf=[pypdf>=4.0] optional extra+uv.lock 同步。图片/notebook 零新依赖（base64/json stdlib），仅 PDF 走 extra。决策 D1 pypdf optional extra 文本-only/D2 超限报错不自动缩放/D3 不做 vision 能力探测（镜像 MCP）。走完整 trellis brainstorm→implement→check 流程，check 验证零改 loop/provider（git diff 空）、沙箱不被多模态分支绕过、页范围边界、文本回归，发现并修 1 个测试 pyright 类型收窄。新增测试 17 函数/32 cases；pytest 703 passed/3 skipped/47 deselected、ruff check 净、pyright 0 error。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `291a12b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
