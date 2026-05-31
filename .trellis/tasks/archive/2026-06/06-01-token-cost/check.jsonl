@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核验 ruff/pytest/pyright 全绿、测试覆盖（累计/细分/估价/无价降级/重置）、无过度设计、Conventional Commits"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核验 [cost] 配置分层覆盖正确、缺省安全、重置语义（/new·/clear·/resume 归零，/compact 不重置）正确"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "核验 /cost 输出走 console 而非 print/logging、无价 model 不报错不臆造价格的降级文案"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "核验 TokenTracker 放置、agent_loop 汇总注入点单点覆盖流式+非流式、两个 agent_loop 调用点均接入"}

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "TokenTracker 放置在 src/memory/（会话级 bookkeeping）的分层依据；Config dataclass 与 slash 命令在 main.py 的既有组织约定"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "config 分层加载（config.toml→local→env，_deep_merge）与新增 [cost] section 的解析约定；会话作用域状态的处理惯例"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "/cost 输出走 AgentConsole/print_status 而非 logging/print；summary 文案风格对齐现有 /mcp status"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Python 3.12+/类型注解/ruff/pytest、反过度设计（MVP 不做实时显示/缓存计价）；新行为需补 pytest"}
