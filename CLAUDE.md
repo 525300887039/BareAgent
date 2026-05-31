@@ -41,7 +41,7 @@ ruff format src tests               # 格式化
 `BaseLLMProvider`（base.py）为抽象基类，`AnthropicProvider` 和 `OpenAIProvider` 为具体实现（OpenAI provider 也覆盖 DeepSeek 等 OpenAI 兼容端点）。`factory.py` 负责工厂创建。统一的 `LLMResponse` 包含工具调用、文本、思考过程、token 计数。支持流式（`create_stream()`）和非流式（`create()`）。
 
 ### 工具系统 (`src/core/tools.py`)
-工具以可调用对象注册在字典中。基础工具（`BASE_TOOLS`）：bash、read_file、write_file、edit_file、glob、grep、web_fetch、web_search。延迟加载工具（`DEFERRED_TOOLS`）：todo_*、task_*、subagent、load_skill、background_run、team_*。Schema 定义在 `core/schema.py`，处理器在 `core/handlers/`（含 `web_fetch.py`、`web_search.py`、`search_utils.py`）。
+工具以可调用对象注册在字典中。基础工具（`BASE_TOOLS`）：bash、read_file、write_file、edit_file、glob、grep、web_fetch、web_search。延迟加载工具（`DEFERRED_TOOLS`）：todo_*、task_*、subagent、load_skill、background_run、team_*。Schema 定义在 `core/schema.py`，处理器在 `core/handlers/`（含 `web_fetch.py`、`web_search.py`、`search_utils.py`）。`read_file` 支持多模态：按扩展名分派——图片（png/jpg/jpeg/gif/webp）→ base64 image 块（需 vision 模型）、PDF（.pdf）→ 按页提取文本（需 `[pdf]` extra，pypdf，lazy import，未装时返回友好提示而非崩溃，`pages` 参数选页范围如 "1-5"/"3"）、notebook（.ipynb）→ json 解析渲染 markdown/code cells + 输出、其余走 UTF-8 文本路径（offset/limit）。图片块复用 Anthropic 内部 shape，经 `loop.py:_tool_result` 的 `list[dict]` 直通通路（零改 loop/provider）。
 
 ### 权限模型 (`src/permission/guard.py`)
 模式：DEFAULT（写操作需确认）、AUTO（安全模式自动批准）、PLAN（仅允许安全工具）、BYPASS（无检查）。内置危险模式检测（rm -rf、force push、DROP TABLE 等）。支持 allow/deny 规则（前缀匹配）。`clone()` 创建权限副本，`for_subagent()` 为子智能体创建隔离权限（模式级联 + fail-closed）。运行时可通过 `/default`、`/auto`、`/plan`、`/bypass`、`/mode` 命令或 `Shift+Tab` 快捷键切换权限模式。

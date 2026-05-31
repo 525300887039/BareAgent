@@ -225,20 +225,34 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     ),
     _schema(
         "read_file",
-        "Read a UTF-8 text file with line numbers.",
+        (
+            "Read a file. UTF-8 text files are returned with line numbers. "
+            "Images (.png/.jpg/.jpeg/.gif/.webp) are returned as image blocks "
+            "(needs a vision-capable model). PDFs (.pdf) return extracted text "
+            'and need the optional [pdf] extra (uv pip install -e ".[pdf]"). '
+            "Jupyter notebooks (.ipynb) return rendered markdown/code cells."
+        ),
         {
             "file_path": {"type": "string", "description": "Path to the file."},
             "offset": {
                 "type": "integer",
-                "description": "Zero-based line offset.",
+                "description": "Zero-based line offset (text files only).",
                 "default": 0,
                 "minimum": 0,
             },
             "limit": {
                 "type": ["integer", "null"],
-                "description": "Maximum number of lines to read.",
+                "description": "Maximum number of lines to read (text files only).",
                 "default": None,
                 "minimum": 0,
+            },
+            "pages": {
+                "type": ["string", "null"],
+                "description": (
+                    "PDF page range, e.g. '1-5' or '3' (1-based). PDF only; "
+                    "omit for all pages."
+                ),
+                "default": None,
             },
         },
         ["file_path"],
