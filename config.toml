@@ -118,6 +118,39 @@ enabled = true
 # 每轮按用户消息词法相关性召回并注入的记忆条数（0 = 关闭召回，仅保留开局索引注入）。
 # recall_k = 5
 
+# --- Hooks (工具调用前后用户自定义钩子) ----------------------------------
+# 在 [[hooks]] 中声明：在工具调用前后触发自定义 shell 命令。仅在主循环触发，
+# 子代理不触发（隔离）。权限闸（PermissionGuard）仍是安全边界，hooks 是用户自配的
+# 便利层（trust-the-config）。每个 hook 收到一行 JSON stdin（字段对齐 Claude Code）：
+#   PreToolUse:  {"event","tool_name","tool_input","session_id","cwd"}
+#   PostToolUse: 追加 {"tool_output","is_error"}
+# 控制协议（exit code，对齐 Claude Code）：
+#   - PreToolUse exit 2 = 拦截：跳过 handler，stderr 作拒绝理由回灌 LLM（error result）。
+#   - exit 0 = 放行；其他非 0 = 非阻塞警告 + 放行。
+#   - PostToolUse 退出码不影响工具结果（仅非 0 时警告）。
+# 失败模式 = fail-open：hook spawn 失败 / 超时 → 警告 + 放行，不挂主循环。
+# 字段：event（必填，PreToolUse|PostToolUse）、command（必填 shell 命令）、
+#       tool（可选，精确工具名；省略 = 匹配所有工具）、timeout（可选，秒，默认 30）。
+# 默认全部注释掉（不启用任何 hook）。
+#
+# 注意：BareAgent 始终用 UTF-8 把 JSON 写入 hook 的 stdin。务必用
+#       json.load(sys.stdin.buffer)（二进制流 + 隐式 UTF-8 解码）读取，不要用
+#       json.load(sys.stdin)——后者按 OS locale 解码（中文 Windows 控制台是 GBK），
+#       会把非 ASCII 的 tool_input（如中文文件路径）解成乱码。
+
+# 示例 1：PreToolUse —— 挡危险，bash 命令含 "rm -rf" 时 exit 2 拦截。
+# [[hooks]]
+# event = "PreToolUse"
+# tool = "bash"
+# command = "python -c \"import sys,json; cmd=json.load(sys.stdin.buffer)['tool_input'].get('command',''); (sys.stderr.write('blocked: rm -rf'), sys.exit(2)) if 'rm -rf' in cmd else sys.exit(0)\""
+
+# 示例 2：PostToolUse —— write_file 之后自动 ruff format 写入的文件。
+# [[hooks]]
+# event = "PostToolUse"
+# tool = "write_file"
+# command = "python -c \"import sys,json,subprocess; d=json.load(sys.stdin.buffer); p=d['tool_input'].get('file_path'); p and subprocess.run(['ruff','format',p])\""
+# timeout = 60
+
 [cost]
 # Token 用量与成本估算（/cost 命令展示当前会话累计）。
 # 默认内置 Claude Opus/Sonnet/Haiku 4.x 的参考价；其余 model 只显 token 不显 $。

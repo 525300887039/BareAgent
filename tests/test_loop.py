@@ -665,3 +665,146 @@ def test_agent_loop_terminates_after_max_iterations() -> None:
 
     assert len(provider.calls) == 3
     assert any("exceeded 3 iterations" in e for e in console.errors)
+
+
+# --- hook_engine integration ---------------------------------------------
+
+
+class _HookOutcome:
+    def __init__(self, block: bool = False, reason: str = "") -> None:
+        self.block = block
+        self.reason = reason
+
+
+class FakeHookEngine:
+    """Records hook invocations; PreToolUse can be configured to block."""
+
+    def __init__(self, *, pre_block: _HookOutcome | None = None) -> None:
+        self.pre_calls: list[tuple[str, dict]] = []
+        self.post_calls: list[tuple[str, dict, object, bool]] = []
+        self._pre_block = pre_block or _HookOutcome()
+
+    def run_pre_tool_use(self, tool_name, tool_input, *, session_id, cwd):
+        self.pre_calls.append((tool_name, tool_input))
+        return self._pre_block
+
+    def run_post_tool_use(
+        self, tool_name, tool_input, tool_output, *, is_error, session_id, cwd
+    ):
+        self.post_calls.append((tool_name, tool_input, tool_output, is_error))
+
+
+def _single_tool_then_done() -> MockProvider:
+    return MockProvider(
+        [
+            LLMResponse(
+                text="Calling.",
+                tool_calls=[ToolCall(id="toolu_1", name="echo", input={"value": "hi"})],
+                stop_reason="tool_use",
+                input_tokens=10,
+                output_tokens=5,
+            ),
+            LLMResponse(
+                text="Done.",
+                tool_calls=[],
+                stop_reason="end_turn",
+                input_tokens=5,
+                output_tokens=2,
+            ),
+        ]
+    )
+
+
+def test_pre_tool_use_block_skips_handler_and_returns_error_result() -> None:
+    provider = _single_tool_then_done()
+    called: list[str] = []
+
+    def handler(value: str) -> str:
+        called.append(value)
+        return f"handled {value}"
+
+    engine = FakeHookEngine(pre_block=_HookOutcome(block=True, reason="nope"))
+
+    result = agent_loop(
+        provider=provider,
+        messages=[
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "go"},
+        ],
+        tools=[],
+        handlers={"echo": handler},
+        permission=PermissionGuard(PermissionMode.BYPASS),
+        hook_engine=engine,
+    )
+
+    assert result == "Done."
+    assert called == []  # handler never ran
+    assert engine.post_calls == []  # PostToolUse not fired on block
+    # The error result was fed back to the LLM on the follow-up turn.
+    tool_result = provider.calls[1]["messages"][-1]["content"][0]
+    assert tool_result["content"] == "nope"
+    assert tool_result["is_error"] is True
+
+
+def test_pre_tool_use_allow_runs_handler_then_post_hook() -> None:
+    provider = _single_tool_then_done()
+    engine = FakeHookEngine()
+
+    result = agent_loop(
+        provider=provider,
+        messages=[
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "go"},
+        ],
+        tools=[],
+        handlers={"echo": lambda value: f"handled {value}"},
+        permission=PermissionGuard(PermissionMode.BYPASS),
+        hook_engine=engine,
+    )
+
+    assert result == "Done."
+    assert engine.pre_calls == [("echo", {"value": "hi"})]
+    assert engine.post_calls == [("echo", {"value": "hi"}, "handled hi", False)]
+
+
+def test_post_hook_not_fired_when_handler_raises() -> None:
+    provider = _single_tool_then_done()
+    engine = FakeHookEngine()
+
+    def boom(value: str) -> str:
+        raise RuntimeError("kaboom")
+
+    agent_loop(
+        provider=provider,
+        messages=[
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "go"},
+        ],
+        tools=[],
+        handlers={"echo": boom},
+        permission=PermissionGuard(PermissionMode.BYPASS),
+        hook_engine=engine,
+    )
+
+    assert engine.pre_calls == [("echo", {"value": "hi"})]
+    assert engine.post_calls == []  # PostToolUse skipped on handler failure
+
+
+def test_no_hook_engine_preserves_existing_behavior() -> None:
+    provider = _single_tool_then_done()
+
+    result = agent_loop(
+        provider=provider,
+        messages=[
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "go"},
+        ],
+        tools=[],
+        handlers={"echo": lambda value: f"handled {value}"},
+        permission=PermissionGuard(PermissionMode.BYPASS),
+    )
+
+    assert result == "Done."
+    tool_result = provider.calls[1]["messages"][-1]["content"][0]
+    assert tool_result["content"] == "handled hi"
+    assert "is_error" not in tool_result

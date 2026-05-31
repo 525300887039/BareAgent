@@ -151,6 +151,82 @@ def test_load_config_reads_subagent_settings(tmp_path: Path) -> None:
     assert config.subagent.default_type == "plan"
 
 
+def test_load_config_reads_hooks(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[provider]",
+                'name = "openai"',
+                'model = "gpt-5-codex-mini"',
+                'api_key_env = "OPENAI_API_KEY"',
+                "",
+                "[permission]",
+                'mode = "default"',
+                "",
+                "[ui]",
+                "stream = true",
+                'theme = "dark"',
+                "",
+                "[thinking]",
+                'mode = "adaptive"',
+                "budget_tokens = 10000",
+                "",
+                "[[hooks]]",
+                'event = "PreToolUse"',
+                'tool = "bash"',
+                'command = "block.sh"',
+                "",
+                "[[hooks]]",
+                'event = "PostToolUse"',
+                'command = "format.sh"',
+                "timeout = 60",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert len(config.hooks.entries) == 2
+    assert config.hooks.entries[0].event == "PreToolUse"
+    assert config.hooks.entries[0].tool == "bash"
+    assert config.hooks.entries[0].command == "block.sh"
+    assert config.hooks.entries[1].event == "PostToolUse"
+    assert config.hooks.entries[1].tool is None
+    assert config.hooks.entries[1].timeout == 60
+
+
+def test_load_config_without_hooks_defaults_empty(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[provider]",
+                'name = "openai"',
+                'model = "gpt-5-codex-mini"',
+                'api_key_env = "OPENAI_API_KEY"',
+                "",
+                "[permission]",
+                'mode = "default"',
+                "",
+                "[ui]",
+                "stream = true",
+                'theme = "dark"',
+                "",
+                "[thinking]",
+                'mode = "adaptive"',
+                "budget_tokens = 10000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.hooks.entries == []
+
+
 def test_load_config_reads_debug_settings(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(

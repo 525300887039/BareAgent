@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Callable
 from typing import Any, cast
@@ -33,8 +34,11 @@ def agent_loop(
     max_iterations: int = 200,
     interaction_logger: Any = None,
     token_tracker: Any = None,
+    hook_engine: Any = None,
 ) -> str:
     compact = compact_fn or (lambda _messages: None)
+    hook_session_id = _resolve_hook_session_id(compact_fn)
+    hook_cwd = os.getcwd()
 
     for _iteration in range(max_iterations):
         _run_background(bg_manager, messages)
@@ -114,6 +118,20 @@ def agent_loop(
                     results.append(_tool_result(call.id, denied, is_error=True))
                     continue
 
+            if hook_engine is not None:
+                outcome = hook_engine.run_pre_tool_use(
+                    call.name,
+                    call.input,
+                    session_id=hook_session_id,
+                    cwd=hook_cwd,
+                )
+                if outcome.block:
+                    blocked = outcome.reason or "Blocked by PreToolUse hook."
+                    if console is not None:
+                        console.print_tool_result(call.name, blocked)
+                    results.append(_tool_result(call.id, blocked, is_error=True))
+                    continue
+
             handler = handlers.get(call.name)
             if handler is None:
                 output = f"Unknown tool: {call.name}"
@@ -135,6 +153,16 @@ def agent_loop(
                     console.print_tool_result(call.name, output)
                 results.append(_tool_result(call.id, output, is_error=True))
                 continue
+
+            if hook_engine is not None:
+                hook_engine.run_post_tool_use(
+                    call.name,
+                    call.input,
+                    output,
+                    is_error=False,
+                    session_id=hook_session_id,
+                    cwd=hook_cwd,
+                )
 
             if console is not None:
                 console.print_tool_result(call.name, output)
@@ -328,6 +356,23 @@ def _serialize_tool_calls(tool_calls: list[ToolCall]) -> list[dict[str, Any]]:
         }
         for tool_call in tool_calls
     ]
+
+
+def _resolve_hook_session_id(compact_fn: Any) -> str:
+    """Best-effort session id for hook JSON payloads.
+
+    Reuses the ``get_session_id`` attribute the REPL attaches to ``compact_fn``
+    (see ``main.py:_build_loop_compact``) rather than threading a new parameter
+    through every caller. Falls back to ``"default"`` when unavailable (tests,
+    sub-agents) — hooks don't run for sub-agents anyway.
+    """
+    getter = getattr(compact_fn, "get_session_id", None)
+    if callable(getter):
+        try:
+            return str(getter())
+        except Exception:
+            return "default"
+    return "default"
 
 
 def _run_background(bg_manager: Any, messages: list[dict[str, Any]]) -> None:

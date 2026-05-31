@@ -28,6 +28,12 @@ from src.core.fileutil import (
 from src.core.loop import LLMCallError, agent_loop
 from src.core.tools import get_handlers, get_tools
 from src.debug.interaction_log import InteractionLogger
+from src.hooks import (
+    HookConfigError,
+    HookEngine,
+    HooksConfig,
+    parse_hooks_config,
+)
 from src.lsp import (
     LanguageServerManager,
     LSPConfig,
@@ -159,6 +165,7 @@ class Config:
     # working without passing memory explicitly.
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     cost: CostConfig = field(default_factory=CostConfig)
+    hooks: HooksConfig = field(default_factory=HooksConfig)
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
@@ -458,6 +465,17 @@ def load_config(
         print(f"Warning: invalid [lsp] config, LSP disabled ({exc})")
         lsp_config = LSPConfig()
 
+    hooks_raw = raw_config.get("hooks", [])
+    try:
+        hooks_config = parse_hooks_config(
+            {"hooks": hooks_raw} if isinstance(hooks_raw, list) else {}
+        )
+    except HookConfigError as exc:
+        print(f"Warning: invalid [[hooks]] config, hooks disabled ({exc})")
+        hooks_config = HooksConfig()
+    for skipped_reason in hooks_config.skipped:
+        print(f"Warning: {skipped_reason}")
+
     cost_raw = raw_config.get("cost", {})
     cost_config = _parse_cost_config(cost_raw if isinstance(cost_raw, dict) else {})
 
@@ -494,6 +512,7 @@ def load_config(
         lsp=lsp_config,
         memory=memory_config,
         cost=cost_config,
+        hooks=hooks_config,
     )
 
 
@@ -1785,6 +1804,8 @@ def _run_stdio_session(
         memory_manager=memory_manager,
         recall_k=config.memory.recall_k,
     )
+    # Hooks only fire in the main loop; sub-agents never receive the engine.
+    hook_engine = HookEngine(config.hooks, console=ui_console)
     handlers = _build_handlers(
         workspace_path=workspace_path,
         todo_manager=todo_manager,
@@ -2052,6 +2073,7 @@ def _run_stdio_session(
                         console=ui_console,
                         interaction_logger=interaction_logger,
                         token_tracker=token_tracker,
+                        hook_engine=hook_engine,
                     )
                     _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
                     main_mailbox_cursor = _drain_team_mailbox(
@@ -2100,6 +2122,7 @@ def _run_stdio_session(
                     console=ui_console,
                     interaction_logger=interaction_logger,
                     token_tracker=token_tracker,
+                    hook_engine=hook_engine,
                 )
                 _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
                 main_mailbox_cursor = _drain_team_mailbox(
