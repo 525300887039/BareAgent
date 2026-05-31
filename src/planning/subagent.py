@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from functools import partial
+from pathlib import Path
 from typing import Any
 
 from src.concurrency.background import BackgroundManager
@@ -15,6 +17,14 @@ from src.planning.agent_types import (
     filter_handlers,
     filter_tools,
     resolve_agent_type,
+)
+from src.planning.worktree import (
+    WorktreeError,
+    WorktreeHandle,
+    create_worktree,
+    is_git_repo,
+    remove_worktree,
+    worktree_status,
 )
 from src.provider.base import BaseLLMProvider
 from src.tracing import tracer as global_tracer
@@ -78,6 +88,15 @@ SUBAGENT_TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "description": "Run the child agent asynchronously in the background.",
                     "default": False,
                 },
+                "isolation": {
+                    "type": "string",
+                    "enum": ["none", "worktree"],
+                    "default": "none",
+                    "description": (
+                        "Set 'worktree' to run the child agent in an isolated git "
+                        "worktree + temp branch; file ops won't touch the main working tree."
+                    ),
+                },
             },
             "required": ["task"],
         },
@@ -98,6 +117,7 @@ def run_subagent(
     bg_manager: BackgroundManager | None = None,
     run_in_background: bool = False,
     default_agent_type: str = DEFAULT_AGENT_TYPE,
+    isolation: str = "none",
 ) -> str:
     if current_depth > max_depth:
         return f"Subagent refused: recursion depth {current_depth} exceeds limit {max_depth}."
@@ -130,6 +150,7 @@ def run_subagent(
                 resolved_type=resolved_type,
                 bg_manager=bg_manager,
                 default_agent_type=default_agent_type,
+                isolation=isolation,
             ),
         )
         return f"Subagent {task_id} started in the background."
@@ -146,6 +167,7 @@ def run_subagent(
         resolved_type=resolved_type,
         bg_manager=bg_manager,
         default_agent_type=default_agent_type,
+        isolation=isolation,
     )
 
 
@@ -161,6 +183,7 @@ def _run_subagent_sync(
     resolved_type: AgentType,
     bg_manager: BackgroundManager | None,
     default_agent_type: str,
+    isolation: str = "none",
 ) -> str:
     filtered_tools = filter_tools(tools, resolved_type)
     child_handlers = filter_handlers(handlers, filtered_tools)
@@ -176,13 +199,40 @@ def _run_subagent_sync(
         threshold=_SUBAGENT_COMPACT_THRESHOLD,
     )
 
+    # Worktree isolation: rebind the six file-op handlers onto the worktree
+    # path *before* the nested subagent closure is built, so a child spawned
+    # inside this worktree also writes into the worktree. fail-open: a non-git
+    # workspace or a failed worktree creation falls back to no isolation with a
+    # footnote (isolation is a convenience, PermissionGuard is the safety edge).
+    handle: WorktreeHandle | None = None
+    footnote = ""
+    if isolation == "worktree":
+        base = os.getcwd()
+        if not is_git_repo(base):
+            footnote = "\n\n[worktree] skipped: not a git repository (ran without isolation)."
+        else:
+            try:
+                handle = create_worktree(base)
+            except WorktreeError as exc:
+                footnote = f"\n\n[worktree] skipped: {exc} (ran without isolation)."
+            else:
+                # Lazy import: ``src.core.tools`` imports this module at top
+                # level, so importing it here breaks the cycle.
+                from src.core.tools import rebind_workspace_handlers
+
+                child_handlers = rebind_workspace_handlers(child_handlers, Path(handle.path))
+
     if "subagent" in child_handlers:
-        child_handlers["subagent"] = lambda task, agent_type=None, run_in_background=False: (
-            run_subagent(
+        # Capture the (possibly rebound) child_handlers so a nested subagent
+        # inherits the worktree-rooted file handlers. Nested isolation defaults
+        # to "none" (no worktree-in-worktree, per Out of Scope).
+        nested_handlers = child_handlers
+        child_handlers["subagent"] = (
+            lambda task, agent_type=None, run_in_background=False, isolation="none": run_subagent(
                 provider=provider,
                 task=task,
                 tools=filtered_tools,
-                handlers=child_handlers,
+                handlers=nested_handlers,
                 permission=permission,
                 system_prompt=resolved_system_prompt,
                 max_depth=max_depth,
@@ -191,6 +241,7 @@ def _run_subagent_sync(
                 bg_manager=bg_manager,
                 run_in_background=run_in_background,
                 default_agent_type=default_agent_type,
+                isolation=isolation,
             )
         )
 
@@ -198,23 +249,42 @@ def _run_subagent_sync(
     if resolved_system_prompt.strip():
         messages.append({"role": "system", "content": resolved_system_prompt})
     messages.append({"role": "user", "content": task})
-    with global_tracer.trace(
-        "subagent",
-        tags={"agent_type": resolved_type.name, "depth": current_depth},
-    ) as span:
-        span.set_content_tag("task", task)
-        result = agent_loop(
-            provider=provider,
-            messages=messages,
-            tools=filtered_tools,
-            handlers=child_handlers,
-            permission=permission,
-            compact_fn=compact_fn,
-            bg_manager=None,
-            max_iterations=resolved_type.max_turns,
+    try:
+        with global_tracer.trace(
+            "subagent",
+            tags={"agent_type": resolved_type.name, "depth": current_depth},
+        ) as span:
+            span.set_content_tag("task", task)
+            result = agent_loop(
+                provider=provider,
+                messages=messages,
+                tools=filtered_tools,
+                handlers=child_handlers,
+                permission=permission,
+                compact_fn=compact_fn,
+                bg_manager=None,
+                max_iterations=resolved_type.max_turns,
+            )
+            span.set_content_tag("result", result[:500])
+    finally:
+        if handle is not None:
+            footnote = _finalize_worktree(handle)
+    return result + footnote
+
+
+def _finalize_worktree(handle: WorktreeHandle) -> str:
+    """Keep a dirty worktree (with a report) or clean up a pristine one.
+
+    Returns the footnote to append to the sub-agent's result.
+    """
+    dirty, summary = worktree_status(handle.path)
+    if dirty:
+        return (
+            f"\n\n[worktree] kept at {handle.path} on branch {handle.branch} "
+            f"({summary}). Inspect with: git worktree list."
         )
-        span.set_content_tag("result", result[:500])
-    return result
+    remove_worktree(handle)
+    return f"\n\n[worktree] cleaned up (no changes) at branch {handle.branch}."
 
 
 def _compose_system_prompt(*, parent_prompt: str, agent_prompt: str) -> str:

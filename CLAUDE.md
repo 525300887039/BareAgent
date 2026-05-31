@@ -55,6 +55,9 @@ ruff format src tests               # 格式化
 ### 子智能体委派 (`src/planning/subagent.py`)
 隔离的消息上下文，递归深度限制（max_depth=3），基于 token 的消息压缩（50k 阈值）。支持 `agent_type` 参数选择智能体类型，`run_in_background` 参数后台异步执行。权限隔离：通过 `PermissionGuard.for_subagent()` 创建子级权限，后台智能体使用 fail-closed 模式。
 
+### Git Worktree 子代理隔离 (`src/planning/worktree.py`)
+`run_subagent(isolation="worktree")`（schema 暴露 `isolation: "none"|"worktree"`，LLM 可请求）让子代理在**独立的 git worktree + 临时分支**中工作，所有文件操作（bash/read/write/edit/glob/grep）落在隔离工作目录，不污染主工作区。对齐 ROADMAP 3.3 / Claude Code `Agent(isolation:"worktree")` 语义。`worktree.py` 是纯 git CLI 封装（无 LLM/loop 依赖，可单测），镜像 `context.py:_run_git_command` 的 subprocess 范式（utf-8 / errors=replace / timeout）：`is_git_repo`、`create_worktree`（worktree 落系统临时目录 `tempfile.mkdtemp(prefix="bareagent-wt-")`，分支 `bareagent/wt-<id>`，失败抛 `WorktreeError`）、`worktree_status`（`git status --porcelain` 非空即 dirty）、`remove_worktree`（`worktree remove --force` + `branch -D`，best-effort 幂等）。隔离核心是 `core/tools.py:rebind_workspace_handlers`——浅拷贝 handlers，只把 6 个文件 handler 的 partial 重绑到 worktree 路径（`write_file`/`edit_file` 从原 partial 的 `.keywords["diagnostics_hook"]` 取回复用），其余 handler 原样保留。生命周期全在 `_run_subagent_sync` 内（后台路径天然继承），重绑在 readonly-memory 包装之后、嵌套 subagent 闭包之前（确保 worktree 内再 spawn 的子代理也用 worktree 文件 handler，嵌套 isolation 默认 "none"，见 Out of Scope）；loop 结束后 `try/finally` 按 dirty 决定保留+回报路径/分支或自动清理，脚注追加到 result 尾部。**fail-open**：非 git 仓库 / worktree 创建失败 → 回退无隔离继续跑 + 脚注提示（隔离是便利层，安全边界仍是 PermissionGuard，与 hooks 一致）。worktree 的 git 命令不经 PermissionGuard（基础设施级，同 task.py/context.py）；子代理在 worktree 内的 bash/write 仍受 `child_permission` 约束。MVP 不加配置项（temp 前缀 / 分支名硬编码），不支持嵌套 worktree、自动 commit/merge/PR、worktree 内 LSP 重新 rooted（diagnostics 仍指向主 repo root）。关键文件：`src/planning/worktree.py`、`src/core/tools.py:rebind_workspace_handlers`、`src/planning/subagent.py`（`isolation` 参数贯穿 + `_finalize_worktree`）。
+
 ### 技能系统 (`src/planning/skills.py`)
 从 `skills/*/SKILL.md` 自动发现技能。通过 `load_skill` 工具按需加载。当前技能：code-review、git、test。
 

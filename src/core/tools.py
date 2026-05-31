@@ -601,26 +601,67 @@ def get_handlers(
 
     available_tools = tools or get_tools(mcp_manager, lsp_manager)
     if provider is None:
-        handlers["subagent"] = lambda task, agent_type=None, run_in_background=False: (
-            "Subagent unavailable: provider is not configured."
+        handlers["subagent"] = (
+            lambda task, agent_type=None, run_in_background=False, isolation="none": (
+                "Subagent unavailable: provider is not configured."
+            )
         )
     else:
-        handlers["subagent"] = lambda task, agent_type=None, run_in_background=False: run_subagent(
-            provider=provider,
-            task=task,
-            tools=available_tools,
-            handlers=handlers,
-            permission=permission,
-            system_prompt=subagent_system_prompt,
-            max_depth=subagent_max_depth,
-            current_depth=subagent_depth + 1,
-            agent_type=agent_type,
-            bg_manager=bg_manager,
-            run_in_background=run_in_background,
-            default_agent_type=subagent_default_type,
+        handlers["subagent"] = (
+            lambda task, agent_type=None, run_in_background=False, isolation="none": run_subagent(
+                provider=provider,
+                task=task,
+                tools=available_tools,
+                handlers=handlers,
+                permission=permission,
+                system_prompt=subagent_system_prompt,
+                max_depth=subagent_max_depth,
+                current_depth=subagent_depth + 1,
+                agent_type=agent_type,
+                bg_manager=bg_manager,
+                run_in_background=run_in_background,
+                default_agent_type=subagent_default_type,
+                isolation=isolation,
+            )
         )
 
     return handlers
+
+
+def rebind_workspace_handlers(
+    handlers: dict[str, Callable[..., Any]],
+    new_workspace: Path,
+) -> dict[str, Callable[..., Any]]:
+    """Return a shallow copy of *handlers* with file ops rooted at *new_workspace*.
+
+    Only the six workspace-bound handlers (bash/read/write/edit/glob/grep) are
+    replaced; every other handler (todo/task/skill/memory/mcp/lsp/subagent/
+    web_*/background_run) keeps its parent binding. ``bash`` rebinds its ``cwd``
+    keyword, the rest rebind ``workspace``. ``write_file`` / ``edit_file`` carry
+    a ``diagnostics_hook`` keyword on their original partial that must be
+    preserved across the rebind, so it is read back from ``.keywords``.
+    """
+    rebound = dict(handlers)
+
+    diag_hook = _extract_diagnostics_hook(handlers.get("write_file"))
+    if diag_hook is None:
+        diag_hook = _extract_diagnostics_hook(handlers.get("edit_file"))
+
+    rebound["bash"] = partial(run_bash, cwd=new_workspace)
+    rebound["read_file"] = partial(run_read, workspace=new_workspace)
+    rebound["write_file"] = partial(run_write, workspace=new_workspace, diagnostics_hook=diag_hook)
+    rebound["edit_file"] = partial(run_edit, workspace=new_workspace, diagnostics_hook=diag_hook)
+    rebound["glob"] = partial(run_glob, workspace=new_workspace)
+    rebound["grep"] = partial(run_grep, workspace=new_workspace)
+    return rebound
+
+
+def _extract_diagnostics_hook(handler: Any) -> Any:
+    """Read a ``diagnostics_hook`` keyword off a partial, or ``None``."""
+    keywords = getattr(handler, "keywords", None)
+    if isinstance(keywords, dict):
+        return keywords.get("diagnostics_hook")
+    return None
 
 
 def tool_search(query: str, max_results: int = 5) -> list[dict[str, Any]]:
