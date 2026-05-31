@@ -74,7 +74,7 @@ ruff format src tests               # 格式化
 `AgentConsole`（基于 rich 的输出）、`StreamPrinter`（流式输出）、`prompt.py`（基于 prompt-toolkit 的输入层）、`theme.py`（主题，默认 `catppuccin-mocha`）。后台通知通过 `concurrency/notification.py` 实现。
 
 ### 后台执行 (`src/concurrency/`)
-`BackgroundManager`（background.py）：基于 threading 的后台任务管理，支持 submit/drain_notifications。`NotificationManager`（notification.py）：后台任务完成通知。
+`BackgroundManager`（background.py）：基于 threading 的后台任务管理，支持 submit/drain_notifications。`NotificationManager`（notification.py）：后台任务完成通知。`Scheduler`（scheduler.py，ROADMAP 4.1）：cron 风格定时任务调度——按固定间隔（秒）重复执行 shell 命令。`Scheduler` 只负责「定时 + 重复 arm」：每次 `_fire` 用 `threading.Timer`（daemon）触发后，把命令交给注入的 `BackgroundManager.submit`（用唯一 `loop-<id>-<run_count>` run_id 避开 submit 去重 `ValueError`）在后台线程执行，结果/失败经既有通知通道在下个 turn 浮现；fire 末尾重新 arm 下一个 Timer 实现自重排。`Scheduler` 自身**绝不碰 messages/console**（线程安全关键），`threading.Lock` 保护 job/timer 字典，`_fire` 整体包 try（Timer 线程异常不得逃逸）。`MIN_INTERVAL_SEC=5.0` 守护（防 `/loop 0` 打爆后台），低于报 `SchedulerError`。内存级（退出即清，无跨会话持久化）。REPL 命令 `/loop`：`/loop <秒> <命令...>` 创建、`/loop list` 列出、`/loop cancel <id>` 取消单个、`/loop clear` 清空、`/loop`（无参）= 列表 + 用法。**安全语义**：定时命令经 `run_bash` 但**不经 PermissionGuard 交互确认**（后台无人值守无法弹窗），与 `background_run` 同档（基础设施级）——`/loop` 创建路径与 `_HELP_TEXT` 均明示「runs WITHOUT permission prompts，请自行确保命令安全」。Scheduler 在 `_run_stdio_session` 于 `bg_manager` 之后实例化（runner=`partial(run_bash, cwd=workspace, raise_on_error=True)`），`finally` 里 `cancel_all()`（幂等）清理。MVP 不暴露给 LLM、不支持 cron 表达式 / one-shot 延时 / 次数上限，均为后续扩展位。
 
 ### 会话管理
 `TranscriptManager`（memory/transcript.py）：会话转录持久化。REPL 支持 `/sessions` 列出历史会话、`/resume` 恢复会话、`/new` 开始新会话、`/clear` 清屏并重置。每个会话有唯一 ID（时间戳格式）。

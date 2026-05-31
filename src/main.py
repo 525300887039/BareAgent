@@ -12,11 +12,13 @@ from collections.abc import Callable
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Literal, cast
 
 from src.concurrency.background import BackgroundManager
+from src.concurrency.scheduler import Scheduler, SchedulerError
 from src.core.context import assemble_system_prompt
 from src.core.fileutil import (
     generate_random_id,
@@ -25,6 +27,7 @@ from src.core.fileutil import (
 from src.core.fileutil import (
     optional_string as _coerce_optional_string,
 )
+from src.core.handlers.bash import run_bash
 from src.core.loop import LLMCallError, agent_loop
 from src.core.tools import get_handlers, get_tools
 from src.debug.interaction_log import InteractionLogger
@@ -685,6 +688,7 @@ _SLASH_COMMANDS = [
     "/sessions",
     "/resume",
     "/cost",
+    "/loop",
     "/log",
     "/team",
     "/mcp",
@@ -709,6 +713,8 @@ _HELP_TEXT = (
     "  /sessions  List saved sessions\n"
     "  /resume    Resume a previous session\n"
     "  /cost      Show token usage and estimated cost for this session\n"
+    "  /loop      Schedule a shell command to repeat every N seconds "
+    "(list|cancel <id>|clear); runs WITHOUT permission prompts\n"
     "  /log       Debug log viewer (status|serve|open|<seq>)\n"
     "  /team      Manage team agents (list | spawn | send)\n"
     "  /mcp       Manage MCP servers (status | list | reload <name>)\n"
@@ -1735,6 +1741,82 @@ def _dispatch_lsp_command(
     ui_console.print_error(f"Unknown /lsp subcommand: {sub}. Use status, list, or reload.")
 
 
+_LOOP_COMMAND_USAGE = (
+    "Usage:\n"
+    "  /loop <seconds> <command...>   Schedule a command to repeat every N seconds\n"
+    "  /loop list                     List scheduled commands\n"
+    "  /loop cancel <job_id>          Cancel one scheduled command\n"
+    "  /loop clear                    Cancel all scheduled commands\n"
+    "Note: scheduled commands run WITHOUT permission prompts (no human to confirm)."
+)
+
+
+def _dispatch_loop_command(
+    text: str,
+    *,
+    scheduler: Scheduler,
+    ui_console: AgentConsole,
+) -> None:
+    """Handle the ``/loop`` REPL command for the cron-style scheduler.
+
+    Forms: ``/loop`` / ``/loop list`` (list), ``/loop <seconds> <command...>``
+    (create), ``/loop cancel <job_id>`` (cancel one), ``/loop clear`` (cancel
+    all). Scheduled commands run via the background pool WITHOUT permission
+    confirmation, so the create path echoes that warning. Never raises.
+    """
+    rest = text[len("/loop"):].strip()
+    if not rest or rest == "list":
+        jobs = scheduler.list()
+        if not jobs:
+            ui_console.print_status(f"(no scheduled commands)\n{_LOOP_COMMAND_USAGE}")
+            return
+        for job in jobs:
+            ui_console.print_status(
+                f"{job.job_id}: every {job.interval_sec:g}s, "
+                f"runs={job.run_count} — {job.command}"
+            )
+        return
+
+    first, _, remainder = rest.partition(" ")
+    if first == "cancel":
+        job_id = remainder.strip()
+        if not job_id:
+            ui_console.print_error("Usage: /loop cancel <job_id>")
+            return
+        if scheduler.cancel(job_id):
+            ui_console.print_status(f"Cancelled scheduled command: {job_id}")
+        else:
+            ui_console.print_error(f"No scheduled command found: {job_id}")
+        return
+    if first == "clear":
+        scheduler.cancel_all()
+        ui_console.print_status("Cancelled all scheduled commands.")
+        return
+
+    # Create form: first token is the interval in seconds, the rest is the
+    # command verbatim (keep internal spaces).
+    try:
+        interval_sec = float(first)
+    except ValueError:
+        ui_console.print_error(
+            f"Invalid interval {first!r}: expected a number of seconds.\n{_LOOP_COMMAND_USAGE}"
+        )
+        return
+    command = remainder.strip()
+    if not command:
+        ui_console.print_error(f"Missing command to schedule.\n{_LOOP_COMMAND_USAGE}")
+        return
+    try:
+        job = scheduler.add(interval_sec, command)
+    except SchedulerError as exc:
+        ui_console.print_error(str(exc))
+        return
+    ui_console.print_status(
+        f"Scheduled {job.job_id}: every {job.interval_sec:g}s — {job.command}\n"
+        "Warning: this command runs WITHOUT permission confirmation in the background."
+    )
+
+
 def _run_stdio_session(
     config: Config,
     provider: BaseLLMProvider,
@@ -1765,6 +1847,10 @@ def _run_stdio_session(
     todo_manager = TodoManager()
     task_manager = _load_task_manager(workspace_path, ui_console)
     bg_manager = BackgroundManager()
+    scheduler = Scheduler(
+        runner=partial(run_bash, cwd=workspace_path, raise_on_error=True),
+        notifier=bg_manager,
+    )
     teammate_manager = _load_teammate_manager(workspace_path, ui_console)
     skill_loader = SkillLoader(resolve_skills_dir())
     memory_manager = _build_memory_manager(config, workspace_path, ui_console)
@@ -1985,6 +2071,9 @@ def _run_stdio_session(
             if text == "/cost":
                 ui_console.print_status(token_tracker.summary(config.cost.prices))
                 continue
+            if text == "/loop" or text.startswith("/loop "):
+                _dispatch_loop_command(text, scheduler=scheduler, ui_console=ui_console)
+                continue
             if text == "/log" or text.startswith("/log "):
                 viewer_server = _handle_log_command(
                     text,
@@ -2137,6 +2226,10 @@ def _run_stdio_session(
                 del messages[snapshot_len:]
                 ui_console.print_status("Agent loop interrupted.")
     finally:
+        try:
+            scheduler.cancel_all()
+        except Exception:
+            pass
         try:
             mcp_manager.close_all()
         except Exception:
