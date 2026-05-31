@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核验 D1 错误路径不静默退化、空编辑/无路由文案、权限四模式与子代理 fail-closed 隔离正确"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核验 ruff/pytest/pyright 全绿、测试覆盖充分、无过度设计、Conventional Commits"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核验跨文件编辑走 atomic_write_text、单文件内倒序应用不损坏内容"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "核验 workspace_edit.py 放置、tools/manager 职责边界、handler 不反向依赖 src.lsp"}

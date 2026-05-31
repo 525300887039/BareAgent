@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新模块 src/lsp/workspace_edit.py 的放置位置与 src/ 分层约定；handler 不反向 import src.lsp 的边界惯例"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "D1 显式 Error 文案规范、结构化 tool error 返回约定、权限 fail-closed/PLAN 短路于 allow_rules 之前的结构性约定（子代理隔离相关）"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "atomic_write_text 落盘约定，跨文件 WorkspaceEdit 应用必须走原子写"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Python 3.12+/类型注解/ruff/pytest、反过度设计；新增行为需补 pytest（含 manual E2E 标记惯例）"}
