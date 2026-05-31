@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "审查基线:类型注解、测试充分性、避免过度设计、命名一致性"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核对 fail-open 语义正确(回退而非崩溃)、WorktreeError 边界、git subprocess 失败容错"}

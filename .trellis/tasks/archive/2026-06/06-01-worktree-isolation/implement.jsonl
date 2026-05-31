@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新建 src/planning/worktree.py 的落位与模块组织约定(src/planning/ 下子代理相关代码)"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "WorktreeError 自定义异常 + fail-open 回退(非 git 仓库/创建失败不崩)的错误处理规范"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "类型注解、测试覆盖(worktree 生命周期/重绑定/隔离落盘/fail-open)、避免过度设计的质量基线"}
