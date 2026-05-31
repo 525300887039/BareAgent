@@ -476,3 +476,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: 语义重命名工具 semantic_rename（基于 LSP textDocument/rename）
+
+**Date**: 2026-06-01
+**Task**: 语义重命名工具 semantic_rename（基于 LSP textDocument/rename）
+**Branch**: `main`
+
+### Summary
+
+实现 ROADMAP 3.2 语义重命名：引用感知的跨文件安全重命名工具，区别于 edit_file+grep 纯文本替换。技术尽调确认 multilspy 0.0.15 无 rename 同步包装，但内层裸请求 server.send.rename 可用，async→sync 桥接复刻 multilspy 的 run_coroutine_threadsafe(coro, sync_server.loop) + open_file didOpen。新建 src/lsp/workspace_edit.py（纯函数：解析 WorkspaceEdit 的 changes/documentChanges 两形态、按 uri 分组、单文件内按 start 位置倒序 splice 应用避免位移后续编辑、atomic_write_text 落盘、跳过 Create/Rename/DeleteFile 资源操作、CRLF 保留）；manager.request_rename 桥接并 getattr 防御 multilspy 版本漂移；tools.py 加 semantic_rename schema+handler（不带 lsp_ 前缀以区分读写并规避 lsp_tools_enabled=True 误放行写工具，1-based 坐标）；core/tools.py 三处注入齐全（DEFERRED schema + _LSP_UNAVAILABLE_MESSAGE fallback + build_lsp_tools live handler）；guard 写工具权限（不入 SAFE_TOOLS → DEFAULT 确认/AUTO 通过/PLAN 拒绝）；agent_types 把 semantic_rename 加进 read-only 子代理 disallowed_tools 双层防御。关键决策 D1：LSP 不可用/无路由/空编辑明确报错，不退化为文本替换（不把精确与尽力而为混在一个工具）。走完整 trellis 流程 brainstorm→implement→check，check 额外做 CRLF 落盘 round-trip+真实 jedi E2E+偏移手算三项独立验证，0 问题。新增测试 workspace_edit 12 + tools 8 + 权限 5 + agent_types 1 + jedi manual E2E 1；pytest 654 passed/3 skipped/47 deselected、ruff check 净、pyright 0 error。ruff format 因本机 0.15.8 版本漂移有意跳过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bf700ed` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
