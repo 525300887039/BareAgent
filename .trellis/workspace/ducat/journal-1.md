@@ -575,3 +575,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 18: Hooks 系统（PreToolUse/PostToolUse 工具调用钩子）
+
+**Date**: 2026-06-01
+**Task**: Hooks 系统（PreToolUse/PostToolUse 工具调用钩子）
+**Branch**: `main`
+
+### Summary
+
+实现 ROADMAP 2.1 Hooks 系统：用户在 config.toml [[hooks]] 声明 shell 钩子，PreToolUse 拦截工具执行、PostToolUse 跑副作用。新建 src/hooks/：events(HookEvent PreToolUse/PostToolUse)、config(HookEntry/HooksConfig.matching 按 event 精确+tool 精确或 None/parse_hooks_config 非法条目跳过 graceful)、engine(HookEngine.run_pre_tool_use/run_post_tool_use，跨平台子进程复用 bash.py 的 Windows PowerShell+UTF-8 模式，JSON stdin 传上下文，字段名对齐 Claude Code)、errors(HookConfigError)。loop.py agent_loop 加可选 hook_engine：PreToolUse 插在权限通过后→handler 前（exit 2 拦截 skip handler + stderr 作理由回灌 LLM error result + 跳过 PostToolUse），PostToolUse 插在 handler 成功后→_tool_result 前（仅副作用，退出码不改结果，handler 异常路径不触发），_resolve_hook_session_id 复用 compact_fn.get_session_id。main.py Config.hooks + [[hooks]] 解析 graceful 降级 + 建 HookEngine + 两个主循环 agent_loop 传入，子代理 subagent/autonomous 不传（隔离）。决策 D1 事件=PreToolUse+PostToolUse、D2 exit-code 协议(0 放行/2 拦截/其他非 0 非阻塞警告，不做 JSON-stdout 高级协议/输入改写)、D3 fail-open(超时 TimeoutExpired/spawn 失败 OSError 警告+放行不挂主循环，权限闸才是安全边界)；排序 permission 先于 PreToolUse hook。两个关键 Windows 子进程坑：(1)powershell -Command 默认不透传子命令退出码，_build_argv 追加 ; exit $LASTEXITCODE 否则 exit 2 拦截永不触发（真实子进程测试佐证 load-bearing）；(2)hook 读 stdin 须用 UTF-8 即 sys.stdin.buffer 否则本机 GBK 控制台乱码非 ASCII。走完整 trellis brainstorm→implement→check 流程，check 发现并修 2 个 config.toml 示例 bug：示例 json.load(sys.stdin) 的 GBK 乱码改 sys.stdin.buffer、以及 sys.stderr.write(...) or sys.exit(2) 短路 bug（write 返回真值导致 exit(2) 永不执行使挡 rm -rf 示例根本不拦截）改 (write,exit) 元组；核心引擎本身正确。新增测试 hooks_config+hooks_engine(真实子进程)+loop 4+main 2 共约 26；pytest 729 passed/3 skipped/47 deselected、ruff check 净、pyright src 0 error，无新依赖。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f79716f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
