@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核验 ruff/pytest/pyright 全绿、三处修复各有针对性测试 + 回归测试、无过度设计"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核验 Fix #3 越界 Error 文案、Fix #1 双形态不重复应用/仅 changes 回归、不抛穿透"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核验 Fix #1/#2 写盘正确性（无重复应用、UTF-16 换算后偏移正确不损坏文件）"}
