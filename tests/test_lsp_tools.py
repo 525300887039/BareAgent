@@ -11,8 +11,14 @@ from typing import Any
 
 import pytest
 
+from src.lsp.coord import path_to_document_uri
 from src.lsp.manager import ServerStatus
-from src.lsp.tools import LSP_TOOL_NAMES, LSP_TOOL_SCHEMAS, build_lsp_tools
+from src.lsp.tools import (
+    LSP_TOOL_NAMES,
+    LSP_TOOL_SCHEMAS,
+    SEMANTIC_RENAME_TOOL_NAME,
+    build_lsp_tools,
+)
 
 
 class FakeServer:
@@ -80,6 +86,10 @@ class _StubManager:
         # via its publishDiagnostics handler. Keyed by *relative* path the
         # same way the manager does.
         self.diagnostics_cache: dict[str, list[dict]] = {}
+        # ``request_rename`` controls for the semantic_rename handler tests.
+        self.rename_response: Any = None
+        self.rename_raises: Exception | None = None
+        self.last_rename_args: tuple[str, int, int, str] | None = None
 
     def language_for_file(self, path: str) -> str | None:
         _, ext = os.path.splitext(path)
@@ -98,6 +108,12 @@ class _StubManager:
         abs_path = path if os.path.isabs(path) else os.path.abspath(path)
         rel = os.path.relpath(abs_path, start=self.repository_root)
         return list(self.diagnostics_cache.get(rel, []))
+
+    def request_rename(self, abs_path: str, line0: int, col0: int, new_name: str):
+        self.last_rename_args = (abs_path, line0, col0, new_name)
+        if self.rename_raises is not None:
+            raise self.rename_raises
+        return self.rename_response
 
 
 @pytest.fixture
@@ -129,17 +145,22 @@ def fake_setup(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_build_lsp_tools_returns_four_schemas_and_handlers(fake_setup) -> None:
+def test_build_lsp_tools_returns_query_tools_plus_semantic_rename(fake_setup) -> None:
     schemas = fake_setup["schemas"]
     handlers = fake_setup["handlers"]
     names = {s["name"] for s in schemas}
-    assert names == set(LSP_TOOL_NAMES)
-    assert set(handlers) == set(LSP_TOOL_NAMES)
+    # The four read-only query tools plus the semantic_rename write tool.
+    assert names == set(LSP_TOOL_NAMES) | {SEMANTIC_RENAME_TOOL_NAME}
+    assert set(handlers) == set(LSP_TOOL_NAMES) | {SEMANTIC_RENAME_TOOL_NAME}
+    # The rename tool intentionally does NOT carry the ``lsp_`` prefix so the
+    # ``lsp_tools_enabled`` name filter can't accidentally keep it for
+    # read-only agents.
+    assert not SEMANTIC_RENAME_TOOL_NAME.startswith("lsp_")
     # Every schema must mention the 1-based coordinate convention so the LLM
     # never sends 0-based positions.
     coord_text = "1-based"
     for schema in schemas:
-        if schema["name"] in {"lsp_definition", "lsp_references"}:
+        if schema["name"] in {"lsp_definition", "lsp_references", SEMANTIC_RENAME_TOOL_NAME}:
             assert coord_text in schema["description"]
 
 
@@ -353,3 +374,107 @@ def test_handler_returns_error_string_never_raises(fake_setup) -> None:
             out = fake_setup["handlers"][tool](file="x.unknown")
         assert isinstance(out, str)
         assert out.startswith("Error:")
+
+
+# ---------------------------------------------------------------------------
+# semantic_rename
+# ---------------------------------------------------------------------------
+
+
+def test_semantic_rename_applies_changes_form(fake_setup) -> None:
+    sample = fake_setup["sample"]
+    sample.write_text("foo = 1\nprint(foo)\n", encoding="utf-8")
+    uri = path_to_document_uri(str(sample))
+    fake_setup["manager"].rename_response = {
+        "changes": {
+            uri: [
+                {
+                    "range": {
+                        "start": {"line": 0, "character": 0},
+                        "end": {"line": 0, "character": 3},
+                    },
+                    "newText": "bar",
+                },
+                {
+                    "range": {
+                        "start": {"line": 1, "character": 6},
+                        "end": {"line": 1, "character": 9},
+                    },
+                    "newText": "bar",
+                },
+            ]
+        }
+    }
+    out = fake_setup["handlers"][SEMANTIC_RENAME_TOOL_NAME](
+        file=str(sample), line=1, col=1, new_name="bar"
+    )
+    # 1-based (1,1) → 0-based (0,0) handed to request_rename.
+    abs_path, line0, col0, new_name = fake_setup["manager"].last_rename_args
+    assert (line0, col0) == (0, 0)
+    assert new_name == "bar"
+    assert sample.read_text(encoding="utf-8") == "bar = 1\nprint(bar)\n"
+    assert "2 edits across 1 file" in out
+
+
+def test_semantic_rename_none_edit_returns_error_and_no_write(fake_setup) -> None:
+    sample = fake_setup["sample"]
+    before = sample.read_text(encoding="utf-8")
+    fake_setup["manager"].rename_response = None  # D1: explicit error, no fallback
+    out = fake_setup["handlers"][SEMANTIC_RENAME_TOOL_NAME](
+        file=str(sample), line=1, col=1, new_name="bar"
+    )
+    assert out.startswith("Error:")
+    assert "no rename edits" in out
+    assert sample.read_text(encoding="utf-8") == before  # untouched
+
+
+def test_semantic_rename_empty_changes_returns_error(fake_setup) -> None:
+    sample = fake_setup["sample"]
+    before = sample.read_text(encoding="utf-8")
+    fake_setup["manager"].rename_response = {"changes": {}}
+    out = fake_setup["handlers"][SEMANTIC_RENAME_TOOL_NAME](
+        file=str(sample), line=1, col=1, new_name="bar"
+    )
+    assert out.startswith("Error:")
+    assert sample.read_text(encoding="utf-8") == before
+
+
+def test_semantic_rename_blank_new_name_rejected(fake_setup) -> None:
+    out = fake_setup["handlers"][SEMANTIC_RENAME_TOOL_NAME](
+        file=str(fake_setup["sample"]), line=1, col=1, new_name="   "
+    )
+    assert out.startswith("Error: new_name")
+    # Manager was never consulted.
+    assert fake_setup["manager"].last_rename_args is None
+
+
+def test_semantic_rename_missing_file_returns_error(fake_setup) -> None:
+    out = fake_setup["handlers"][SEMANTIC_RENAME_TOOL_NAME](
+        file="does/not/exist.py", line=1, col=1, new_name="bar"
+    )
+    assert out.startswith("Error: file not found")
+
+
+def test_semantic_rename_no_route_returns_error(fake_setup, tmp_path) -> None:
+    other = tmp_path / "foo.rs"
+    other.write_text("fn main() {}")
+    out = fake_setup["handlers"][SEMANTIC_RENAME_TOOL_NAME](
+        file=str(other), line=1, col=1, new_name="bar"
+    )
+    assert out.startswith("Error: no LSP server configured for .rs")
+
+
+def test_semantic_rename_unhealthy_server_returns_error(fake_setup) -> None:
+    fake_setup["manager"]._statuses["python"] = ServerStatus.UNHEALTHY
+    out = fake_setup["handlers"][SEMANTIC_RENAME_TOOL_NAME](
+        file=str(fake_setup["sample"]), line=1, col=1, new_name="bar"
+    )
+    assert out == "Error: language server 'python' is unhealthy"
+
+
+def test_semantic_rename_request_raises_is_caught(fake_setup) -> None:
+    fake_setup["manager"].rename_raises = RuntimeError("boom")
+    out = fake_setup["handlers"][SEMANTIC_RENAME_TOOL_NAME](
+        file=str(fake_setup["sample"]), line=1, col=1, new_name="bar"
+    )
+    assert out.startswith("Error: LSP rename failed: RuntimeError: boom")

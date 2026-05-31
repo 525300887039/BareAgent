@@ -17,7 +17,14 @@ from __future__ import annotations
 from .config import LSPConfig, LSPServerConfig, parse_lsp_config
 from .errors import LSPCallError, LSPError, LSPHandshakeError
 from .manager import LanguageServerManager, ServerStatus
-from .tools import LSP_TOOL_NAMES, LSP_TOOL_SCHEMAS, build_lsp_tools
+from .tools import (
+    LSP_TOOL_NAMES,
+    LSP_TOOL_SCHEMAS,
+    SEMANTIC_RENAME_TOOL_NAME,
+    SEMANTIC_RENAME_TOOL_SCHEMA,
+    build_lsp_tools,
+)
+from .workspace_edit import apply_workspace_edit
 
 
 def _detect_multilspy() -> bool:
@@ -45,9 +52,12 @@ __all__ = [
     "LSPServerConfig",
     "LSP_TOOL_NAMES",
     "LSP_TOOL_SCHEMAS",
+    "SEMANTIC_RENAME_TOOL_NAME",
+    "SEMANTIC_RENAME_TOOL_SCHEMA",
     "LanguageServerManager",
     "MULTILSPY_AVAILABLE",
     "ServerStatus",
+    "apply_workspace_edit",
     "build_lsp_tools",
     "parse_lsp_config",
 ]

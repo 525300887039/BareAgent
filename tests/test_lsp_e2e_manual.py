@@ -166,3 +166,31 @@ def test_pyright_definition(
         time.sleep(0.5)
     assert "no definition" not in output
     assert "good.py" in output
+
+
+# ---------------------------------------------------------------------------
+# 5. Semantic rename — rename ``add`` in good.py and verify the definition
+#    file is rewritten (cross-file follow-up depends on the server; the
+#    definition rewrite is the minimum jedi reliably produces).
+# ---------------------------------------------------------------------------
+
+
+def test_jedi_semantic_rename(
+    manager: LanguageServerManager, lsp_workspace: Path
+) -> None:
+    _schemas, handlers = build_lsp_tools(manager)
+    good = lsp_workspace / "good.py"
+    # ``def add(...)`` — 1-based col 5 points at the ``add`` identifier.
+    output = ""
+    deadline = time.monotonic() + LSP_TIMEOUT
+    while time.monotonic() < deadline:
+        output = handlers["semantic_rename"](
+            file=str(good), line=1, col=5, new_name="plus"
+        )
+        if not output.startswith("Error"):
+            break
+        time.sleep(0.5)
+    assert not output.startswith("Error"), output
+    # The definition site must have been renamed on disk.
+    assert "def plus(" in good.read_text(encoding="utf-8")
+    assert "edit" in output

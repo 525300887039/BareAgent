@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 from src.core.schema import tool_schema as _schema
 
 from .coord import line_col_0_to_1, line_col_1_to_0, to_repo_relative
+from .workspace_edit import apply_workspace_edit
 
 if TYPE_CHECKING:
     from .manager import LanguageServerManager
@@ -35,6 +36,14 @@ LSP_TOOL_NAMES = (
     "lsp_references",
     "lsp_diagnostics",
 )
+
+# The reference-aware rename tool. Deliberately *not* prefixed ``lsp_`` — the
+# four ``lsp_*`` tools are read-only queries, whereas ``semantic_rename`` writes
+# to disk. Keeping the prefix free means read-only agent types (which set
+# ``lsp_tools_enabled=True``) cannot accidentally retain the write tool through
+# the ``lsp_*`` name filter; isolation is instead handled by the explicit
+# ``disallowed_tools`` entry in :data:`agent_types._READ_ONLY_DEFAULTS`.
+SEMANTIC_RENAME_TOOL_NAME = "semantic_rename"
 
 _COORD_DOC = (
     "line and column are 1-based (matching editor convention). "
@@ -120,20 +129,63 @@ LSP_TOOL_SCHEMAS: list[dict[str, Any]] = [
 ]
 
 
+SEMANTIC_RENAME_TOOL_SCHEMA: dict[str, Any] = _schema(
+    SEMANTIC_RENAME_TOOL_NAME,
+    (
+        "Rename the symbol at the given position across the whole workspace "
+        "using the language server's textDocument/rename (a reference-aware, "
+        "symbol-level rename). Unlike a text find-and-replace, this updates "
+        "only real references to the symbol — never same-named strings, "
+        "comments, or unrelated symbols — and follows the rename across every "
+        "file that references it. If the language server is unavailable, no "
+        "server handles the file's extension, or the rename produces no edits, "
+        "this returns an explicit Error and changes nothing (it never falls "
+        "back to a text replacement). " + _COORD_DOC
+    ),
+    {
+        "file": {
+            "type": "string",
+            "description": "Workspace-relative or absolute path to the file.",
+        },
+        "line": {
+            "type": "integer",
+            "description": "1-based line number of the symbol to rename.",
+            "minimum": 1,
+        },
+        "col": {
+            "type": "integer",
+            "description": "1-based column number of the symbol to rename.",
+            "minimum": 1,
+        },
+        "new_name": {
+            "type": "string",
+            "description": "The new identifier for the symbol.",
+        },
+    },
+    ["file", "line", "col", "new_name"],
+)
+
+
 def build_lsp_tools(
     manager: LanguageServerManager,
 ) -> tuple[list[dict[str, Any]], dict[str, Callable[..., Any]]]:
-    """Return ``(schemas, handlers)`` for the four Tier-1 LSP tools.
+    """Return ``(schemas, handlers)`` for the four Tier-1 LSP tools plus the
+    ``semantic_rename`` write tool.
 
     Schemas are stable across managers; only the handlers close over
-    ``manager`` so they can look up the live server on every call.
+    ``manager`` so they can look up the live server on every call. The
+    ``semantic_rename`` entry rides along here (rather than in a separate
+    builder) so the registry has a single injection point for everything that
+    needs a live ``LanguageServerManager``.
     """
     schemas = [dict(schema) for schema in LSP_TOOL_SCHEMAS]
+    schemas.append(dict(SEMANTIC_RENAME_TOOL_SCHEMA))
     handlers: dict[str, Callable[..., Any]] = {
         "lsp_outline": _make_outline_handler(manager),
         "lsp_definition": _make_definition_handler(manager),
         "lsp_references": _make_references_handler(manager),
         "lsp_diagnostics": _make_diagnostics_handler(manager),
+        SEMANTIC_RENAME_TOOL_NAME: _make_semantic_rename_handler(manager),
     }
     return schemas, handlers
 
@@ -290,6 +342,71 @@ def _trigger_open_and_wait(
     finally:
         holder["done"].set()
         worker.join(timeout=1.0)
+
+
+def _make_semantic_rename_handler(
+    manager: LanguageServerManager,
+) -> Callable[..., str]:
+    def _handler(file: str, line: int, col: int, new_name: str) -> str:
+        if not new_name or not str(new_name).strip():
+            return "Error: new_name must be a non-empty identifier"
+        prelude = _prelude_or_error(manager, file)
+        if isinstance(prelude, str):
+            return prelude
+        _server, _relpath = prelude
+        abs_path = file if os.path.isabs(file) else os.path.abspath(file)
+        line0, col0 = line_col_1_to_0(line, col)
+        try:
+            workspace_edit = manager.request_rename(abs_path, line0, col0, new_name)
+        except Exception as exc:
+            return f"Error: LSP rename failed: {type(exc).__name__}: {exc}"
+
+        # D1 — no grep/regex fallback. A None / empty WorkspaceEdit means the
+        # server could not (or would not) rename here; surface an explicit
+        # error so the caller can decide whether to fall back to ``edit_file``
+        # itself. Silently degrading to a text replacement would break the
+        # "safe rename" contract this tool exists to provide.
+        if not workspace_edit:
+            return (
+                "Error: language server returned no rename edits for "
+                f"{file}:{line}:{col} (the position may not be a renameable "
+                "symbol). No files were changed."
+            )
+
+        result = apply_workspace_edit(workspace_edit)
+        if not result.changed_any:
+            note = ""
+            if result.skipped:
+                note = " Skipped resource operations: " + "; ".join(result.skipped)
+            return (
+                "Error: rename produced no applicable text edits. "
+                "No files were changed." + note
+            )
+        return _format_rename_result(new_name, result)
+
+    return _handler
+
+
+def _format_rename_result(new_name: str, result: Any) -> str:
+    """Render a ``WorkspaceEditResult`` as a short, LLM-readable summary."""
+    file_count = len(result.files)
+    edit_count = result.total_edits
+    lines = [
+        f"Renamed symbol to {new_name!r}: {edit_count} edit"
+        f"{'s' if edit_count != 1 else ''} across {file_count} file"
+        f"{'s' if file_count != 1 else ''}.",
+    ]
+    for path in sorted(result.files):
+        count = result.files[path]
+        lines.append(f"  {path}: {count} edit{'s' if count != 1 else ''}")
+    if result.skipped:
+        lines.append(
+            "Skipped resource operations (file create/rename/delete are not "
+            "performed by semantic_rename):"
+        )
+        for note in result.skipped:
+            lines.append(f"  {note}")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

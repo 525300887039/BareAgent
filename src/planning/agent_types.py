@@ -41,7 +41,17 @@ class AgentType:
 
 
 _READ_ONLY_DEFAULTS: dict[str, Any] = {
-    "disallowed_tools": ["write_file", "edit_file", "bash", "subagent"],
+    # ``semantic_rename`` is a write tool that does not carry the ``lsp_`` name
+    # prefix (so ``lsp_tools_enabled=True`` does not filter it). It must be
+    # denied explicitly here, otherwise read-only agents would keep a tool that
+    # mutates files across the workspace.
+    "disallowed_tools": [
+        "write_file",
+        "edit_file",
+        "bash",
+        "subagent",
+        "semantic_rename",
+    ],
     "max_turns": 50,
     "allow_nesting": False,
     "permission_mode": PermissionMode.PLAN,

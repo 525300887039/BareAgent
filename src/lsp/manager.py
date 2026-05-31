@@ -32,16 +32,17 @@ around both gaps post-handshake by:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import threading
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from .config import LSPConfig, LSPServerConfig
-from .coord import to_repo_relative
+from .coord import path_to_document_uri, to_repo_relative
 
 if TYPE_CHECKING:
     from src.concurrency.background import BackgroundManager
@@ -339,6 +340,75 @@ class LanguageServerManager:
                 return None
             entry = self._entries.get(language)
         return entry.server if entry is not None else None
+
+    def request_rename(
+        self,
+        abs_path: str,
+        line0: int,
+        col0: int,
+        new_name: str,
+    ) -> dict[str, Any] | None:
+        """Run ``textDocument/rename`` and return the raw ``WorkspaceEdit``.
+
+        multilspy 0.0.15 does **not** wrap rename on ``SyncLanguageServer`` (it
+        only surfaces definition / references / completions / document_symbols /
+        hover / workspace_symbol). The bare LSP request is reachable through the
+        inner async server (``language_server.server.send.rename(params)``), so
+        this method bridges async→sync using the exact pattern multilspy uses
+        internally: schedule the coroutine on the server's own event loop via
+        :func:`asyncio.run_coroutine_threadsafe` and block on the result.
+
+        The document is opened (``textDocument/didOpen``) for the duration of the
+        request via multilspy's ``open_file`` context manager — the same thing
+        ``request_definition`` does internally so the server has the buffer
+        loaded before it computes the edit.
+
+        Returns the raw ``WorkspaceEdit`` dict, or ``None`` when no server routes
+        the file, the server is unhealthy, or the request yields no edit. The
+        multilspy internals are reached through ``getattr`` guards so a future
+        version shift degrades to ``None`` instead of an ``AttributeError``.
+        """
+        sync_server = self.get_server_for_file(abs_path)
+        if sync_server is None:
+            return None
+
+        relpath = to_repo_relative(abs_path, self._repository_root)
+        uri = path_to_document_uri(abs_path)
+        params = {
+            "textDocument": {"uri": uri},
+            "position": {"line": line0, "character": col0},
+            "newName": new_name,
+        }
+
+        language_server = getattr(sync_server, "language_server", None)
+        loop = getattr(sync_server, "loop", None)
+        open_file = getattr(language_server, "open_file", None)
+        inner = getattr(language_server, "server", None)
+        send = getattr(inner, "send", None)
+        rename = getattr(send, "rename", None)
+        if loop is None or not callable(open_file) or not callable(rename):
+            return None
+
+        async def _rename_coro() -> Any:
+            # ``open_file`` is a context manager and ``rename`` an async callable
+            # on multilspy's untyped internals; cast through Any so the ``with``
+            # / ``await`` below type-check (same convention used elsewhere in
+            # this module for multilspy-internal access). The callable() guards
+            # above narrow these back to ``object``, hence the explicit casts.
+            open_cm = cast(Any, open_file)
+            rename_fn = cast(Any, rename)
+            with open_cm(relpath):
+                return await rename_fn(params)
+
+        # multilspy spins its own event-loop thread inside ``start_server``;
+        # ``sync_server.loop`` is that loop. Scheduling onto it from this
+        # (caller) thread is the only safe way to drive the async server.
+        future = asyncio.run_coroutine_threadsafe(_rename_coro(), loop)
+        timeout = self._config.start_timeout or 15.0
+        result = future.result(timeout=timeout)
+        if not isinstance(result, dict):
+            return None
+        return result
 
     def language_for_file(self, path: str) -> str | None:
         """Map a file path to its configured language, or None if no

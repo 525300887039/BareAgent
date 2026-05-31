@@ -19,7 +19,12 @@ from src.core.handlers.web_fetch import run_web_fetch
 from src.core.handlers.web_search import run_web_search
 from src.core.schema import tool_schema as _schema
 from src.lsp.manager import LanguageServerManager
-from src.lsp.tools import LSP_TOOL_SCHEMAS, build_lsp_tools
+from src.lsp.tools import (
+    LSP_TOOL_SCHEMAS,
+    SEMANTIC_RENAME_TOOL_NAME,
+    SEMANTIC_RENAME_TOOL_SCHEMA,
+    build_lsp_tools,
+)
 from src.mcp.manager import MCPManager
 from src.mcp.registry import build_mcp_handlers, build_mcp_tool_schemas
 from src.memory.persistent import MemoryManager
@@ -199,6 +204,7 @@ DEFERRED_TOOL_SCHEMAS: list[dict[str, Any]] = [
     *BACKGROUND_TOOL_SCHEMAS,
     *TEAM_TOOL_SCHEMAS,
     *LSP_TOOL_SCHEMAS,
+    SEMANTIC_RENAME_TOOL_SCHEMA,
     *MEMORY_TOOL_SCHEMAS,
 ]
 
@@ -460,6 +466,7 @@ _LSP_FALLBACK_HANDLERS: dict[str, Callable[..., Any]] = {
     "lsp_definition": lambda **_kw: _LSP_UNAVAILABLE_MESSAGE,
     "lsp_references": lambda **_kw: _LSP_UNAVAILABLE_MESSAGE,
     "lsp_diagnostics": lambda **_kw: _LSP_UNAVAILABLE_MESSAGE,
+    SEMANTIC_RENAME_TOOL_NAME: lambda **_kw: _LSP_UNAVAILABLE_MESSAGE,
 }
 
 _MEMORY_DISABLED_MESSAGE = (

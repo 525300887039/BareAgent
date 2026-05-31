@@ -156,7 +156,10 @@ class PermissionGuard:
             rule_subject,
         ):
             return False
-        if normalized_tool == "write_file":
+        if normalized_tool in {"write_file", "semantic_rename"}:
+            # Write tools: confirm in DEFAULT, auto-approve in AUTO. PLAN was
+            # already rejected above (not in SAFE_TOOLS), BYPASS short-circuited
+            # at the top.
             return self.mode == PermissionMode.DEFAULT
         return True
 

@@ -19,6 +19,7 @@ _TOOLS = [
     {"name": "lsp_definition"},
     {"name": "lsp_references"},
     {"name": "lsp_diagnostics"},
+    {"name": "semantic_rename"},
     {"name": "mcp__svc__do"},
 ]
 
@@ -72,6 +73,21 @@ def test_read_only_defaults_keep_lsp() -> None:
         assert agent.mcp_tools_enabled is False
         kept = {t["name"] for t in filter_tools(_TOOLS, agent)}
         assert "lsp_outline" in kept
+
+
+def test_read_only_types_drop_semantic_rename() -> None:
+    """semantic_rename is a write tool that does not carry the ``lsp_`` prefix,
+    so ``lsp_tools_enabled=True`` must NOT keep it for read-only agents — it is
+    denied via the explicit ``disallowed_tools`` entry instead."""
+    for name in ("explore", "plan", "code-review"):
+        agent = BUILTIN_AGENT_TYPES[name]
+        # The read-only query tools survive...
+        kept = {t["name"] for t in filter_tools(_TOOLS, agent)}
+        assert "lsp_outline" in kept
+        # ...but the write tool is stripped.
+        assert "semantic_rename" not in kept
+        assert agent.disallowed_tools is not None
+        assert "semantic_rename" in agent.disallowed_tools
 
 
 def test_filter_handlers_drops_stripped_lsp_handlers() -> None:
