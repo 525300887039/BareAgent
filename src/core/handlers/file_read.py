@@ -221,7 +221,10 @@ def _parse_page_range(pages: str | None, total: int) -> list[int] | str:
     """Parse a 1-based user page spec into a list of 0-based indices.
 
     Accepts ``None`` (all pages), ``"3"`` (single page) and ``"1-5"`` (range).
-    Out-of-range bounds are clamped. Returns an Error string on bad input.
+    A range's ``end`` past the last page is clamped, but a ``start`` past the
+    last page is an explicit error (mirroring the single-page branch) rather
+    than silently returning a different page. Returns an Error string on bad
+    input.
     """
     if pages is None:
         return list(range(total))
@@ -238,7 +241,9 @@ def _parse_page_range(pages: str | None, total: int) -> list[int] | str:
             return f"Error: invalid page range {pages!r} (expected e.g. '1-5' or '3')"
         if start < 1 or end < 1 or start > end:
             return f"Error: invalid page range {pages!r}"
-        start_idx = min(start, total) - 1
+        if start > total:
+            return f"Error: page range start {start} out of range (PDF has {total} pages)"
+        start_idx = start - 1
         end_idx = min(end, total)
         return list(range(start_idx, end_idx))
 

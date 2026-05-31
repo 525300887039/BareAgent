@@ -58,12 +58,15 @@ def _iter_edit_groups(
     workspace_edit: dict[str, Any],
     skipped: list[str],
 ) -> dict[str, list[dict[str, Any]]]:
-    """Normalize both WorkspaceEdit shapes into ``{uri: [TextEdit, ...]}``.
+    """Normalize a WorkspaceEdit into ``{uri: [TextEdit, ...]}``.
 
-    ``changes`` and ``documentChanges`` may both be present; per the LSP spec a
-    client that understands ``documentChanges`` should prefer it. jedi and the
-    other servers we target only ever emit one of the two, so we merge both
-    rather than choosing — duplicate URIs just accumulate their edit lists.
+    A ``WorkspaceEdit`` may carry edits in ``changes`` *and/or*
+    ``documentChanges``. The LSP spec recommends a client that understands
+    ``documentChanges`` use it **exclusively** when present and ignore
+    ``changes`` entirely — ``changes`` is only the backward-compatibility
+    fallback for clients that don't. Merging both would apply the same edit
+    twice when a server emits both forms for one URI, and the bottom-up splice
+    would then corrupt the file. So we choose one form, never merge.
 
     Resource operations inside ``documentChanges`` (items carrying a ``"kind"``
     field) are recorded in ``skipped`` and not returned for application.
@@ -72,6 +75,7 @@ def _iter_edit_groups(
 
     document_changes = workspace_edit.get("documentChanges")
     if isinstance(document_changes, list):
+        # documentChanges present: parse it and ignore ``changes`` entirely.
         for item in document_changes:
             if not isinstance(item, dict):
                 continue
@@ -92,6 +96,7 @@ def _iter_edit_groups(
             groups.setdefault(uri, []).extend(
                 edit for edit in edits if isinstance(edit, dict)
             )
+        return groups
 
     changes = workspace_edit.get("changes")
     if isinstance(changes, dict):
@@ -126,12 +131,52 @@ def _edit_sort_key(edit: dict[str, Any]) -> tuple[int, int]:
     return (line, char)
 
 
-def _offset_for_position(line_starts: list[int], line: int, char: int, text_len: int) -> int:
+def _utf16_units_to_py_col(line_text: str, utf16_char: int) -> int:
+    """Map a UTF-16 code-unit offset into a line to a Python str column index.
+
+    LSP ``Position.character`` is counted in **UTF-16 code units**, not Python
+    code points. multilspy 0.0.15 does not negotiate ``positionEncoding`` with
+    the server, so the default (UTF-16) is what every server uses. A non-BMP
+    character (``ord(ch) > 0xFFFF`` — emoji, astral plane) is a surrogate pair
+    occupying *two* UTF-16 units but a *single* Python str index. Treating the
+    character offset as a Python index therefore shifts every position after an
+    astral character left by one per astral char, silently corrupting the edit
+    range and the file.
+
+    We walk the line accumulating UTF-16 units until we reach ``utf16_char`` and
+    return the corresponding Python column. A ``utf16_char`` that lands in the
+    middle of a surrogate pair, or runs past the line's UTF-16 length, clamps to
+    the line end — matching the boundary-clamp safety of the offset path.
+
+    (The read-only ``lsp_definition`` / ``lsp_references`` coordinates in
+    ``coord.py`` pass ``character`` through unconverted; that only affects
+    display, so the small risk is out of scope here — only the write path can
+    corrupt a file.)
+    """
+    if utf16_char <= 0:
+        return 0
+    units = 0
+    for col, ch in enumerate(line_text):
+        if units >= utf16_char:
+            return col
+        units += 2 if ord(ch) > 0xFFFF else 1
+    return len(line_text)
+
+
+def _offset_for_position(
+    line_starts: list[int],
+    lines: list[str],
+    line: int,
+    char: int,
+    text_len: int,
+) -> int:
     """Convert a 0-based ``(line, character)`` to an absolute string offset.
 
-    ``line_starts[i]`` is the offset where line ``i`` begins. Positions past the
-    end of a line / file are clamped to the file length so a malformed range
-    from the server can never raise — it just edits at the boundary.
+    ``line_starts[i]`` is the offset where line ``i`` begins and ``lines[i]`` is
+    that line's text (terminator stripped) used to translate the UTF-16
+    ``character`` into a Python column. Positions past the end of a line / file
+    are clamped to the file length so a malformed range from the server can
+    never raise — it just edits at the boundary.
     """
     if not line_starts:
         return 0
@@ -139,7 +184,9 @@ def _offset_for_position(line_starts: list[int], line: int, char: int, text_len:
         line = 0
     if line >= len(line_starts):
         return text_len
-    return min(line_starts[line] + max(char, 0), text_len)
+    line_text = lines[line] if line < len(lines) else ""
+    py_col = _utf16_units_to_py_col(line_text, char)
+    return min(line_starts[line] + py_col, text_len)
 
 
 def _build_line_starts(text: str) -> list[int]:
@@ -157,6 +204,17 @@ def _build_line_starts(text: str) -> list[int]:
     return starts
 
 
+def _build_lines(text: str) -> list[str]:
+    """Split ``text`` into per-line content for UTF-16 column translation.
+
+    Aligned with :func:`_build_line_starts`: one entry per line, split on
+    ``\\n``. A trailing ``\\r`` is kept (CRLF files) so UTF-16 unit counting
+    matches the bytes actually on the line; the splice still uses absolute
+    offsets, so the terminator is never disturbed.
+    """
+    return text.split("\n")
+
+
 def apply_text_edits(text: str, edits: list[dict[str, Any]]) -> str:
     """Apply a list of LSP ``TextEdit`` objects to ``text`` and return the result.
 
@@ -167,6 +225,7 @@ def apply_text_edits(text: str, edits: list[dict[str, Any]]) -> str:
     single ``TextEdit[]`` (the spec forbids overlapping ranges).
     """
     line_starts = _build_line_starts(text)
+    lines = _build_lines(text)
     text_len = len(text)
     # Descending by start position: apply the last edit in the file first so
     # splicing it never shifts offsets of edits that come earlier.
@@ -181,12 +240,14 @@ def apply_text_edits(text: str, edits: list[dict[str, Any]]) -> str:
             continue
         start_off = _offset_for_position(
             line_starts,
+            lines,
             int(start.get("line", 0) or 0),
             int(start.get("character", 0) or 0),
             text_len,
         )
         end_off = _offset_for_position(
             line_starts,
+            lines,
             int(end.get("line", 0) or 0),
             int(end.get("character", 0) or 0),
             text_len,

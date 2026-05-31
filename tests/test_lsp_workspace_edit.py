@@ -86,6 +86,55 @@ def test_apply_edit_preserves_crlf() -> None:
 
 
 # ---------------------------------------------------------------------------
+# apply_text_edits — UTF-16 ``character`` offsets vs Python code points
+# ---------------------------------------------------------------------------
+
+
+def test_apply_edit_after_astral_char_offset_correct() -> None:
+    # An emoji is one Python str index but TWO UTF-16 code units. In
+    # "<emoji> x = 1": emoji = UTF-16 units 0-1, space = unit 2, ``x`` = unit 3.
+    # The server reports ``x`` at UTF-16 character 3; renaming x -> y must hit
+    # the ``x``. A naive code-point reading would target unit 3 as Python col 3
+    # (the ``=`` side) and corrupt the line.
+    text = "\U0001f600 x = 1\n"
+    edits = [_text_edit(0, 3, 0, 4, "y")]
+    assert apply_text_edits(text, edits) == "\U0001f600 y = 1\n"
+
+
+def test_apply_edit_multiple_astral_chars() -> None:
+    # Two emoji before the symbol: 4 UTF-16 units (2 Python indices), space at
+    # unit 4, ``x`` at UTF-16 char 5.
+    text = "\U0001f600\U0001f601 x = 1\n"
+    edits = [_text_edit(0, 5, 0, 6, "y")]
+    assert apply_text_edits(text, edits) == "\U0001f600\U0001f601 y = 1\n"
+
+
+def test_apply_edit_astral_across_lines() -> None:
+    # Astral char on line 0 must not perturb line 1's offsets; line 1 also has
+    # an emoji before its symbol. ``a``/``b`` sit at UTF-16 char 3 on each line.
+    text = "\U0001f600 a = 1\n\U0001f602 b = 2\n"
+    edits = [
+        _text_edit(0, 3, 0, 4, "x"),  # line 0: rename a -> x
+        _text_edit(1, 3, 1, 4, "y"),  # line 1: rename b -> y
+    ]
+    assert apply_text_edits(text, edits) == "\U0001f600 x = 1\n\U0001f602 y = 2\n"
+
+
+def test_apply_edit_replace_the_astral_char_itself() -> None:
+    # Selecting UTF-16 chars 0-2 covers exactly the single emoji code point.
+    text = "\U0001f600x\n"
+    edits = [_text_edit(0, 0, 0, 2, "Z")]
+    assert apply_text_edits(text, edits) == "Zx\n"
+
+
+def test_apply_edit_bmp_line_unchanged_regression() -> None:
+    # Pure ASCII / BMP: UTF-16 units == Python indices, behavior unchanged.
+    text = "héllo world\n"  # all BMP, including the accented e
+    edits = [_text_edit(0, 6, 0, 11, "there")]
+    assert apply_text_edits(text, edits) == "héllo there\n"
+
+
+# ---------------------------------------------------------------------------
 # apply_workspace_edit — ``changes`` form
 # ---------------------------------------------------------------------------
 
@@ -189,6 +238,56 @@ def test_resource_operations_are_skipped(tmp_path: Path) -> None:
     assert len(result.skipped) == 3
     assert not (tmp_path / "renamed.py").exists()
     assert target.exists()
+
+
+# ---------------------------------------------------------------------------
+# documentChanges takes precedence: ``changes`` is ignored when both present
+# ---------------------------------------------------------------------------
+
+
+def test_document_changes_wins_over_changes_no_double_apply(tmp_path: Path) -> None:
+    # A server that gives both forms for the same URI (LSP back-compat fallback)
+    # must not have the edit applied twice. With documentChanges present, the
+    # ``changes`` form is ignored entirely, so the splice runs once.
+    target = tmp_path / "mod.py"
+    target.write_text("foo = 1\n", encoding="utf-8")
+    uri = path_to_document_uri(str(target))
+    edit = _text_edit(0, 0, 0, 3, "bar")
+    workspace_edit = {
+        "documentChanges": [
+            {"textDocument": {"uri": uri, "version": 1}, "edits": [edit]},
+        ],
+        "changes": {uri: [edit]},
+    }
+    result = apply_workspace_edit(workspace_edit)
+    # Applied once: 3-char "foo" -> "bar". A double splice would corrupt this.
+    assert target.read_text(encoding="utf-8") == "bar = 1\n"
+    assert result.total_edits == 1
+
+
+def test_changes_only_still_applied_regression(tmp_path: Path) -> None:
+    # No documentChanges: the ``changes`` fallback is parsed and applied.
+    target = tmp_path / "mod.py"
+    target.write_text("foo = 1\n", encoding="utf-8")
+    uri = path_to_document_uri(str(target))
+    workspace_edit = {"changes": {uri: [_text_edit(0, 0, 0, 3, "bar")]}}
+    result = apply_workspace_edit(workspace_edit)
+    assert target.read_text(encoding="utf-8") == "bar = 1\n"
+    assert result.total_edits == 1
+
+
+def test_document_changes_only_still_applied_regression(tmp_path: Path) -> None:
+    target = tmp_path / "mod.py"
+    target.write_text("foo = 1\n", encoding="utf-8")
+    uri = path_to_document_uri(str(target))
+    workspace_edit = {
+        "documentChanges": [
+            {"textDocument": {"uri": uri}, "edits": [_text_edit(0, 0, 0, 3, "bar")]},
+        ]
+    }
+    result = apply_workspace_edit(workspace_edit)
+    assert target.read_text(encoding="utf-8") == "bar = 1\n"
+    assert result.total_edits == 1
 
 
 def test_empty_workspace_edit_changes_nothing(tmp_path: Path) -> None:

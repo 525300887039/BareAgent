@@ -186,6 +186,17 @@ def test_parse_page_range_valid(pages, total, expected):
 
 
 @pytest.mark.parametrize(
+    ("pages", "expected"),
+    [
+        ("2-3", [1, 2]),  # within range
+        ("1-10", [0, 1, 2]),  # end clamped to last page
+    ],
+)
+def test_parse_page_range_end_clamp_regression(pages, expected):
+    assert _parse_page_range(pages, 3) == expected
+
+
+@pytest.mark.parametrize(
     "pages",
     ["abc", "0", "5", "3-1", "1-x"],
 )
@@ -193,6 +204,18 @@ def test_parse_page_range_invalid(pages):
     result = _parse_page_range(pages, 3)
     assert isinstance(result, str)
     assert result.startswith("Error:")
+
+
+@pytest.mark.parametrize(
+    "pages",
+    ["5-5", "4-6", "5-10"],
+)
+def test_parse_page_range_start_out_of_bounds_errors(pages):
+    # start > total must error explicitly, not silently return the last page.
+    result = _parse_page_range(pages, 3)
+    assert isinstance(result, str)
+    assert result.startswith("Error:")
+    assert "out of range" in result
 
 
 # --- PDF library-missing degradation ---------------------------------------
