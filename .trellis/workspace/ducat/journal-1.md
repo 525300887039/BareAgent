@@ -674,3 +674,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: Cron 定时任务调度与 /loop 命令（ROADMAP 4.1）
+
+**Date**: 2026-06-01
+**Task**: Cron 定时任务调度与 /loop 命令（ROADMAP 4.1）
+**Branch**: `main`
+
+### Summary
+
+实现 /loop：按固定间隔重复执行 shell 命令，结果经现有 BackgroundManager 通知通道在下个 turn 浮现。新建 scheduler.py（Scheduler 只负责定时+重复 arm，threading.Timer 自重排，唯一 run_id 避开 submit 去重，_fire 包 try 隔离 Timer 线程异常，绝不碰 messages/console，MIN_INTERVAL 5s 守护）+ _dispatch_loop_command 五形态命令 + REPL 集成（实例化/分发/登记/finally cancel_all）。内存级、不经权限确认（已明示警示）。19 新测试（fake notifier + 直调 _fire 不依赖墙钟），三道门全绿，无新依赖。实现+审查双子代理，审查 9 项全 PASS 零修复。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7970881` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
