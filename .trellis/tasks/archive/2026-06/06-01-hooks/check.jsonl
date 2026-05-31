@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核验 D3 fail-open（超时/spawn 失败警告+放行不挂主循环）、PreToolUse exit 2 拦截回灌 error result、权限闸先于 hook 排序、错误不抛穿透"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核验 ruff/pytest/pyright 全绿、测试覆盖（匹配/Pre 拦截放行警告/Post 副作用/JSON stdin/超时降级/config 解析）、无过度设计、跨平台子进程"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "核验 src/hooks/ 放置、engine 不反向依赖 loop、loop 插入点单点正确、子代理 agent_loop 不传 hook_engine"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核验 [[hooks]] 解析正确、非法配置 graceful 降级、缺省安全（无 [[hooks]] 不影响）"}

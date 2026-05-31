@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新 src/hooks/ 包（events/config/engine）放置与 src/ 分层；loop.py 插入点 + main.py Config/解析的既有组织；engine 不反向依赖 loop 的边界"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "D3 fail-open 失败模式、PreToolUse exit 2 拦截回灌 LLM 的 error result 文案、hook 超时/spawn 失败 graceful 不抛穿透；权限闸先于 hook 的排序约定"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "config 分层加载（config.toml→local→env，array-of-tables [[hooks]] 同 [[mcp.servers]]）与解析失败 graceful 降级约定"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Python 3.12+/类型注解/ruff/pytest、反过度设计（MVP 不做 JSON-stdout/输入改写/其余事件）；跨平台子进程复用 bash.py；新行为补 pytest"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "hook 警告/拦截提示走 AgentConsole 而非 print/logging；文案风格对齐现有工具结果输出"}
