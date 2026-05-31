@@ -608,3 +608,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 19: 代码审查修复（WorkspaceEdit 双形态/UTF-16 偏移/PDF 页范围越界）
+
+**Date**: 2026-06-01
+**Task**: 代码审查修复（WorkspaceEdit 双形态/UTF-16 偏移/PDF 页范围越界）
+**Branch**: `main`
+
+### Summary
+
+对本 session 四个功能提交（semantic_rename/token-cost/多模态/hooks）派 4 个并行 general-purpose 子代理做独立只读代码审查，发现 3 个 Med 级正确性问题并走 trellis 流程修复（token-cost 与 hooks 审查 clean 无需改）。Fix #1（src/lsp/workspace_edit.py:_iter_edit_groups）：WorkspaceEdit 的 documentChanges 与 changes 两形态原先 merge 进同一 groups dict，若 LSP server 对同一 URI 两者都给（spec 允许 changes 作向后兼容回退）同一处编辑被应用两次→倒序 splice 损坏文件；改为 LSP spec 推荐口径，存在 documentChanges(list) 时只解析它并 return、完全忽略 changes，否则才解析 changes。Fix #2（同文件 UTF-16 换算）：LSP Position.character 是 UTF-16 code unit，原代码当 Python str code point 索引，同一行符号前有 emoji/非 BMP 字符（astral 占 2 个 UTF-16 单位但 1 个 Python 索引）时偏移错位静默损坏文件；新增纯函数 _utf16_units_to_py_col（按行累加 UTF-16 单位 astral 计 2，半代理对/越界 clamp）+ _build_lines（split(\n) 保留 \r 与 _build_line_starts 行数对齐），_offset_for_position 改签名接 lines 做换算，倒序 splice/绝对偏移/CRLF 处理不变；注释说明 multilspy 0.0.15 不协商 positionEncoding 默认 UTF-16，coord.py 只读坐标未换算仅显示用不在范围。Fix #3（src/core/handlers/file_read.py:_parse_page_range）：PDF range start 越界（3 页 PDF 的 5-5/4-6）原先静默返回末页，与单页 5 报错不一致；改为 start>total 返回明确 Error（边界用 > 不用 >= 故 3-3 仍合法），end 仍 clamp。审查的 Low/Nit（no-op edit 计数、didOpen 超时泄漏、非白名单图片 UnicodeDecodeError 友好文案、子代理 token 不计入 /cost、PostToolUse is_error 恒 False、hook 子进程 cwd、coord.py 只读坐标 UTF-16）按 PRD Out of Scope 未动。走 implement→check 流程，check 逐项码点级验证三 fix 真正解决原 finding + astral 半代理对边界 + CRLF/_build_lines 对齐 + > vs >= 边界 + documentChanges 优先，零回归无需自修。8 新测试；pytest 742 passed/3 skipped/47 deselected、ruff check 净、pyright 0 error。无新依赖。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1c4a04b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
