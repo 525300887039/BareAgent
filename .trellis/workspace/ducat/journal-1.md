@@ -641,3 +641,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: Git Worktree 子代理隔离（ROADMAP 3.3）
+
+**Date**: 2026-06-01
+**Task**: Git Worktree 子代理隔离（ROADMAP 3.3）
+**Branch**: `main`
+
+### Summary
+
+实现 run_subagent(isolation='worktree')：子代理在独立 git worktree + 临时分支中工作，文件操作落隔离目录不污染主工作区。新建 worktree.py（纯 git CLI 封装）+ rebind_workspace_handlers（重绑 6 个文件 handler，保留 diagnostics_hook）+ isolation 参数贯穿 subagent 链路与 schema。dirty 保留+回报、clean 自动清理、非 git 仓库 fail-open。10 新测试，三道门全绿，无新依赖。实现+审查双子代理验证，审查自修 3 处小问题。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bd49e2d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

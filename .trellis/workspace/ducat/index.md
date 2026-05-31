@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 19
+- **Total Sessions**: 20
 - **Last Active**: 2026-06-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~643 | Active |
+| `journal-1.md` | ~676 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 20 | 2026-06-01 | Git Worktree 子代理隔离（ROADMAP 3.3） | `bd49e2d` | `main` |
 | 19 | 2026-06-01 | 代码审查修复（WorkspaceEdit 双形态/UTF-16 偏移/PDF 页范围越界） | `1c4a04b` | `main` |
 | 18 | 2026-06-01 | Hooks 系统（PreToolUse/PostToolUse 工具调用钩子） | `f79716f` | `main` |
 | 17 | 2026-06-01 | 本地多模态文件读取（图片/PDF/notebook） | `291a12b` | `main` |
