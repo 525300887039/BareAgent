@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核查重试是否守住既有契约：耗尽后仍 raise LLMCallError 且 `from exc` 保留 cause、KeyboardInterrupt/SystemExit（非 Exception）立即透传不被重试吞、不引入多余自定义异常、不可重试错误立即上抛不掩盖配置错误。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "通用质量门槛核查：测试覆盖、类型注解、简洁实现、无过度设计、向后兼容（retry_policy=None 保持旧行为）。"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "核查重试观测点（print_status / tracer tag / logging）是否符合日志约定，不噪声刷屏。"}

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "本任务核心契约源：LLMCallError 仅在 caller 需区分时定义、provider 失败包 LLMCallError 且 `raise ... from exc` 保留 cause、`BaseException` 捕获让 KeyboardInterrupt/SystemExit 透传、后台失败不静默。重试驱动必须严守这些：只重试 Exception 子类、耗尽后仍 raise LLMCallError from 原错、KeyboardInterrupt 立即上抛。"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新增纯模块 src/core/retry.py 的落点与分层约定（无 LLM/loop 依赖、可单测），对齐现有 src/core/ 纯工具模块（fileutil/sandbox）的放置惯例。"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "重试间隙的 console.print_status 告知 + tracer tag + logging 用法需对齐项目日志/可观测约定。"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用现有配置解析模式（_parse_*_config / _resolve_bool/int 环境变量覆盖 / dataclass 子段）而非另造一套；避免与 scheduler/cost 等已有 [section] 解析重复。"}
