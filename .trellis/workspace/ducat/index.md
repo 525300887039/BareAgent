@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 26
+- **Total Sessions**: 27
 - **Last Active**: 2026-06-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~876 | Active |
+| `journal-1.md` | ~910 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 27 | 2026-06-01 | skill 自进化 (agent 更新已有 skill) | `d631ea6`, `2cc9265` | `main` |
 | 26 | 2026-06-01 | 经验式技能生成 (agent 从经验自动长 skill) | `140e0f2`, `f60686d` | `main` |
 | 25 | 2026-06-01 | ROADMAP Prompt Caching (Anthropic) | `cbfcc66`, `79a9638` | `main` |
 | 24 | 2026-06-01 | 对话导入导出 /export + /import | `1e8e477` | `main` |

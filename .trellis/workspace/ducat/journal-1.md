@@ -874,3 +874,37 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 27: skill 自进化 (agent 更新已有 skill)
+
+**Date**: 2026-06-01
+**Task**: skill 自进化 (agent 更新已有 skill)
+**Branch**: `main`
+
+### Summary
+
+承接 experiential-skill-gen decision 5。反思起草时若识别这次工作流是某已有生成 skill 的改进，用同名取代而非堆重复。复用既有 create→promote 同名替换，真正新增只有'让反思模型看见已有 skill'：render_reflection_prompt 注入生成 skill 候选清单 + 进化指令(空候选退回纯 create 字节级兼容)，反思仅在有候选时挂只读 load_skill；reserved_names(canon_skill_names)守卫拦正典同名死 skill；/skill list 标注 (revision of live)。修订仍走 pending→keep 取代，不直接改 live/不留备份/不做 patch。10 新测试 + 904 全过 0 回归，ruff/pyright clean，无新依赖。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d631ea6` | (see git log) |
+| `2cc9265` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
