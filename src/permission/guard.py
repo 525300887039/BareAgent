@@ -50,6 +50,10 @@ class PermissionGuard:
         # Read-only isolation for sub-agents is handled at the AgentType layer
         # (memory_writable), not here.
         "memory",
+        # skill_create writes only to the generated-skills pending sandbox and
+        # is exposed only inside the isolated reflection call (never the main
+        # tool set / sub-agents), so prompting would be noise.
+        "skill_create",
     }
     AUTO_SAFE_PATTERNS = [
         re.compile(r"^(ls|cat|head|tail|wc|echo|pwd|date|which|type)\b"),

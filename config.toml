@@ -207,3 +207,17 @@ jitter = true
 enabled = true
 # 缓存 TTL："5m"（默认，交互式 agent 甜区）或 "1h"（写 2×，适合长时间挂起）。
 ttl = "5m"
+
+[skills]
+# 经验式技能生成：复杂的多轮任务收尾后，agent 自动把工作流起草成可复用 skill
+# 草稿（落 pending 区），用户用 /skill keep 提升到可加载。env 覆盖：
+# BAREAGENT_SKILLS_AUTO_GENERATE。关闭即全链路短路（无额外反思 LLM 调用）。
+auto_generate = true
+# 触发为双条件 AND（自会话开始/上次起草后累计）：工具调用数 + 用户回复数同时达标。
+min_tool_calls = 5
+min_user_replies = 3
+# pending 草稿数量软上限，超出按最旧裁剪（<=0 关闭裁剪）。
+max_pending = 10
+# 生成 skill 根目录覆盖（留空 = ~/.bareagent/projects/<workspace-slug>/skills/，
+# 与仓库 checked-in 的 skills/ 正典分离，项目隔离，不进版本控制）。
+dir = ""

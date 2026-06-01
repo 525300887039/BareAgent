@@ -37,10 +37,16 @@ def agent_loop(
     token_tracker: Any = None,
     hook_engine: Any = None,
     retry_policy: RetryPolicy | None = None,
+    skill_gen: Any = None,
 ) -> str:
     compact = compact_fn or (lambda _messages: None)
     hook_session_id = _resolve_hook_session_id(compact_fn)
     hook_cwd = os.getcwd()
+    # Tool calls made during THIS user turn (accumulated across iterations).
+    # Fed to ``skill_gen`` only on normal completion so a failed/aborted turn
+    # never counts toward experiential skill generation. Sub-agents pass
+    # skill_gen=None, keeping generation a main-loop-only concern (like hooks).
+    turn_tool_calls = 0
 
     for _iteration in range(max_iterations):
         _run_background(bg_manager, messages)
@@ -106,8 +112,11 @@ def agent_loop(
         if response.text and console is not None and not streamed_output:
             console.print_assistant(response.text)
         if not response.has_tool_calls:
+            if skill_gen is not None:
+                skill_gen.note_turn(turn_tool_calls)
             return response.text or ""
 
+        turn_tool_calls += len(response.tool_calls)
         results: list[dict[str, Any]] = []
         for call in response.tool_calls:
             if console is not None and call.id not in displayed_tool_calls:

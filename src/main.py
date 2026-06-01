@@ -29,6 +29,7 @@ from src.core.fileutil import (
     optional_string as _coerce_optional_string,
 )
 from src.core.handlers.bash import run_bash
+from src.core.handlers.skill import SKILL_CREATE_TOOL_SCHEMA, run_skill_create
 from src.core.loop import LLMCallError, agent_loop
 from src.core.retry import RetryPolicy
 from src.core.tools import get_handlers, get_tools
@@ -64,6 +65,12 @@ from src.permission.guard import (
 )
 from src.permission.rules import parse_permission_rules
 from src.planning.agent_types import BUILTIN_AGENT_TYPES, DEFAULT_AGENT_TYPE
+from src.planning.skill_gen import DRAFT_INSTRUCTION, SkillGenConfig, SkillGenerator
+from src.planning.skill_store import (
+    SkillStore,
+    SkillStoreError,
+    resolve_generated_skills_root,
+)
 from src.planning.skills import SkillLoader, resolve_skills_dir
 from src.planning.tasks import TaskManager
 from src.planning.todo import TodoManager
@@ -174,6 +181,22 @@ class RetryConfig:
 
 
 @dataclass(slots=True)
+class SkillsConfig:
+    # Experiential skill generation (task 06-01-experiential-skill-gen): after a
+    # complex multi-turn task the agent auto-drafts a reusable skill into a
+    # pending area for the user to promote with /skill keep.
+    auto_generate: bool = True
+    # Double-AND trigger thresholds (cumulative since session start / last draft).
+    min_tool_calls: int = 5
+    min_user_replies: int = 3
+    # Soft cap on pending drafts (oldest pruned beyond this; <=0 disables).
+    max_pending: int = 10
+    # Generated-skills root override. Empty -> per-project default under
+    # ~/.bareagent/projects/<slug>/skills/.
+    dir: str = ""
+
+
+@dataclass(slots=True)
 class Config:
     provider: ProviderConfig
     permission: PermissionConfig
@@ -194,6 +217,7 @@ class Config:
     # Prompt caching (Anthropic explicit cache_control breakpoints). Defined in
     # provider.base so the factory/provider share one type, mirroring thinking.
     cache: CacheConfig = field(default_factory=CacheConfig)
+    skills: SkillsConfig = field(default_factory=SkillsConfig)
 
 
 # Dotted config paths that ``/reload`` can hot-apply to live runtime objects.
@@ -526,6 +550,47 @@ def _parse_cache_config(cache_raw: dict) -> CacheConfig:
     return CacheConfig(enabled=enabled, ttl=ttl)
 
 
+def _parse_skills_config(skills_raw: dict) -> SkillsConfig:
+    """Parse the ``[skills]`` config section (defensive, never crashes boot).
+
+    ``auto_generate`` honors ``BAREAGENT_SKILLS_AUTO_GENERATE`` (mirrors
+    ``[retry]``/``[cache]``); the rest are config-only and fall back per field.
+    Note ``BAREAGENT_SKILLS_DIR`` is a *separate* knob for the repo canon dir
+    (``resolve_skills_dir``), so the generated-root override here is config-only.
+    """
+    defaults = SkillsConfig()
+    try:
+        auto_generate = _resolve_bool(
+            bool(skills_raw.get("auto_generate", defaults.auto_generate)),
+            "BAREAGENT_SKILLS_AUTO_GENERATE",
+        )
+    except (TypeError, ValueError):
+        auto_generate = defaults.auto_generate
+
+    def _int_field(key: str, fallback: int) -> int:
+        try:
+            return int(skills_raw.get(key, fallback))
+        except (TypeError, ValueError):
+            return fallback
+
+    return SkillsConfig(
+        auto_generate=auto_generate,
+        min_tool_calls=_int_field("min_tool_calls", defaults.min_tool_calls),
+        min_user_replies=_int_field("min_user_replies", defaults.min_user_replies),
+        max_pending=_int_field("max_pending", defaults.max_pending),
+        dir=str(skills_raw.get("dir", defaults.dir)),
+    )
+
+
+def _build_skillgen_config(skills: SkillsConfig) -> SkillGenConfig:
+    """Adapt the user-facing ``SkillsConfig`` to the pure ``SkillGenConfig``."""
+    return SkillGenConfig(
+        enabled=skills.auto_generate,
+        min_tool_calls=skills.min_tool_calls,
+        min_user_replies=skills.min_user_replies,
+    )
+
+
 def load_config(
     config_path: Path,
     *,
@@ -693,6 +758,9 @@ def load_config(
     cache_raw = raw_config.get("cache", {})
     cache_config = _parse_cache_config(cache_raw if isinstance(cache_raw, dict) else {})
 
+    skills_raw = raw_config.get("skills", {})
+    skills_config = _parse_skills_config(skills_raw if isinstance(skills_raw, dict) else {})
+
     memory_raw = raw_config.get("memory", {})
     memory_config = MemoryConfig(
         enabled=_resolve_bool(
@@ -729,6 +797,7 @@ def load_config(
         hooks=hooks_config,
         retry=retry_config,
         cache=cache_config,
+        skills=skills_config,
     )
 
 
@@ -912,6 +981,7 @@ _SLASH_COMMANDS = [
     "/reload",
     "/remember",
     "/forget",
+    "/skill",
 ]
 _HELP_TEXT = (
     "Available commands:\n"
@@ -940,7 +1010,8 @@ _HELP_TEXT = (
     "  /lsp       Manage LSP servers (status | list | reload <language>)\n"
     "  /reload    Reload config.toml (theme + permission hot-apply; others need restart)\n"
     "  /remember  Save information to persistent memory (/remember <text>)\n"
-    "  /forget    Remove information from persistent memory (/forget <text>)"
+    "  /forget    Remove information from persistent memory (/forget <text>)\n"
+    "  /skill     Manage generated skills (list | keep <name> | discard <name>)"
 )
 
 
@@ -2111,6 +2182,114 @@ def _dispatch_loop_command(
     )
 
 
+def _run_skill_reflection(
+    *,
+    provider: Any,
+    messages: list[dict[str, Any]],
+    store: SkillStore,
+    console: AgentConsole,
+    token_tracker: Any,
+    permission: Any,
+    max_pending: int,
+) -> None:
+    """Reflect on the just-finished session and draft a reusable skill.
+
+    Runs an isolated ``agent_loop`` on a COPY of the conversation with only the
+    ``skill_create`` tool exposed, so the real history / turn result stay clean
+    and normal turns / sub-agents never see the tool. The model may decline
+    (reply "no skill") for trivial work. Never raises — a reflection failure
+    must not break the REPL.
+    """
+    console.print_status("Reflecting on this session to draft a reusable skill...")
+    reflection_messages = list(messages)
+    reflection_messages.append({"role": "user", "content": DRAFT_INSTRUCTION})
+    draft_handlers = {"skill_create": partial(run_skill_create, store=store)}
+    try:
+        agent_loop(
+            provider=provider,
+            messages=reflection_messages,
+            tools=[SKILL_CREATE_TOOL_SCHEMA],
+            handlers=draft_handlers,
+            permission=permission,
+            stream=False,
+            console=console,
+            max_iterations=4,
+            token_tracker=token_tracker,
+            skill_gen=None,
+        )
+    except (LLMCallError, KeyboardInterrupt):
+        console.print_status("Skill reflection skipped (interrupted or LLM error).")
+        return
+    except Exception as exc:  # never let reflection break the REPL
+        console.print_error(f"Skill reflection failed: {type(exc).__name__}: {exc}")
+        return
+    removed = store.prune_pending(max_pending)
+    pending = store.list_pending()
+    if pending:
+        console.print_status(
+            "Pending skills: "
+            + ", ".join(pending)
+            + " — /skill keep <name> to keep, /skill discard <name> to drop."
+        )
+    if removed:
+        console.print_status(f"Pruned old pending drafts: {', '.join(removed)}")
+
+
+def _print_skill_list(store: SkillStore, loader: SkillLoader, console: AgentConsole) -> None:
+    live = [meta.skill_name for meta in loader.scan()]
+    pending = store.list_pending()
+    lines = ["Loadable skills:"]
+    lines += [f"  - {name}" for name in live] or ["  (none)"]
+    lines.append("Pending drafts:")
+    lines += [
+        f"  - {name}  (/skill keep {name} | /skill discard {name})" for name in pending
+    ] or ["  (none)"]
+    console.print_status("\n".join(lines))
+
+
+def _dispatch_skill_command(
+    text: str,
+    *,
+    store: SkillStore,
+    loader: SkillLoader,
+    console: AgentConsole,
+) -> None:
+    """Handle ``/skill`` (``list`` | ``keep <name>`` | ``discard <name>``).
+
+    Never raises — fails safe with an error line so a bad argument can't crash
+    the REPL (same stance as the other ``_dispatch_*`` commands).
+    """
+    parts = text.split()
+    sub = parts[1].lower() if len(parts) > 1 else "list"
+    arg = parts[2] if len(parts) > 2 else ""
+    try:
+        if sub == "list":
+            _print_skill_list(store, loader, console)
+            return
+        if sub == "keep":
+            if not arg:
+                console.print_error("Usage: /skill keep <name>")
+                return
+            console.print_status(store.promote(arg))
+            # Refresh the cache so the promoted skill is loadable this session.
+            loader.scan()
+            return
+        if sub == "discard":
+            if not arg:
+                console.print_error("Usage: /skill discard <name>")
+                return
+            console.print_status(store.discard(arg))
+            return
+        console.print_error(
+            f"Unknown /skill subcommand {sub!r}. "
+            "Use: /skill [list | keep <name> | discard <name>]."
+        )
+    except SkillStoreError as exc:
+        console.print_error(f"Error: {exc}")
+    except Exception as exc:  # never raise out of a slash command
+        console.print_error(f"/skill failed: {type(exc).__name__}: {exc}")
+
+
 def _dispatch_export_command(
     text: str,
     *,
@@ -2199,7 +2378,15 @@ def _run_stdio_session(
         notifier=bg_manager,
     )
     teammate_manager = _load_teammate_manager(workspace_path, ui_console)
-    skill_loader = SkillLoader(resolve_skills_dir())
+    # Experiential skill generation: generated skills live under a project-
+    # isolated user-global root (separate from the repo's checked-in canon).
+    # SkillLoader scans both (canon wins on name conflicts); SkillStore owns the
+    # pending drafts + promotion; SkillGenerator owns the trigger decision.
+    generated_skills_root = resolve_generated_skills_root(workspace_path, config.skills.dir)
+    skill_store = SkillStore(generated_skills_root)
+    skill_loader = SkillLoader(resolve_skills_dir(), generated_root=generated_skills_root)
+    skillgen_config = _build_skillgen_config(config.skills)
+    skill_generator = SkillGenerator(skillgen_config) if skillgen_config.enabled else None
     memory_manager = _build_memory_manager(config, workspace_path, ui_console)
     message_bus, main_mailbox_cursor = _switch_session_mailbox(
         workspace_path,
@@ -2313,6 +2500,8 @@ def _run_stdio_session(
                 )
                 todo_manager.reset()
                 token_tracker.reset()
+                if skill_generator is not None:
+                    skill_generator.reset()
                 new_session_id = _generate_session_id(
                     transcript_mgr,
                     reserved_ids={_get_compact_session_id(compact_fn)},
@@ -2558,6 +2747,14 @@ def _run_stdio_session(
                     ui_console=ui_console,
                 )
                 continue
+            if text == "/skill" or text.startswith("/skill "):
+                _dispatch_skill_command(
+                    text,
+                    store=skill_store,
+                    loader=skill_loader,
+                    console=ui_console,
+                )
+                continue
             if text == "/reload":
                 _dispatch_reload_command(
                     config=config,
@@ -2648,8 +2845,24 @@ def _run_stdio_session(
                     token_tracker=token_tracker,
                     hook_engine=hook_engine,
                     retry_policy=retry_policy,
+                    skill_gen=skill_generator,
                 )
                 _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
+                # Experiential skill generation: when this turn pushed the
+                # cumulative activity past both thresholds, reflect on the
+                # session and draft a reusable skill (isolated extra LLM call).
+                # Reset first so the trigger does not re-fire every later turn.
+                if skill_generator is not None and skill_generator.should_draft():
+                    skill_generator.reset()
+                    _run_skill_reflection(
+                        provider=provider,
+                        messages=messages,
+                        store=skill_store,
+                        console=ui_console,
+                        token_tracker=token_tracker,
+                        permission=permission,
+                        max_pending=config.skills.max_pending,
+                    )
                 main_mailbox_cursor = _drain_team_mailbox(
                     ui_console,
                     message_bus=message_bus,

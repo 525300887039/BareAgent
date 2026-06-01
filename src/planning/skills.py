@@ -51,30 +51,42 @@ def resolve_skills_dir() -> Path:
 
 
 class SkillLoader:
-    def __init__(self, skills_dir: Path) -> None:
+    def __init__(self, skills_dir: Path, generated_root: Path | None = None) -> None:
+        # ``skills_dir`` is the repo's checked-in canon. ``generated_root`` is the
+        # optional experiential-skill layer (live promoted skills only — its
+        # ``.pending/`` drafts are NOT scanned because the glob is one level
+        # deep). Canon wins on name conflicts.
         self.skills_dir = skills_dir
+        self.generated_root = generated_root
         self._cache: dict[str, SkillMeta] = {}
 
     def scan(self) -> list[SkillMeta]:
         skills: list[SkillMeta] = []
         cache: dict[str, SkillMeta] = {}
 
-        try:
-            entries = sorted(self.skills_dir.glob("*/SKILL.md"))
-        except OSError:
-            self._cache = {}
-            return []
+        # Order matters: scan canon first so a generated skill never shadows a
+        # repo skill of the same name.
+        roots = [self.skills_dir]
+        if self.generated_root is not None:
+            roots.append(self.generated_root)
 
-        for skill_file in entries:
-            skill_name = skill_file.parent.name
-            description = self._extract_description(skill_file)
-            meta = SkillMeta(
-                skill_name=skill_name,
-                description=description,
-                path=skill_file,
-            )
-            skills.append(meta)
-            cache[skill_name] = meta
+        for root in roots:
+            try:
+                entries = sorted(root.glob("*/SKILL.md"))
+            except OSError:
+                continue
+            for skill_file in entries:
+                skill_name = skill_file.parent.name
+                if skill_name in cache:
+                    continue
+                description = self._extract_description(skill_file)
+                meta = SkillMeta(
+                    skill_name=skill_name,
+                    description=description,
+                    path=skill_file,
+                )
+                skills.append(meta)
+                cache[skill_name] = meta
 
         self._cache = cache
         return skills
