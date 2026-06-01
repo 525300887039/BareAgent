@@ -707,3 +707,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: ROADMAP 4.2 LLM 重试策略
+
+**Date**: 2026-06-01
+**Task**: ROADMAP 4.2 LLM 重试策略
+**Branch**: `main`
+
+### Summary
+
+在 _invoke_provider 单一汇聚点加 app 层 LLM 重试：纯模块 retry.py（RetryPolicy/is_retryable duck-typing 分类/compute_delay 指数退避+jitter/run_with_retry 驱动），provider 设 max_retries=0 独占重试消除 2xN 复合，[retry] 配置段+env 覆盖，子代理（含后台/嵌套）继承 retry_policy。耗尽后仍 raise LLMCallError from exc，KeyboardInterrupt 透传，retry_policy=None 保持旧行为。33 新测试，pytest 804 passed，ruff/format clean，无新依赖。Out of Scope: 流式 mid-stream 续传、Retry-After 解析、team 自治守护路径。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2046332` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

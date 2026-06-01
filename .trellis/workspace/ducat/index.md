@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 21
+- **Total Sessions**: 22
 - **Last Active**: 2026-06-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~709 | Active |
+| `journal-1.md` | ~742 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 22 | 2026-06-01 | ROADMAP 4.2 LLM 重试策略 | `2046332` | `main` |
 | 21 | 2026-06-01 | Cron 定时任务调度与 /loop 命令（ROADMAP 4.1） | `7970881` | `main` |
 | 20 | 2026-06-01 | Git Worktree 子代理隔离（ROADMAP 3.3） | `bd49e2d` | `main` |
 | 19 | 2026-06-01 | 代码审查修复（WorkspaceEdit 双形态/UTF-16 偏移/PDF 页范围越界） | `1c4a04b` | `main` |
