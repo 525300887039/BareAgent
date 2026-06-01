@@ -840,3 +840,37 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 26: 经验式技能生成 (agent 从经验自动长 skill)
+
+**Date**: 2026-06-01
+**Task**: 经验式技能生成 (agent 从经验自动长 skill)
+**Branch**: `main`
+
+### Summary
+
+对标 Hermes Agent 的自动生成 skill，落半自动安全档：复杂多轮任务(工具≥5且回复≥3)收尾自动反思起草 SKILL.md 草稿到 .pending/，用户 /skill keep 提升。skill_create 只在隔离反思 agent_loop 暴露(主循环触发/子代理隔离/auto_generate=false 全短路 一处搞定)；SkillLoader 多根(正典优先)；项目隔离存储复用 derive_memory_slug。29 新测试 + 894 全过 0 回归，ruff/pyright clean，无新依赖。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `140e0f2` | (see git log) |
+| `f60686d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 25
+- **Total Sessions**: 26
 - **Last Active**: 2026-06-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~842 | Active |
+| `journal-1.md` | ~876 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 26 | 2026-06-01 | 经验式技能生成 (agent 从经验自动长 skill) | `140e0f2`, `f60686d` | `main` |
 | 25 | 2026-06-01 | ROADMAP Prompt Caching (Anthropic) | `cbfcc66`, `79a9638` | `main` |
 | 24 | 2026-06-01 | 对话导入导出 /export + /import | `1e8e477` | `main` |
 | 23 | 2026-06-01 | ROADMAP 4.3 配置热重载 | `953daad` | `main` |
