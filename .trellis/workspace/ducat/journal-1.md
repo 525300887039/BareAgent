@@ -740,3 +740,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 23: ROADMAP 4.3 配置热重载
+
+**Date**: 2026-06-01
+**Task**: ROADMAP 4.3 配置热重载
+**Branch**: `main`
+
+### Summary
+
+/reload 命令（REPL 主循环同步、线程安全）热重载 theme + permission：load_config(config.path) 重读 → _diff_config_for_reload 纯函数（asdict 拍平降一层、list/dict 整体比较、path 跳过、_HOT_RELOAD_PATHS 分类 hot vs restart）→ 应用到运行时对象并镜像回 live config → 报告。失败安全 all-or-nothing（坏 TOML 报错保持当前配置零应用，theme/mode 非法局部跳过不崩）。被动 mtime 监听（无后台线程无新依赖，启动初始化基线避免首轮误报，/reload 后刷新基线）。13 新测试，pytest 817 passed，ruff/pyright clean。Out of Scope: 后台 auto-watch+apply（线程安全坑）、热重载 provider/mcp/lsp、retry/cost 纳 hot。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `953daad` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
