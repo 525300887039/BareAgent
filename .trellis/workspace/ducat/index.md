@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 23
+- **Total Sessions**: 24
 - **Last Active**: 2026-06-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~775 | Active |
+| `journal-1.md` | ~808 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 24 | 2026-06-01 | 对话导入导出 /export + /import | `1e8e477` | `main` |
 | 23 | 2026-06-01 | ROADMAP 4.3 配置热重载 | `953daad` | `main` |
 | 22 | 2026-06-01 | ROADMAP 4.2 LLM 重试策略 | `2046332` | `main` |
 | 21 | 2026-06-01 | Cron 定时任务调度与 /loop 命令（ROADMAP 4.1） | `7970881` | `main` |

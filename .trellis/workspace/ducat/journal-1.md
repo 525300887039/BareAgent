@@ -773,3 +773,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 24: 对话导入导出 /export + /import
+
+**Date**: 2026-06-01
+**Task**: 对话导入导出 /export + /import
+**Branch**: `main`
+
+### Summary
+
+新增 /export（markdown 默认 / json 自包含，落 .transcripts/exports/）+ /import（载入新会话）。纯模块 src/memory/conversation_io.py：render_markdown（复刻 _replay_stdio_transcript 遍历、跳过 system、tool_use 摘要、tool_result 截断、thinking 默认跳过）/ to_export_json（wrapper 保真）/ parse_import（自动判形 wrapper-dict/裸list/jsonl + 校验 list[dict]+role，非法 raise ValueError）。/import inline 镜像 /resume 完整会话切换（messages[:]、token_tracker.reset、新 sid、切 mailbox、rebuild handlers 17 参、_replay、snapshot），三类失败在 mutation 前 continue 零改动。/export helper try/except never-raise、显式路径相对锚 workspace、不经 PermissionGuard。20 新测试，pytest 837 passed，ruff/pyright clean，无新依赖。trellis-check 揪出并修正源码 emoji 违规（已记 no-emoji-in-source 记忆）。参考 Claude Code /export。Out of Scope: 导入追加当前对话、剪贴板、HTML/远端分享、批量导出。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1e8e477` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
