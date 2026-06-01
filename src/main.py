@@ -10,7 +10,7 @@ import sys
 import tomllib
 from collections.abc import Callable
 from collections.abc import Set as AbstractSet
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from functools import partial
 from pathlib import Path
@@ -183,6 +183,105 @@ class Config:
     cost: CostConfig = field(default_factory=CostConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)
     retry: RetryConfig = field(default_factory=RetryConfig)
+
+
+# Dotted config paths that ``/reload`` can hot-apply to live runtime objects.
+# Anything else that changes on disk is reported as "requires restart" because
+# it was baked into a manager/client/provider at boot (see CLAUDE.md ROADMAP 4.3).
+_HOT_RELOAD_PATHS = frozenset(
+    {
+        "ui.theme",
+        "permission.mode",
+        "permission.allow",
+        "permission.deny",
+    }
+)
+
+
+@dataclass(slots=True)
+class ConfigChange:
+    """A single changed config leaf, identified by its dotted path."""
+
+    path: str  # dotted, e.g. "ui.theme"
+    old: Any
+    new: Any
+
+
+@dataclass(slots=True)
+class ReloadReport:
+    """Classification of a config diff into hot (applied) vs restart-required."""
+
+    hot: list[ConfigChange]  # hot-reloadable and will be applied
+    restart: list[ConfigChange]  # changed but only reported (needs restart)
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.hot or self.restart)
+
+
+def _flatten_config(data: dict[str, Any]) -> dict[str, Any]:
+    """Flatten a top-level ``asdict(Config)`` mapping into dotted-path leaves.
+
+    Each top-level Config field (provider/permission/ui/...) is a nested
+    dataclass that ``asdict`` rendered as a dict, so we descend exactly one
+    level to produce ``section.field`` leaves. Whatever sits at the second level
+    (scalar, ``list`` like ``permission.allow``, or ``dict`` like ``cost.prices``)
+    is a single leaf compared wholesale — order changes in a list count as a
+    change. ``path`` is a scalar and stays a top-level leaf.
+    """
+    leaves: dict[str, Any] = {}
+    for key, value in data.items():
+        if isinstance(value, dict):
+            for sub_key, sub_value in value.items():
+                leaves[f"{key}.{sub_key}"] = sub_value
+        else:
+            leaves[key] = value
+    return leaves
+
+
+def _diff_config_for_reload(old: Config, new: Config) -> ReloadReport:
+    """Diff two configs and classify each changed leaf as hot vs restart.
+
+    Pure function (no side effects) so it can be unit tested. The ``path`` field
+    (a resolved filesystem path, not a config knob) is skipped entirely.
+    """
+    old_flat = _flatten_config(asdict(old))
+    new_flat = _flatten_config(asdict(new))
+
+    hot: list[ConfigChange] = []
+    restart: list[ConfigChange] = []
+    for dotted in sorted(set(old_flat) | set(new_flat)):
+        if dotted == "path":
+            continue
+        old_value = old_flat.get(dotted)
+        new_value = new_flat.get(dotted)
+        if old_value == new_value:
+            continue
+        change = ConfigChange(path=dotted, old=old_value, new=new_value)
+        if dotted in _HOT_RELOAD_PATHS:
+            hot.append(change)
+        else:
+            restart.append(change)
+    return ReloadReport(hot=hot, restart=restart)
+
+
+def _config_mtimes(config: Config) -> dict[str, float]:
+    """Best-effort mtimes of config.toml + its .local sibling.
+
+    Missing files are skipped (so creating/deleting the local override is itself
+    a detectable change). Used by the passive on-prompt change detector.
+    """
+    main_path = config.path
+    local_path = main_path.with_suffix("").with_name(
+        main_path.stem + ".local" + main_path.suffix,
+    )
+    mtimes: dict[str, float] = {}
+    for path in (main_path, local_path):
+        try:
+            mtimes[str(path)] = os.stat(path).st_mtime
+        except OSError:
+            continue
+    return mtimes
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
@@ -773,6 +872,7 @@ _SLASH_COMMANDS = [
     "/mcp",
     "/mcp:",
     "/lsp",
+    "/reload",
     "/remember",
     "/forget",
 ]
@@ -799,6 +899,7 @@ _HELP_TEXT = (
     "  /mcp       Manage MCP servers (status | list | reload <name>)\n"
     "  /mcp:      Invoke an MCP prompt (e.g. /mcp:server:prompt key=value)\n"
     "  /lsp       Manage LSP servers (status | list | reload <language>)\n"
+    "  /reload    Reload config.toml (theme + permission hot-apply; others need restart)\n"
     "  /remember  Save information to persistent memory (/remember <text>)\n"
     "  /forget    Remove information from persistent memory (/forget <text>)"
 )
@@ -809,6 +910,77 @@ def _build_permission_guard(config: Config) -> PermissionGuard:
     guard.allow_rules = list(config.permission.allow)
     guard.deny_rules = list(config.permission.deny)
     return guard
+
+
+def _format_config_change(change: ConfigChange) -> str:
+    return f"{change.path} {change.old!r}→{change.new!r}"
+
+
+def _dispatch_reload_command(
+    *,
+    config: Config,
+    permission: PermissionGuard,
+    ui_console: AgentConsole,
+) -> None:
+    """Re-read config from disk and hot-apply the theme + permission subset.
+
+    All-or-nothing failure safety: if ``load_config`` raises (bad TOML, validation
+    failure) the current live config is left untouched. Hot-reloadable changes
+    (``ui.theme`` + ``permission.{mode,allow,deny}``) are applied to the live
+    runtime objects *and* mirrored back into ``config`` so later reads stay
+    consistent; everything else is only reported as "requires restart".
+    """
+    from src.ui.theme import format_unknown_theme, get_theme
+
+    try:
+        new_config = load_config(config.path)
+    except Exception as exc:
+        ui_console.print_error(
+            f"Reload failed ({type(exc).__name__}: {exc}). Keeping current config."
+        )
+        return
+
+    report = _diff_config_for_reload(config, new_config)
+    if not report.changed:
+        ui_console.print_status("Config unchanged.")
+        return
+
+    applied: list[str] = []
+    for change in report.hot:
+        if change.path == "ui.theme":
+            tm = get_theme()
+            if tm.switch(new_config.ui.theme):
+                ui_console.set_theme(tm)
+                config.ui.theme = new_config.ui.theme
+                applied.append(_format_config_change(change))
+            else:
+                ui_console.print_error(format_unknown_theme(new_config.ui.theme))
+        elif change.path == "permission.mode":
+            try:
+                permission.mode = PermissionMode(new_config.permission.mode)
+            except ValueError:
+                ui_console.print_error(
+                    f"Invalid permission.mode {new_config.permission.mode!r}; skipped."
+                )
+                continue
+            config.permission.mode = new_config.permission.mode
+            applied.append(_format_config_change(change))
+        elif change.path == "permission.allow":
+            permission.allow_rules = list(new_config.permission.allow)
+            config.permission.allow = list(new_config.permission.allow)
+            applied.append(_format_config_change(change))
+        elif change.path == "permission.deny":
+            permission.deny_rules = list(new_config.permission.deny)
+            config.permission.deny = list(new_config.permission.deny)
+            applied.append(_format_config_change(change))
+
+    if applied:
+        ui_console.print_status("Reloaded: " + ", ".join(applied))
+    if report.restart:
+        restart_summary = ", ".join(_format_config_change(change) for change in report.restart)
+        ui_console.print_status(
+            f"Changed but requires restart: {restart_summary} (restart BareAgent to apply)"
+        )
 
 
 def _build_permission_allow_rule(
@@ -2003,6 +2175,10 @@ def _run_stdio_session(
         f"Permission mode: {permission.mode.value}. Type /help to see available commands."
     )
 
+    # Passive config-change detection (ROADMAP 4.3): record the config files'
+    # mtimes once at startup so we only nudge the user about *new* edits.
+    last_config_mtimes = _config_mtimes(config)
+
     try:
         while True:
             main_mailbox_cursor = _drain_team_mailbox(
@@ -2010,6 +2186,10 @@ def _run_stdio_session(
                 message_bus=message_bus,
                 since=main_mailbox_cursor,
             )
+            current_config_mtimes = _config_mtimes(config)
+            if current_config_mtimes != last_config_mtimes:
+                last_config_mtimes = current_config_mtimes
+                ui_console.print_status("config changed on disk — type /reload to apply")
             try:
                 user_input = read_fn()
             except (KeyboardInterrupt, EOFError):
@@ -2213,6 +2393,14 @@ def _run_stdio_session(
                     lsp_manager=lsp_manager,
                     ui_console=ui_console,
                 )
+                continue
+            if text == "/reload":
+                _dispatch_reload_command(
+                    config=config,
+                    permission=permission,
+                    ui_console=ui_console,
+                )
+                last_config_mtimes = _config_mtimes(config)
                 continue
             if text.startswith("/mcp:"):
                 snapshot_len = len(messages)

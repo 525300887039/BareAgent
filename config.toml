@@ -1,5 +1,10 @@
 # Tip: run `bareagent init` for an interactive provider setup wizard that writes
 # config.local.toml for you (DeepSeek / OpenAI / Anthropic / Qwen / GLM / custom).
+#
+# 配置热重载（ROADMAP 4.3）：改完本文件 / config.local.toml 后，REPL 内 `/reload`
+# 可热重载 `[ui] theme` 与 `[permission] mode/allow/deny`（改完即生效，无需重启）；
+# 其余配置（provider / mcp / lsp / hooks 等 boot 时固化的连接/客户端）仅报告
+# “需重启”，重启 BareAgent 后才生效。改坏 TOML 时 `/reload` 报错并保持当前配置。
 [provider]
 name = "openai"
 model = "gpt-4.1"
