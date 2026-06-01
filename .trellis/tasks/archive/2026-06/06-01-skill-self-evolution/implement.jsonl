@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "run_skill_create 的 reserved_names 命中返回结构化 Error: 字符串而非抛错；_print_skill_list / 反思 never-raise"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Python 3.12+/ruff/pytest、反过度设计（本任务刻意复用 promote/SkillLoader 不造新机制）、纯逻辑可单测、源码禁 emoji"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "本任务=极小增量，强复用：promote 同名替换、SkillLoader 多根/load、make_skill_handlers/LOAD_SKILL_TOOL_SCHEMAS、render_reflection_prompt 接 DRAFT_INSTRUCTION——动手前先确认复用点"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "改动跨 反思调用(main)→候选清单(SkillLoader 扫 store.root)→指令(skill_gen)→守卫(handler)→UX(/skill list 标注)，向后兼容(空候选退化)的数据流要跨层想清楚"}

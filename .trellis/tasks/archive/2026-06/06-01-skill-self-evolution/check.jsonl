@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "审查基线：ruff/pytest 绿、反过度设计、纯逻辑单测覆盖、无 emoji、Conventional Commits"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核验 reserved_names 守卫返回 Error 不抛、不写盘；向后兼容(reserved_names=None 不拦、空候选退化纯 create)；正典只读不被覆盖"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核验跨层一致性：候选清单只含生成 live(不含 pending/正典)、同名取代经 promote、/skill list 标注、反思仍主循环 only"}
