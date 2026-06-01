@@ -21,6 +21,7 @@ from src.concurrency.background import BackgroundManager
 from src.concurrency.scheduler import Scheduler, SchedulerError
 from src.core.context import assemble_system_prompt
 from src.core.fileutil import (
+    atomic_write_text,
     generate_random_id,
     is_tool_result_message,
 )
@@ -47,6 +48,7 @@ from src.lsp import (
 from src.mcp import MCPCallError, MCPConfig, MCPError, MCPManager, parse_mcp_config
 from src.mcp.registry import _flatten_content as _mcp_flatten_content
 from src.memory.compact import Compactor
+from src.memory.conversation_io import parse_import, render_markdown, to_export_json
 from src.memory.persistent import (
     MemoryManager,
     build_forget_instruction,
@@ -865,6 +867,8 @@ _SLASH_COMMANDS = [
     "/theme",
     "/sessions",
     "/resume",
+    "/export",
+    "/import",
     "/cost",
     "/loop",
     "/log",
@@ -891,6 +895,8 @@ _HELP_TEXT = (
     "  /theme     Switch color theme (catppuccin-mocha, dracula, nord, tokyo-night, gruvbox)\n"
     "  /sessions  List saved sessions\n"
     "  /resume    Resume a previous session\n"
+    "  /export    Export conversation (markdown default | json) [path]\n"
+    "  /import    Import a conversation file (.json/.jsonl) into a new session\n"
     "  /cost      Show token usage and estimated cost for this session\n"
     "  /loop      Schedule a shell command to repeat every N seconds "
     "(list|cancel <id>|clear); runs WITHOUT permission prompts\n"
@@ -2068,6 +2074,59 @@ def _dispatch_loop_command(
     )
 
 
+def _dispatch_export_command(
+    text: str,
+    *,
+    messages: list[dict[str, Any]],
+    session_id: str,
+    workspace_path: Path,
+    ui_console: AgentConsole,
+) -> None:
+    """Handle the ``/export`` REPL command.
+
+    Forms: ``/export`` (markdown default), ``/export <format>`` and
+    ``/export <format> <path>`` where format ∈ {markdown, md, json}; the first
+    token, when not a known format, is treated as an explicit path with the
+    default markdown format. Markdown skips system messages and omits thinking;
+    JSON is a faithful self-contained wrapper. Defaults to
+    ``.transcripts/exports/<session>_<ts>.{md,json}``. Runs without permission
+    confirmation (user-initiated, infrastructure tier). Never raises.
+    """
+    try:
+        rest = text[len("/export") :].strip()
+        parts = rest.split(maxsplit=1)
+        if parts and parts[0] in ("markdown", "md", "json"):
+            fmt = "markdown" if parts[0] in ("markdown", "md") else "json"
+            user_path = parts[1].strip() if len(parts) > 1 else ""
+        else:
+            fmt = "markdown"
+            user_path = rest
+
+        ext = "json" if fmt == "json" else "md"
+        if user_path:
+            path = Path(user_path).expanduser()
+            if not path.is_absolute():
+                path = workspace_path / path
+        else:
+            timestamp = datetime.now().strftime(_SESSION_ID_TIMESTAMP_FORMAT)
+            path = workspace_path / ".transcripts" / "exports" / f"{session_id}_{timestamp}.{ext}"
+
+        if fmt == "json":
+            content = to_export_json(
+                messages,
+                session_id=session_id,
+                exported_at=datetime.now().isoformat(),
+            )
+        else:
+            content = render_markdown(messages, title=f"Conversation {session_id}")
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(path, content)
+        ui_console.print_status(f"Exported to {path}")
+    except Exception as exc:  # noqa: BLE001 - never crash the REPL on export
+        ui_console.print_error(f"Export failed: {exc}")
+
+
 def _run_stdio_session(
     config: Config,
     provider: BaseLLMProvider,
@@ -2329,6 +2388,74 @@ def _run_stdio_session(
                 )
                 _replay_stdio_transcript(messages, ui_console)
                 ui_console.print_status(f"Resumed session: {resumed_session}")
+                continue
+            if text == "/export" or text.startswith("/export "):
+                _dispatch_export_command(
+                    text,
+                    messages=messages,
+                    session_id=_get_compact_session_id(compact_fn),
+                    workspace_path=workspace_path,
+                    ui_console=ui_console,
+                )
+                continue
+            if text == "/import" or text.startswith("/import "):
+                _, _, raw_path = text.partition(" ")
+                import_path = raw_path.strip()
+                if not import_path:
+                    ui_console.print_error("Usage: /import <path-to-.json-or-.jsonl>")
+                    continue
+                p = Path(import_path).expanduser()
+                try:
+                    raw_text = p.read_text(encoding="utf-8")
+                except OSError as exc:
+                    ui_console.print_error(f"Cannot read {p}: {exc}")
+                    continue
+                try:
+                    imported_messages = parse_import(raw_text)
+                except ValueError as exc:
+                    ui_console.print_error(f"Invalid conversation file: {exc}")
+                    continue
+                # Validation passed: only now mutate state (fail-safe — any
+                # failure above already continued with zero changes).
+                messages[:] = imported_messages
+                token_tracker.reset()
+                new_sid = _generate_session_id(
+                    transcript_mgr,
+                    reserved_ids={_get_compact_session_id(compact_fn)},
+                )
+                _set_compact_session_id(compact_fn, new_sid)
+                _set_interaction_logger_session(interaction_logger, new_sid)
+                message_bus, main_mailbox_cursor = _switch_session_mailbox(
+                    workspace_path,
+                    new_sid,
+                    current_bus=message_bus,
+                )
+                spawned_agents = {}
+                handlers = _build_handlers(
+                    workspace_path=workspace_path,
+                    todo_manager=todo_manager,
+                    task_manager=task_manager,
+                    skill_loader=skill_loader,
+                    provider=provider,
+                    tools=tools,
+                    permission=permission,
+                    bg_manager=bg_manager,
+                    messages=messages,
+                    config=config,
+                    runtime_id=new_sid,
+                    teammate_manager=teammate_manager,
+                    message_bus=message_bus,
+                    spawned_agents=spawned_agents,
+                    agent_name=MAIN_AGENT_NAME,
+                    mcp_manager=mcp_manager,
+                    lsp_manager=lsp_manager,
+                    memory_manager=memory_manager,
+                )
+                _replay_stdio_transcript(messages, ui_console)
+                _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
+                ui_console.print_status(
+                    f"Imported {len(messages)} messages into new session: {new_sid}"
+                )
                 continue
             if text == "/cost":
                 ui_console.print_status(token_tracker.summary(config.cost.prices))
