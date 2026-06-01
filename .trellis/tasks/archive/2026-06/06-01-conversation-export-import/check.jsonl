@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核查 /import 边界校验与失败安全：坏 JSON / 非 list / 缺 role / 文件不存在 → 报错 + 当前对话与会话状态零改动、不崩；命令异常作为数据回报。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "通用质量门槛：测试覆盖（render/serialize/parse 往返 + dispatch 失败安全）、类型注解、简洁无过度设计、向后兼容（不影响现有 /resume /sessions 路径）。"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "核查是否复用 /resume 会话切换机制、_replay_stdio_transcript 渲染、atomic_write_text、TranscriptManager jsonl 约定，未重复造会话载入/渲染/写盘逻辑。"}

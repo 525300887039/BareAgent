@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "本任务核心：/import 是外部文件边界——必须 validate at the boundary（list[dict] + 每条 role），坏 JSON / 非法 shape → 报错 + 零状态改动（fail-safe，不污染当前会话、不崩 REPL），命令失败作为数据回报而非传播崩溃。对齐 spec 的边界校验与 /reload 的 all-or-nothing 风格。"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "必须复用既有机制而非另造：/import 镜像 /resume 的会话切换链（messages[:]、_set_compact_session_id、_switch_session_mailbox、_build_handlers、_replay_stdio_transcript），markdown 渲染复用 _replay_stdio_transcript 的遍历结构，落盘用 fileutil.atomic_write_text，序列化复用 TranscriptManager 的 jsonl 约定。"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新纯模块 src/memory/conversation_io.py 的落点（与 transcript.py/compact.py 同属 memory 包，纯函数无 REPL 依赖可单测），对齐项目分层与放置惯例。"}
