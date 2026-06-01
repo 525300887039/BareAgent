@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核查失败安全：坏 TOML / 校验失败的 `/reload` 是否捕获并保持当前配置、零应用、不崩 REPL（all-or-nothing，无半套状态）；命令异常是否作为数据回报而非传播崩溃。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "通用质量门槛：测试覆盖（diff 分类 / 失败安全 / mtime）、类型注解、简洁无过度设计、向后兼容（不影响未触发 /reload 的现有路径）。"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "核查是否复用 load_config 与既有 /theme、/default、_build_permission_guard mutation 模式，未重复造配置解析 / 权限装配逻辑。"}

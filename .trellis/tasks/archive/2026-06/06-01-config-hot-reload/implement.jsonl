@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "本任务失败安全核心：`/reload` 重读坏 TOML / 校验失败必须 all-or-nothing（捕获 + 报错 + 保持当前配置，零应用，不崩 REPL）；对齐 spec「strict at the boundary, trust inside」与「tool/命令失败是数据不是崩溃」「validate at the boundary」。命令 dispatch 异常处理风格须一致。"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "必须复用 `load_config(config.path)` 重读、镜像现有 `/theme`（tm.switch + set_theme）与 `/default`/`_build_permission_guard`（mode/allow_rules/deny_rules）的运行时 mutation 模式，而非另造配置解析或权限装配；避免与既有 slash 命令分发重复。"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "决策 D3：diff/分类纯函数放 main.py 模块级（Config 定义在 main.py，独立 core 模块会造 core→main 循环依赖），对齐项目分层与放置惯例。"}
