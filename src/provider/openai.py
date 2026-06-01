@@ -155,6 +155,7 @@ class OpenAIProvider(BaseLLMProvider):
         emitted_tool_call_ids: set[str] = set()
         usage_prompt_tokens = 0
         usage_completion_tokens = 0
+        usage_cached_tokens = 0
         stop_reason = ""
 
         stream = self.client.chat.completions.create(**params)
@@ -167,6 +168,9 @@ class OpenAIProvider(BaseLLMProvider):
                 val = getattr(usage, "completion_tokens", None)
                 if val is not None:
                     usage_completion_tokens = val
+                cached = self._extract_cached_tokens(usage)
+                if cached:
+                    usage_cached_tokens = cached
 
             choices = getattr(chunk, "choices", None) or []
             if not choices:
@@ -220,8 +224,9 @@ class OpenAIProvider(BaseLLMProvider):
             text="".join(text_parts),
             tool_calls=tool_calls,
             stop_reason="tool_calls" if tool_calls else (stop_reason or "stop"),
-            input_tokens=usage_prompt_tokens,
+            input_tokens=max(usage_prompt_tokens - usage_cached_tokens, 0),
             output_tokens=usage_completion_tokens,
+            cache_read_input_tokens=usage_cached_tokens,
         )
 
     def _create_stream_via_responses(
@@ -637,13 +642,46 @@ class OpenAIProvider(BaseLLMProvider):
             )
 
         usage = getattr(response, "usage", None)
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+        cached_tokens = self._extract_cached_tokens(usage)
         return LLMResponse(
             text=message.content or "",
             tool_calls=tool_calls,
             stop_reason=choice.finish_reason or "",
-            input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            input_tokens=max(prompt_tokens - cached_tokens, 0),
             output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            cache_read_input_tokens=cached_tokens,
         )
+
+    @staticmethod
+    def _extract_cached_tokens(usage: Any) -> int:
+        """Read auto-cache hit tokens from an OpenAI/DeepSeek ``usage`` object.
+
+        Normalizes both provider shapes into a single cached-token count (a
+        subset of ``prompt_tokens``, so callers compute full-price input as
+        ``prompt_tokens - cached``):
+          - OpenAI:   ``usage.prompt_tokens_details.cached_tokens``
+          - DeepSeek: ``usage.prompt_cache_hit_tokens``
+        Defensive against missing fields / dict-vs-attr shapes — absent fields
+        degrade to 0 (no behavior change from the pre-caching baseline).
+        """
+        if usage is None:
+            return 0
+        details = getattr(usage, "prompt_tokens_details", None)
+        if details is None and isinstance(usage, dict):
+            details = usage.get("prompt_tokens_details")
+        if details is not None:
+            cached = getattr(details, "cached_tokens", None)
+            if cached is None and isinstance(details, dict):
+                cached = details.get("cached_tokens")
+            if cached:
+                return int(cached)
+        hit = getattr(usage, "prompt_cache_hit_tokens", None)
+        if hit is None and isinstance(usage, dict):
+            hit = usage.get("prompt_cache_hit_tokens")
+        if hit:
+            return int(hit)
+        return 0
 
     def _parse_responses_api_response(self, response: Any) -> LLMResponse:
         payload = self._coerce_responses_payload(response)
@@ -682,14 +720,21 @@ class OpenAIProvider(BaseLLMProvider):
         usage = payload.get("usage", {}) or {}
         input_tokens = int(usage.get("input_tokens", 0) or 0)
         output_tokens = int(usage.get("output_tokens", 0) or 0)
+        # Responses API exposes auto-cache hits under input_tokens_details;
+        # input_tokens includes cached, so subtract to get full-price input.
+        cached_tokens = 0
+        details = usage.get("input_tokens_details")
+        if isinstance(details, dict):
+            cached_tokens = int(details.get("cached_tokens", 0) or 0)
         stop_reason = "tool_calls" if tool_calls else str(payload.get("status", "completed"))
 
         return LLMResponse(
             text="".join(text_parts),
             tool_calls=tool_calls,
             stop_reason=stop_reason,
-            input_tokens=input_tokens,
+            input_tokens=max(input_tokens - cached_tokens, 0),
             output_tokens=output_tokens,
+            cache_read_input_tokens=cached_tokens,
             content_blocks=content_blocks,
         )
 
@@ -747,6 +792,8 @@ class OpenAIProvider(BaseLLMProvider):
             stop_reason=stop_reason,
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,
+            cache_creation_input_tokens=response.cache_creation_input_tokens,
+            cache_read_input_tokens=response.cache_read_input_tokens,
             thinking=response.thinking,
             content_blocks=merged_content_blocks,
         )

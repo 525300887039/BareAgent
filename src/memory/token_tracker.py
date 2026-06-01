@@ -17,8 +17,40 @@ DEFAULT_PRICES: dict[str, tuple[float, float]] = {
     "claude-haiku-4": (1.0, 5.0),
 }
 
+# Prompt-cache price multipliers relative to a model's base *input* price,
+# keyed by model-family prefix (longest-prefix matched like DEFAULT_PRICES):
+# ``(read_multiplier, write_multiplier)``.
+#   - Anthropic: read 0.1x, write 1.25x (5m TTL; 1h's 2x is approximated as
+#     1.25x — see PRD Out of Scope, estimate-only).
+#   - OpenAI: cached input billed ~0.5x, no separate write premium.
+#   - DeepSeek: cache hits ~0.1x, no separate write premium.
+# Unknown models fall back to the Anthropic-like default (0.1, 1.25); cache
+# tokens are only ever populated for providers covered here, so the fallback is
+# a conservative estimate, never load-bearing.
+DEFAULT_CACHE_MULTIPLIERS: dict[str, tuple[float, float]] = {
+    "claude": (0.1, 1.25),
+    "gpt": (0.5, 0.0),
+    "o1": (0.5, 0.0),
+    "o3": (0.5, 0.0),
+    "o4": (0.5, 0.0),
+    "deepseek": (0.1, 0.0),
+}
+_FALLBACK_CACHE_MULTIPLIERS: tuple[float, float] = (0.1, 1.25)
+
 # Built-in prices are expressed per *million* tokens; convert to per-token.
 _PER_MILLION = 1_000_000
+
+
+def resolve_cache_multipliers(model: str) -> tuple[float, float]:
+    """Resolve ``(read_mult, write_mult)`` cache price multipliers for *model*.
+
+    Longest-prefix match against :data:`DEFAULT_CACHE_MULTIPLIERS`, falling back
+    to an Anthropic-like default when the family is unknown.
+    """
+    prefix = _longest_prefix_match(model, DEFAULT_CACHE_MULTIPLIERS.keys())
+    if prefix is not None:
+        return DEFAULT_CACHE_MULTIPLIERS[prefix]
+    return _FALLBACK_CACHE_MULTIPLIERS
 
 
 def resolve_price(
@@ -75,6 +107,8 @@ def _coerce_price_entry(entry: dict[str, float]) -> tuple[float, float] | None:
 class _ModelUsage:
     input_tokens: int = 0
     output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
     call_count: int = 0
 
 
@@ -90,24 +124,32 @@ class TokenTracker:
 
     total_input: int = 0
     total_output: int = 0
+    total_cache_read: int = 0
+    total_cache_write: int = 0
     call_count: int = 0
     per_model: dict[str, _ModelUsage] = field(default_factory=dict)
 
     @property
     def total_tokens(self) -> int:
-        return self.total_input + self.total_output
+        return self.total_input + self.total_output + self.total_cache_read + self.total_cache_write
 
     def record(self, response: Any, model: str) -> None:
         """Accumulate one LLM response's token usage under *model*.
 
-        Reads only ``response.input_tokens`` / ``response.output_tokens`` so it
-        never couples to a specific provider's wire shape.
+        Reads only the normalized usage fields off the response so it never
+        couples to a specific provider's wire shape. ``input_tokens`` is the
+        full-price remainder; cache read/write are additive and non-overlapping
+        (see ``LLMResponse``), so summing all four gives the true prompt size.
         """
         input_tokens = int(getattr(response, "input_tokens", 0) or 0)
         output_tokens = int(getattr(response, "output_tokens", 0) or 0)
+        cache_read = int(getattr(response, "cache_read_input_tokens", 0) or 0)
+        cache_write = int(getattr(response, "cache_creation_input_tokens", 0) or 0)
 
         self.total_input += input_tokens
         self.total_output += output_tokens
+        self.total_cache_read += cache_read
+        self.total_cache_write += cache_write
         self.call_count += 1
 
         usage = self.per_model.get(model)
@@ -116,12 +158,16 @@ class TokenTracker:
             self.per_model[model] = usage
         usage.input_tokens += input_tokens
         usage.output_tokens += output_tokens
+        usage.cache_read_tokens += cache_read
+        usage.cache_write_tokens += cache_write
         usage.call_count += 1
 
     def reset(self) -> None:
         """Clear all accumulated usage (session boundary)."""
         self.total_input = 0
         self.total_output = 0
+        self.total_cache_read = 0
+        self.total_cache_write = 0
         self.call_count = 0
         self.per_model.clear()
 
@@ -144,8 +190,11 @@ class TokenTracker:
                 continue
             any_priced = True
             input_price, output_price = price
+            read_mult, write_mult = resolve_cache_multipliers(model)
             total += usage.input_tokens / _PER_MILLION * input_price
             total += usage.output_tokens / _PER_MILLION * output_price
+            total += usage.cache_read_tokens / _PER_MILLION * input_price * read_mult
+            total += usage.cache_write_tokens / _PER_MILLION * input_price * write_mult
         return total if any_priced else None
 
     def summary(self, prices: dict[str, dict[str, float]] | None) -> str:
@@ -160,9 +209,20 @@ class TokenTracker:
             "Token usage (this session):",
             f"  Input:  {self.total_input:,} tokens",
             f"  Output: {self.total_output:,} tokens",
-            f"  Total:  {self.total_tokens:,} tokens",
-            f"  Calls:  {self.call_count}",
         ]
+        # Only surface the cache line when caching actually happened, so
+        # non-cached sessions keep the original compact output.
+        if self.total_cache_read or self.total_cache_write:
+            lines.append(
+                f"  Cache:  {self.total_cache_read:,} read / "
+                f"{self.total_cache_write:,} write tokens"
+            )
+        lines.extend(
+            [
+                f"  Total:  {self.total_tokens:,} tokens",
+                f"  Calls:  {self.call_count}",
+            ]
+        )
 
         if self.per_model:
             lines.append("  By model:")
@@ -173,14 +233,24 @@ class TokenTracker:
                     cost_label = " (no price)"
                 else:
                     input_price, output_price = price
+                    read_mult, write_mult = resolve_cache_multipliers(model)
                     model_cost = (
                         usage.input_tokens / _PER_MILLION * input_price
                         + usage.output_tokens / _PER_MILLION * output_price
+                        + usage.cache_read_tokens / _PER_MILLION * input_price * read_mult
+                        + usage.cache_write_tokens / _PER_MILLION * input_price * write_mult
                     )
                     cost_label = f" — ${model_cost:.4f}"
+                cache_label = ""
+                if usage.cache_read_tokens or usage.cache_write_tokens:
+                    cache_label = (
+                        f", {usage.cache_read_tokens:,} cache-read / "
+                        f"{usage.cache_write_tokens:,} cache-write"
+                    )
                 lines.append(
                     f"    {model}: "
-                    f"{usage.input_tokens:,} in / {usage.output_tokens:,} out "
+                    f"{usage.input_tokens:,} in / {usage.output_tokens:,} out"
+                    f"{cache_label} "
                     f"({usage.call_count} calls){cost_label}"
                 )
 
