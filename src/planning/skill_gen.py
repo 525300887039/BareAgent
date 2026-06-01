@@ -73,6 +73,31 @@ DRAFT_INSTRUCTION = (
 )
 
 
+def render_reflection_prompt(candidates: list[tuple[str, str]]) -> str:
+    """Build the reflection user message, optionally offering skills to refine.
+
+    Self-evolution (task 06-01-skill-self-evolution): when generated skills
+    already exist they are listed as refinement targets — the model is told to
+    reuse a skill's EXACT name (after reading it with ``load_skill``) so the new
+    draft supersedes it on promotion, rather than piling up a near-duplicate.
+
+    With no candidates this returns the bare :data:`DRAFT_INSTRUCTION`
+    (byte-identical to the pre-evolution create-only behavior).
+    """
+    if not candidates:
+        return DRAFT_INSTRUCTION
+    listing = "\n".join(f"- {name}: {desc}" for name, desc in candidates)
+    prefix = (
+        "Existing generated skills you may REFINE instead of duplicating. If "
+        "this session improves one of them, read it first with `load_skill`, "
+        "then call `skill_create` with that skill's EXACT name so your improved "
+        "version supersedes it. Otherwise use a fresh name. Never reuse a "
+        "built-in (repo) skill name.\n"
+        f"{listing}\n\n"
+    )
+    return prefix + DRAFT_INSTRUCTION
+
+
 class SkillGenerator:
     """Accumulates per-turn activity and decides when to draft a skill.
 

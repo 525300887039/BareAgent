@@ -19,8 +19,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from src.core.schema import tool_schema
+from src.planning.skill_store import derive_skill_slug
 
 if TYPE_CHECKING:
+    from collections.abc import Set as AbstractSet
+
     from src.planning.skill_store import SkillStore
 
 SKILL_CREATE_TOOL_SCHEMA = tool_schema(
@@ -59,9 +62,21 @@ def run_skill_create(
     name: str | None = None,
     description: str | None = None,
     body: str | None = None,
+    reserved_names: AbstractSet[str] | None = None,
 ) -> str:
     if not name or not str(name).strip():
         return "Error: skill_create requires a non-empty 'name'."
+    # Forbid colliding with a checked-in canon skill: a generated skill of that
+    # name would be shadowed by the canon (loader scans canon first) and never
+    # load. Reject so the model picks a distinct name (self-evolution scope:
+    # only generated skills evolve; canon is read-only).
+    if reserved_names:
+        slug = derive_skill_slug(str(name))
+        if slug in reserved_names:
+            return (
+                f"Error: '{slug}' is a built-in (repo) skill name and cannot be "
+                "overwritten. Choose a different name."
+            )
     try:
         return store.create_draft(
             str(name),

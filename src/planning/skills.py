@@ -95,6 +95,18 @@ class SkillLoader:
         meta = self._lookup(skill_name)
         return meta.path.read_text(encoding="utf-8").strip()
 
+    def canon_skill_names(self) -> set[str]:
+        """Names of the repo's checked-in canon skills (``skills_dir`` only).
+
+        Used by the self-evolution reflection to forbid generated skills from
+        colliding with a canon name — such a generated skill would be shadowed
+        (canon wins in :meth:`scan`) and never load, i.e. a dead skill.
+        """
+        try:
+            return {skill_file.parent.name for skill_file in self.skills_dir.glob("*/SKILL.md")}
+        except OSError:
+            return set()
+
     def get_skill_list_prompt(self) -> str:
         skills = self.scan()
         if not skills:

@@ -65,13 +65,13 @@ from src.permission.guard import (
 )
 from src.permission.rules import parse_permission_rules
 from src.planning.agent_types import BUILTIN_AGENT_TYPES, DEFAULT_AGENT_TYPE
-from src.planning.skill_gen import DRAFT_INSTRUCTION, SkillGenConfig, SkillGenerator
+from src.planning.skill_gen import SkillGenConfig, SkillGenerator, render_reflection_prompt
 from src.planning.skill_store import (
     SkillStore,
     SkillStoreError,
     resolve_generated_skills_root,
 )
-from src.planning.skills import SkillLoader, resolve_skills_dir
+from src.planning.skills import LOAD_SKILL_TOOL_SCHEMAS, SkillLoader, resolve_skills_dir
 from src.planning.tasks import TaskManager
 from src.planning.todo import TodoManager
 from src.provider.base import (
@@ -2187,33 +2187,50 @@ def _run_skill_reflection(
     provider: Any,
     messages: list[dict[str, Any]],
     store: SkillStore,
+    skill_loader: SkillLoader,
     console: AgentConsole,
     token_tracker: Any,
     permission: Any,
     max_pending: int,
 ) -> None:
-    """Reflect on the just-finished session and draft a reusable skill.
+    """Reflect on the just-finished session and draft (or evolve) a skill.
 
-    Runs an isolated ``agent_loop`` on a COPY of the conversation with only the
-    ``skill_create`` tool exposed, so the real history / turn result stay clean
-    and normal turns / sub-agents never see the tool. The model may decline
-    (reply "no skill") for trivial work. Never raises — a reflection failure
-    must not break the REPL.
+    Runs an isolated ``agent_loop`` on a COPY of the conversation. ``skill_create``
+    is the only write tool, so the real history / turn result stay clean and
+    normal turns / sub-agents never see it. When generated skills already exist,
+    the reflection additionally lists them as refinement targets and exposes
+    read-only ``load_skill`` so the model can read one and supersede it with an
+    improved same-name draft (self-evolution). Canon (repo) skill names are
+    reserved so a generated skill never shadows them. The model may decline
+    (reply "no skill"). Never raises — a reflection failure must not break the
+    REPL.
     """
     console.print_status("Reflecting on this session to draft a reusable skill...")
+    # Evolution candidates = generated *live* skills only (pending excluded by
+    # the one-level glob; canon excluded by scanning the generated root alone).
+    candidates = [(meta.skill_name, meta.description) for meta in SkillLoader(store.root).scan()]
+    reserved_names = skill_loader.canon_skill_names()
     reflection_messages = list(messages)
-    reflection_messages.append({"role": "user", "content": DRAFT_INSTRUCTION})
-    draft_handlers = {"skill_create": partial(run_skill_create, store=store)}
+    reflection_messages.append({"role": "user", "content": render_reflection_prompt(candidates)})
+    draft_handlers: dict[str, Any] = {
+        "skill_create": partial(run_skill_create, store=store, reserved_names=reserved_names)
+    }
+    draft_tools = [SKILL_CREATE_TOOL_SCHEMA]
+    # Only offer the read tool when there is something to refine, so the no-skill
+    # case stays byte-identical to the create-only behavior.
+    if candidates:
+        draft_tools = [SKILL_CREATE_TOOL_SCHEMA, *LOAD_SKILL_TOOL_SCHEMAS]
+        draft_handlers["load_skill"] = skill_loader.load
     try:
         agent_loop(
             provider=provider,
             messages=reflection_messages,
-            tools=[SKILL_CREATE_TOOL_SCHEMA],
+            tools=draft_tools,
             handlers=draft_handlers,
             permission=permission,
             stream=False,
             console=console,
-            max_iterations=4,
+            max_iterations=6,
             token_tracker=token_tracker,
             skill_gen=None,
         )
@@ -2237,13 +2254,20 @@ def _run_skill_reflection(
 
 def _print_skill_list(store: SkillStore, loader: SkillLoader, console: AgentConsole) -> None:
     live = [meta.skill_name for meta in loader.scan()]
+    live_set = set(live)
     pending = store.list_pending()
     lines = ["Loadable skills:"]
     lines += [f"  - {name}" for name in live] or ["  (none)"]
     lines.append("Pending drafts:")
-    lines += [
-        f"  - {name}  (/skill keep {name} | /skill discard {name})" for name in pending
-    ] or ["  (none)"]
+    pending_lines = []
+    for name in pending:
+        # A pending draft whose name matches a loadable skill is a revision that
+        # will REPLACE the live version on /skill keep (self-evolution).
+        revision = f"  (revision of live '{name}')" if name in live_set else ""
+        pending_lines.append(
+            f"  - {name}{revision}  (/skill keep {name} | /skill discard {name})"
+        )
+    lines += pending_lines or ["  (none)"]
     console.print_status("\n".join(lines))
 
 
@@ -2858,6 +2882,7 @@ def _run_stdio_session(
                         provider=provider,
                         messages=messages,
                         store=skill_store,
+                        skill_loader=skill_loader,
                         console=ui_console,
                         token_tracker=token_tracker,
                         permission=permission,
