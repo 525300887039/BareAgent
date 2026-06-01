@@ -806,3 +806,37 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 25: ROADMAP Prompt Caching (Anthropic)
+
+**Date**: 2026-06-01
+**Task**: ROADMAP Prompt Caching (Anthropic)
+**Branch**: `main`
+
+### Summary
+
+为 Anthropic provider 接入 prompt caching：_build_request_params 缓存开启时给 last tool / system(转 block 列表) / 最近消息末 block 挂 cache_control 移动断点(<=3, 跳过 thinking, 渲染顺序 tools->system->messages, Opus 4.5+ 最小前缀 4096 静默 no-op)；cache_config=None 或 enabled=false 时请求体字节级不变(向后兼容)。CacheConfig(base.py, 复刻 ThinkingConfig 穿透) + [cache] enabled/ttl(_parse_cache_config 容错 + env BAREAGENT_CACHE_ENABLED, boot 固化随 provider 走 restart-required) + factory/teammate 穿透。跨 provider 用量归一化：LLMResponse 加 cache_creation/cache_read 三字段语义统一(全价/折扣读/写溢价, 相加非重叠)；各 _parse_response 归一(Anthropic 透传流式经 get_final_message、OpenAI input=prompt-cached、DeepSeek hit 经 _extract_cached_tokens 覆盖 chat/responses/流式/merge)。TokenTracker 家族倍率表(claude 0.1/1.25、gpt·o1·o3·o4 0.5/0、deepseek 0.1/0, 复用 _longest_prefix_match)计入 /cost, 有缓存活动才显 Cache 行。28 新测试, pytest 865 passed, ruff/pyright clean, 无新依赖。Out of Scope: 1h 写溢价精确拆分(按 1.25x 近似)、更激进断点策略、bottom-toolbar 实时命中率、缓存开关热重载。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cbfcc66` | (see git log) |
+| `79a9638` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
