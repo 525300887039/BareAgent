@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from src.concurrency.notification import inject_notifications
 from src.core.fileutil import stringify
+from src.core.retry import RetryPolicy, run_with_retry
 from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
 from src.tracing import tracer as global_tracer
 from src.ui.protocol import StreamProtocol, UIProtocol
@@ -35,6 +36,7 @@ def agent_loop(
     interaction_logger: Any = None,
     token_tracker: Any = None,
     hook_engine: Any = None,
+    retry_policy: RetryPolicy | None = None,
 ) -> str:
     compact = compact_fn or (lambda _messages: None)
     hook_session_id = _resolve_hook_session_id(compact_fn)
@@ -61,6 +63,7 @@ def agent_loop(
                     tools=tools,
                     stream=stream,
                     console=console,
+                    retry_policy=retry_policy,
                 )
             except BaseException as exc:
                 llm_span.set_error(str(exc) or type(exc).__name__)
@@ -141,9 +144,7 @@ def agent_loop(
                 continue
 
             try:
-                with global_tracer.trace(
-                    "tool_execution", tags={"tool": call.name}
-                ) as tool_span:
+                with global_tracer.trace("tool_execution", tags={"tool": call.name}) as tool_span:
                     tool_span.set_content_tag("input", call.input)
                     output = handler(**call.input)
                     tool_span.set_content_tag("output", stringify(output))
@@ -177,6 +178,57 @@ def agent_loop(
 
 
 def _invoke_provider(
+    provider: BaseLLMProvider,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    *,
+    stream: bool,
+    console: UIProtocol | None,
+    retry_policy: RetryPolicy | None = None,
+) -> tuple[LLMResponse, bool, set[str]]:
+    # The whole provider call (including stream consumption, D5) is wrapped in
+    # run_with_retry so retryable transient failures (429 / 5xx / connection
+    # timeouts) back off and retry. When retry_policy is None / disabled the
+    # behavior is identical to a single direct call (backward compatible).
+    # _StreamingUnavailableError / NotImplementedError are control-flow signals
+    # with no status_code and class names outside the retryable set, so
+    # is_retryable returns False for them — the streaming fallback is unaffected.
+    def _call() -> tuple[LLMResponse, bool, set[str]]:
+        return _invoke_provider_once(
+            provider=provider,
+            messages=messages,
+            tools=tools,
+            stream=stream,
+            console=console,
+        )
+
+    if retry_policy is None:
+        return _call()
+
+    return run_with_retry(
+        _call,
+        retry_policy,
+        on_retry=_make_retry_notifier(console, retry_policy),
+    )
+
+
+def _make_retry_notifier(
+    console: UIProtocol | None,
+    policy: RetryPolicy,
+) -> Callable[[BaseException, int, float], None] | None:
+    if console is None:
+        return None
+
+    def _notify(exc: BaseException, next_attempt: int, delay: float) -> None:
+        console.print_status(
+            f"LLM call failed ({type(exc).__name__}), retrying in {delay:.1f}s "
+            f"(attempt {next_attempt}/{policy.max_attempts})..."
+        )
+
+    return _notify
+
+
+def _invoke_provider_once(
     provider: BaseLLMProvider,
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]],
@@ -251,9 +303,7 @@ def _consume_stream(
                 streamed_text = printer.finish()
                 response = stop.value
                 if response is None:
-                    raise RuntimeError(
-                        "Streaming provider did not return a response."
-                    ) from None
+                    raise RuntimeError("Streaming provider did not return a response.") from None
                 return (
                     response,
                     streamed_any_text or bool(streamed_text),

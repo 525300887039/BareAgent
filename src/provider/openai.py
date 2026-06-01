@@ -90,7 +90,9 @@ class OpenAIProvider(BaseLLMProvider):
         base_url: str | None = None,
         wire_api: str | None = None,
     ) -> None:
-        self.client = openai.OpenAI(api_key=api_key, base_url=base_url)
+        # The app layer (src/core/retry.py) owns retries exclusively; disable
+        # the SDK's built-in retries to avoid 2xN compound amplification.
+        self.client = openai.OpenAI(api_key=api_key, base_url=base_url, max_retries=0)
         self.model = model
         self.base_url = base_url
         self.wire_api = (wire_api or "chat_completions").strip().lower()
@@ -115,9 +117,7 @@ class OpenAIProvider(BaseLLMProvider):
         **kwargs: Any,
     ):
         if self.wire_api == "responses":
-            return (
-                yield from self._create_stream_via_responses(messages, tools, **kwargs)
-            )
+            return (yield from self._create_stream_via_responses(messages, tools, **kwargs))
 
         return (yield from self._create_stream_via_chat(messages, tools, **kwargs))
 
@@ -287,9 +287,7 @@ class OpenAIProvider(BaseLLMProvider):
 
             if event_type == "response.failed":
                 response = getattr(event, "response", None)
-                raise RuntimeError(
-                    self._extract_responses_error(response) or "Response failed."
-                )
+                raise RuntimeError(self._extract_responses_error(response) or "Response failed.")
 
             if event_type == "error":
                 raise RuntimeError(getattr(event, "message", "Responses stream error."))
@@ -315,9 +313,7 @@ class OpenAIProvider(BaseLLMProvider):
         converted_tools = self._convert_tools(tools)
         if converted_tools:
             params["tools"] = converted_tools
-        params.update(
-            {k: v for k, v in kwargs.items() if k not in _PROTECTED_CHAT_KEYS}
-        )
+        params.update({k: v for k, v in kwargs.items() if k not in _PROTECTED_CHAT_KEYS})
         return params
 
     def _build_responses_request_params(
@@ -338,17 +334,10 @@ class OpenAIProvider(BaseLLMProvider):
             params["tools"] = converted_tools
 
         response_kwargs = dict(kwargs)
-        if (
-            "max_tokens" in response_kwargs
-            and "max_output_tokens" not in response_kwargs
-        ):
+        if "max_tokens" in response_kwargs and "max_output_tokens" not in response_kwargs:
             response_kwargs["max_output_tokens"] = response_kwargs.pop("max_tokens")
         params.update(
-            {
-                k: v
-                for k, v in response_kwargs.items()
-                if k not in _PROTECTED_RESPONSES_KEYS
-            }
+            {k: v for k, v in response_kwargs.items() if k not in _PROTECTED_RESPONSES_KEYS}
         )
         return params
 
@@ -364,9 +353,7 @@ class OpenAIProvider(BaseLLMProvider):
                 converted.append(self._convert_assistant_message(content))
                 continue
 
-            converted.append(
-                {"role": role, "content": self._stringify_content(content)}
-            )
+            converted.append({"role": role, "content": self._stringify_content(content)})
         return converted
 
     def _convert_messages_for_responses(
@@ -393,15 +380,11 @@ class OpenAIProvider(BaseLLMProvider):
         instructions = "\n\n".join(part for part in instruction_parts if part) or None
         return instructions, converted
 
-    def _convert_response_message(
-        self, role: str, content: Any
-    ) -> list[dict[str, Any]]:
+    def _convert_response_message(self, role: str, content: Any) -> list[dict[str, Any]]:
         if isinstance(content, str):
             return [self._make_response_text_message(role, content)]
         if not isinstance(content, list):
-            return [
-                self._make_response_text_message(role, self._stringify_content(content))
-            ]
+            return [self._make_response_text_message(role, self._stringify_content(content))]
 
         converted: list[dict[str, Any]] = []
         text_parts: list[str] = []
@@ -434,9 +417,7 @@ class OpenAIProvider(BaseLLMProvider):
                         "type": "function_call",
                         "call_id": block.get("id", ""),
                         "name": block.get("name", ""),
-                        "arguments": json.dumps(
-                            block.get("input", {}), ensure_ascii=False
-                        ),
+                        "arguments": json.dumps(block.get("input", {}), ensure_ascii=False),
                     }
                 )
                 continue
@@ -642,9 +623,7 @@ class OpenAIProvider(BaseLLMProvider):
 
     def _parse_response(self, response: Any) -> LLMResponse:
         if not response.choices:
-            raise RuntimeError(
-                "OpenAI returned empty choices (content may have been filtered)."
-            )
+            raise RuntimeError("OpenAI returned empty choices (content may have been filtered).")
         choice = response.choices[0]
         message = choice.message
         tool_calls: list[ToolCall] = []
@@ -703,9 +682,7 @@ class OpenAIProvider(BaseLLMProvider):
         usage = payload.get("usage", {}) or {}
         input_tokens = int(usage.get("input_tokens", 0) or 0)
         output_tokens = int(usage.get("output_tokens", 0) or 0)
-        stop_reason = (
-            "tool_calls" if tool_calls else str(payload.get("status", "completed"))
-        )
+        stop_reason = "tool_calls" if tool_calls else str(payload.get("status", "completed"))
 
         return LLMResponse(
             text="".join(text_parts),
@@ -739,9 +716,7 @@ class OpenAIProvider(BaseLLMProvider):
             ]
 
         merged_content_blocks = [dict(block) for block in response.content_blocks]
-        has_text_block = any(
-            block.get("type") == "text" for block in merged_content_blocks
-        )
+        has_text_block = any(block.get("type") == "text" for block in merged_content_blocks)
         if merged_text and not has_text_block:
             merged_content_blocks.insert(0, {"type": "text", "text": merged_text})
 

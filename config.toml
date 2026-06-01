@@ -162,3 +162,27 @@ enabled = true
 # [cost.prices."deepseek-chat"]
 # input = 0.27
 # output = 1.10
+
+# --- Retry (LLM 调用重试策略) --------------------------------------------
+# 瞬时性失败（rate limit / 网络超时 / 5xx / overloaded）自动指数退避重试；
+# 不可重试错误（认证失败 / 400 bad request / 模型不存在 / 未知异常）立即上抛，
+# 不掩盖真正的配置错误。app 层（src/core/retry.py）独占重试，已禁用 SDK 自带重试
+# （anthropic / openai client 均 max_retries=0），避免 2×N 复合放大。
+# 可重试状态码：408 / 409 / 429 / 500 / 502 / 503 / 504 / 529 + 连接/超时类异常。
+# 不可重试状态码：400 / 401 / 403 / 404 / 413 / 422 + 未知异常（保守 fail-fast）。
+# 退避：delay = min(max_delay_sec, base_delay_sec × multiplier^(attempt-1))，
+#       jitter=true 时再叠 full jitter（uniform(0, delay)）。
+# 环境变量覆盖：BAREAGENT_RETRY_ENABLED、BAREAGENT_RETRY_MAX_ATTEMPTS。
+[retry]
+# 关闭后完全无重试（含 SDK，因为 client 始终 max_retries=0）。
+enabled = true
+# 总尝试次数（含首次），<=1 等效关闭重试。
+max_attempts = 3
+# 首次重试前的基础等待秒数。
+base_delay_sec = 1.0
+# 单次退避上限秒数（封顶）。
+max_delay_sec = 30.0
+# 指数退避倍率。
+multiplier = 2.0
+# 是否叠加 full jitter（uniform(0, delay)）打散并发重试。
+jitter = true

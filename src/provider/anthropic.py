@@ -12,9 +12,7 @@ from src.provider.base import (
     ToolCall,
 )
 
-_PROTECTED_KEYS = frozenset(
-    {"model", "messages", "tools", "system", "thinking", "max_tokens"}
-)
+_PROTECTED_KEYS = frozenset({"model", "messages", "tools", "system", "thinking", "max_tokens"})
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -24,7 +22,9 @@ class AnthropicProvider(BaseLLMProvider):
         model: str,
         thinking_config: ThinkingConfig | None = None,
     ) -> None:
-        self.client = anthropic.Anthropic(api_key=api_key)
+        # The app layer (src/core/retry.py) owns retries exclusively; disable
+        # the SDK's built-in retries to avoid 2xN compound amplification.
+        self.client = anthropic.Anthropic(api_key=api_key, max_retries=0)
         self.model = model
         self.thinking_config = thinking_config or ThinkingConfig()
 
@@ -47,10 +47,7 @@ class AnthropicProvider(BaseLLMProvider):
         params = self._build_request_params(messages, tools, **kwargs)
         with self.client.messages.stream(**params) as stream:
             for event in stream:
-                if (
-                    event.type == "content_block_delta"
-                    and event.delta.type == "text_delta"
-                ):
+                if event.type == "content_block_delta" and event.delta.type == "text_delta":
                     yield StreamEvent(type="text", text=event.delta.text)
                     continue
 
@@ -151,9 +148,7 @@ class AnthropicProvider(BaseLLMProvider):
                 result_block: dict[str, Any] = {
                     "type": "tool_result",
                     "tool_use_id": block.get("tool_use_id", ""),
-                    "content": self._convert_tool_result_content(
-                        block.get("content", "")
-                    ),
+                    "content": self._convert_tool_result_content(block.get("content", "")),
                 }
                 if block.get("is_error"):
                     result_block["is_error"] = True
@@ -186,9 +181,7 @@ class AnthropicProvider(BaseLLMProvider):
             blocks: list[dict[str, Any]] = []
             for item in content:
                 if not isinstance(item, dict):
-                    blocks.append(
-                        {"type": "text", "text": self._stringify_content(item)}
-                    )
+                    blocks.append({"type": "text", "text": self._stringify_content(item)})
                     continue
                 item_type = item.get("type")
                 if item_type == "text":
@@ -213,9 +206,7 @@ class AnthropicProvider(BaseLLMProvider):
                             }
                         )
                         continue
-                    blocks.append(
-                        {"type": "text", "text": self._stringify_content(item)}
-                    )
+                    blocks.append({"type": "text", "text": self._stringify_content(item)})
                     continue
                 blocks.append({"type": "text", "text": self._stringify_content(item)})
             return blocks
@@ -226,9 +217,7 @@ class AnthropicProvider(BaseLLMProvider):
             {
                 "name": tool["name"],
                 "description": tool.get("description", ""),
-                "input_schema": tool.get(
-                    "parameters", {"type": "object", "properties": {}}
-                ),
+                "input_schema": tool.get("parameters", {"type": "object", "properties": {}}),
             }
             for tool in tools
         ]

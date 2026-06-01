@@ -29,6 +29,7 @@ from src.core.fileutil import (
 )
 from src.core.handlers.bash import run_bash
 from src.core.loop import LLMCallError, agent_loop
+from src.core.retry import RetryPolicy
 from src.core.tools import get_handlers, get_tools
 from src.debug.interaction_log import InteractionLogger
 from src.hooks import (
@@ -153,6 +154,18 @@ class CostConfig:
 
 
 @dataclass(slots=True)
+class RetryConfig:
+    # Mirrors src/core/retry.py:RetryPolicy (same field names + defaults). The
+    # app layer owns LLM retries exclusively (SDK clients use max_retries=0).
+    enabled: bool = True
+    max_attempts: int = 3  # total attempts (incl. first), <=1 disables retries
+    base_delay_sec: float = 1.0
+    max_delay_sec: float = 30.0
+    multiplier: float = 2.0
+    jitter: bool = True
+
+
+@dataclass(slots=True)
 class Config:
     provider: ProviderConfig
     permission: PermissionConfig
@@ -169,6 +182,7 @@ class Config:
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     cost: CostConfig = field(default_factory=CostConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)
+    retry: RetryConfig = field(default_factory=RetryConfig)
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
@@ -319,6 +333,67 @@ def _parse_cost_config(cost_raw: dict) -> CostConfig:
             except (KeyError, TypeError, ValueError):
                 continue
     return CostConfig(prices=prices)
+
+
+def _parse_retry_config(retry_raw: dict) -> RetryConfig:
+    """Parse the ``[retry]`` config section.
+
+    Each field is parsed defensively — a malformed value falls back to the
+    default rather than crashing boot (mirrors ``_parse_cost_config``).
+    ``enabled`` / ``max_attempts`` honor env overrides
+    (``BAREAGENT_RETRY_ENABLED`` / ``BAREAGENT_RETRY_MAX_ATTEMPTS``); the
+    remaining fields are config-only.
+    """
+    defaults = RetryConfig()
+    try:
+        enabled = _resolve_bool(
+            bool(retry_raw.get("enabled", defaults.enabled)),
+            "BAREAGENT_RETRY_ENABLED",
+        )
+    except (TypeError, ValueError):
+        enabled = defaults.enabled
+    try:
+        max_attempts = _resolve_int(
+            int(retry_raw.get("max_attempts", defaults.max_attempts)),
+            "BAREAGENT_RETRY_MAX_ATTEMPTS",
+        )
+    except (TypeError, ValueError):
+        max_attempts = defaults.max_attempts
+    try:
+        base_delay_sec = float(retry_raw.get("base_delay_sec", defaults.base_delay_sec))
+    except (TypeError, ValueError):
+        base_delay_sec = defaults.base_delay_sec
+    try:
+        max_delay_sec = float(retry_raw.get("max_delay_sec", defaults.max_delay_sec))
+    except (TypeError, ValueError):
+        max_delay_sec = defaults.max_delay_sec
+    try:
+        multiplier = float(retry_raw.get("multiplier", defaults.multiplier))
+    except (TypeError, ValueError):
+        multiplier = defaults.multiplier
+    try:
+        jitter = bool(retry_raw.get("jitter", defaults.jitter))
+    except (TypeError, ValueError):
+        jitter = defaults.jitter
+    return RetryConfig(
+        enabled=enabled,
+        max_attempts=max_attempts,
+        base_delay_sec=base_delay_sec,
+        max_delay_sec=max_delay_sec,
+        multiplier=multiplier,
+        jitter=jitter,
+    )
+
+
+def _build_retry_policy(retry_config: RetryConfig) -> RetryPolicy:
+    return RetryPolicy(
+        enabled=retry_config.enabled,
+        max_attempts=retry_config.max_attempts,
+        base_delay_sec=retry_config.base_delay_sec,
+        max_delay_sec=retry_config.max_delay_sec,
+        multiplier=retry_config.multiplier,
+        jitter=retry_config.jitter,
+    )
 
 
 def load_config(
@@ -482,6 +557,9 @@ def load_config(
     cost_raw = raw_config.get("cost", {})
     cost_config = _parse_cost_config(cost_raw if isinstance(cost_raw, dict) else {})
 
+    retry_raw = raw_config.get("retry", {})
+    retry_config = _parse_retry_config(retry_raw if isinstance(retry_raw, dict) else {})
+
     memory_raw = raw_config.get("memory", {})
     memory_config = MemoryConfig(
         enabled=_resolve_bool(
@@ -516,6 +594,7 @@ def load_config(
         memory=memory_config,
         cost=cost_config,
         hooks=hooks_config,
+        retry=retry_config,
     )
 
 
@@ -1081,6 +1160,7 @@ def _build_handlers(
         mcp_manager=mcp_manager,
         lsp_manager=lsp_manager,
         memory_manager=memory_manager,
+        subagent_retry_policy=_build_retry_policy(config.retry),
     )
 
 
@@ -1764,7 +1844,7 @@ def _dispatch_loop_command(
     all). Scheduled commands run via the background pool WITHOUT permission
     confirmation, so the create path echoes that warning. Never raises.
     """
-    rest = text[len("/loop"):].strip()
+    rest = text[len("/loop") :].strip()
     if not rest or rest == "list":
         jobs = scheduler.list()
         if not jobs:
@@ -1772,8 +1852,7 @@ def _dispatch_loop_command(
             return
         for job in jobs:
             ui_console.print_status(
-                f"{job.job_id}: every {job.interval_sec:g}s, "
-                f"runs={job.run_count} — {job.command}"
+                f"{job.job_id}: every {job.interval_sec:g}s, runs={job.run_count} — {job.command}"
             )
         return
 
@@ -1892,6 +1971,9 @@ def _run_stdio_session(
     )
     # Hooks only fire in the main loop; sub-agents never receive the engine.
     hook_engine = HookEngine(config.hooks, console=ui_console)
+    # Sub-agents *do* inherit the retry policy (D6) so background agents weather
+    # transient failures too; threaded through _build_handlers -> get_handlers.
+    retry_policy = _build_retry_policy(config.retry)
     handlers = _build_handlers(
         workspace_path=workspace_path,
         todo_manager=todo_manager,
@@ -2163,6 +2245,7 @@ def _run_stdio_session(
                         interaction_logger=interaction_logger,
                         token_tracker=token_tracker,
                         hook_engine=hook_engine,
+                        retry_policy=retry_policy,
                     )
                     _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
                     main_mailbox_cursor = _drain_team_mailbox(
@@ -2212,6 +2295,7 @@ def _run_stdio_session(
                     interaction_logger=interaction_logger,
                     token_tracker=token_tracker,
                     hook_engine=hook_engine,
+                    retry_policy=retry_policy,
                 )
                 _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
                 main_mailbox_cursor = _drain_team_mailbox(

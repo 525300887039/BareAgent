@@ -118,6 +118,7 @@ def run_subagent(
     run_in_background: bool = False,
     default_agent_type: str = DEFAULT_AGENT_TYPE,
     isolation: str = "none",
+    retry_policy: Any = None,
 ) -> str:
     if current_depth > max_depth:
         return f"Subagent refused: recursion depth {current_depth} exceeds limit {max_depth}."
@@ -151,6 +152,7 @@ def run_subagent(
                 bg_manager=bg_manager,
                 default_agent_type=default_agent_type,
                 isolation=isolation,
+                retry_policy=retry_policy,
             ),
         )
         return f"Subagent {task_id} started in the background."
@@ -168,6 +170,7 @@ def run_subagent(
         bg_manager=bg_manager,
         default_agent_type=default_agent_type,
         isolation=isolation,
+        retry_policy=retry_policy,
     )
 
 
@@ -184,6 +187,7 @@ def _run_subagent_sync(
     bg_manager: BackgroundManager | None,
     default_agent_type: str,
     isolation: str = "none",
+    retry_policy: Any = None,
 ) -> str:
     filtered_tools = filter_tools(tools, resolved_type)
     child_handlers = filter_handlers(handlers, filtered_tools)
@@ -242,6 +246,7 @@ def _run_subagent_sync(
                 run_in_background=run_in_background,
                 default_agent_type=default_agent_type,
                 isolation=isolation,
+                retry_policy=retry_policy,
             )
         )
 
@@ -264,6 +269,7 @@ def _run_subagent_sync(
                 compact_fn=compact_fn,
                 bg_manager=None,
                 max_iterations=resolved_type.max_turns,
+                retry_policy=retry_policy,
             )
             span.set_content_tag("result", result[:500])
     finally:

@@ -249,8 +249,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "pages": {
                 "type": ["string", "null"],
                 "description": (
-                    "PDF page range, e.g. '1-5' or '3' (1-based). PDF only; "
-                    "omit for all pages."
+                    "PDF page range, e.g. '1-5' or '3' (1-based). PDF only; omit for all pages."
                 ),
                 "default": None,
             },
@@ -551,6 +550,7 @@ def get_handlers(
     mcp_manager: MCPManager | None = None,
     lsp_manager: LanguageServerManager | None = None,
     memory_manager: MemoryManager | None = None,
+    subagent_retry_policy: Any = None,
 ) -> dict[str, Callable[..., Any]]:
     # Hybrid auto-diagnostics hook: built once per ``get_handlers`` call so
     # edit_file / write_file share the same closure. ``None`` when LSP isn't
@@ -622,6 +622,7 @@ def get_handlers(
                 run_in_background=run_in_background,
                 default_agent_type=subagent_default_type,
                 isolation=isolation,
+                retry_policy=subagent_retry_policy,
             )
         )
 
