@@ -191,3 +191,19 @@ max_delay_sec = 30.0
 multiplier = 2.0
 # 是否叠加 full jitter（uniform(0, delay)）打散并发重试。
 jitter = true
+
+# --- Prompt caching (Anthropic 显式 cache_control 断点) --------------------
+# 给静态前缀（tools + system）和增长的对话历史前缀打 cache_control 断点，让多轮
+# agent loop 反复重发的大块上下文走缓存读（约 0.1× 输入价），显著降本提速。
+# 命名 provider 中立，但当前仅 Anthropic provider 生效（需显式打断点）；
+# OpenAI/DeepSeek 自动缓存、无请求侧旋钮，此开关对它们为 no-op（其命中量仍计入 /cost）。
+# 关闭（enabled=false）时 Anthropic 请求体与未接缓存前字节级一致（向后兼容）。
+# 注意：Opus 4.5+ 最小可缓存前缀为 4096 token，低于阈值静默 no-op（不报错）。
+# 缓存读写 token 计入 /cost：写 1.25×（5m）、读 0.1×（claude）。
+# 环境变量覆盖：BAREAGENT_CACHE_ENABLED。
+# 改 [cache] 需重启生效（boot 时固化进 provider，不在 /reload 热重载集内）。
+[cache]
+# 是否启用 prompt caching（默认开启）。
+enabled = true
+# 缓存 TTL："5m"（默认，交互式 agent 甜区）或 "1h"（写 2×，适合长时间挂起）。
+ttl = "5m"

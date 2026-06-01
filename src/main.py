@@ -67,7 +67,13 @@ from src.planning.agent_types import BUILTIN_AGENT_TYPES, DEFAULT_AGENT_TYPE
 from src.planning.skills import SkillLoader, resolve_skills_dir
 from src.planning.tasks import TaskManager
 from src.planning.todo import TodoManager
-from src.provider.base import VALID_THINKING_MODES, BaseLLMProvider, ThinkingConfig
+from src.provider.base import (
+    VALID_CACHE_TTLS,
+    VALID_THINKING_MODES,
+    BaseLLMProvider,
+    CacheConfig,
+    ThinkingConfig,
+)
 from src.provider.factory import create_provider
 from src.provider.setup import run_setup_wizard
 from src.team.autonomous import AutonomousAgent
@@ -185,6 +191,9 @@ class Config:
     cost: CostConfig = field(default_factory=CostConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)
     retry: RetryConfig = field(default_factory=RetryConfig)
+    # Prompt caching (Anthropic explicit cache_control breakpoints). Defined in
+    # provider.base so the factory/provider share one type, mirroring thinking.
+    cache: CacheConfig = field(default_factory=CacheConfig)
 
 
 # Dotted config paths that ``/reload`` can hot-apply to live runtime objects.
@@ -497,6 +506,26 @@ def _build_retry_policy(retry_config: RetryConfig) -> RetryPolicy:
     )
 
 
+def _parse_cache_config(cache_raw: dict) -> CacheConfig:
+    """Parse the ``[cache]`` config section (defensive, never crashes boot).
+
+    ``enabled`` honors the ``BAREAGENT_CACHE_ENABLED`` env override (mirrors
+    ``[retry]``); ``ttl`` is config-only and falls back to ``"5m"`` for any
+    value outside ``{"5m", "1h"}``. Only the Anthropic provider acts on this.
+    """
+    defaults = CacheConfig()
+    try:
+        enabled = _resolve_bool(
+            bool(cache_raw.get("enabled", defaults.enabled)),
+            "BAREAGENT_CACHE_ENABLED",
+        )
+    except (TypeError, ValueError):
+        enabled = defaults.enabled
+    ttl_raw = str(cache_raw.get("ttl", defaults.ttl)).strip().lower()
+    ttl = cast(Literal["5m", "1h"], ttl_raw) if ttl_raw in VALID_CACHE_TTLS else defaults.ttl
+    return CacheConfig(enabled=enabled, ttl=ttl)
+
+
 def load_config(
     config_path: Path,
     *,
@@ -661,6 +690,9 @@ def load_config(
     retry_raw = raw_config.get("retry", {})
     retry_config = _parse_retry_config(retry_raw if isinstance(retry_raw, dict) else {})
 
+    cache_raw = raw_config.get("cache", {})
+    cache_config = _parse_cache_config(cache_raw if isinstance(cache_raw, dict) else {})
+
     memory_raw = raw_config.get("memory", {})
     memory_config = MemoryConfig(
         enabled=_resolve_bool(
@@ -696,6 +728,7 @@ def load_config(
         cost=cost_config,
         hooks=hooks_config,
         retry=retry_config,
+        cache=cache_config,
     )
 
 
@@ -1504,6 +1537,10 @@ def _make_teammate_provider_factory(config: Config):
                 thinking=ThinkingConfig(
                     mode=config.thinking.mode,
                     budget_tokens=config.thinking.budget_tokens,
+                ),
+                cache=CacheConfig(
+                    enabled=config.cache.enabled,
+                    ttl=config.cache.ttl,
                 ),
             )
         )

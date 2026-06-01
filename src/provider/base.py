@@ -21,6 +21,24 @@ VALID_THINKING_MODES: frozenset[str] = frozenset({"enabled", "adaptive", "disabl
 
 
 @dataclass(slots=True)
+class CacheConfig:
+    """Prompt-caching settings (Anthropic explicit ``cache_control`` breakpoints).
+
+    Provider-neutral by name, but today only the Anthropic provider acts on it:
+    OpenAI/DeepSeek cache automatically with no request-side knob. A ``None``
+    cache_config passed to a provider means "caching off" (byte-identical legacy
+    requests); ``factory.create_provider`` always supplies an instance so the app
+    defaults to caching ON.
+    """
+
+    enabled: bool = True
+    ttl: Literal["5m", "1h"] = "5m"
+
+
+VALID_CACHE_TTLS: frozenset[str] = frozenset({"5m", "1h"})
+
+
+@dataclass(slots=True)
 class ToolCall:
     id: str
     name: str
@@ -42,6 +60,16 @@ class LLMResponse:
     stop_reason: str
     input_tokens: int
     output_tokens: int
+    # Prompt-caching usage (additive, non-overlapping with input_tokens). For
+    # Anthropic these come straight off the wire; for OpenAI/DeepSeek the
+    # provider normalizes auto-cache hits into cache_read_input_tokens so the
+    # three fields carry one consistent meaning across providers:
+    #   input_tokens  = full-price input (1x)
+    #   cache_read_input_tokens     = served from cache (read discount)
+    #   cache_creation_input_tokens = written to cache (write premium; Anthropic
+    #                                 only — 0 for auto-caching providers)
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
     tool_calls: list[ToolCall] = field(default_factory=list)
     thinking: str = ""
     content_blocks: list[dict[str, Any]] = field(default_factory=list)
@@ -103,8 +131,6 @@ class BaseLLMProvider(ABC):
                 if isinstance(block, dict) and block.get("type") == "text":
                     text_parts.append(str(block.get("text", "")))
                 else:
-                    text_parts.append(
-                        json.dumps(block, ensure_ascii=False, default=str)
-                    )
+                    text_parts.append(json.dumps(block, ensure_ascii=False, default=str))
             return "\n".join(part for part in text_parts if part)
         return stringify(content)

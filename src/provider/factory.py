@@ -5,7 +5,13 @@ import os
 from typing import Any, Literal, cast
 
 from src.provider.anthropic import AnthropicProvider
-from src.provider.base import VALID_THINKING_MODES, BaseLLMProvider, ThinkingConfig
+from src.provider.base import (
+    VALID_CACHE_TTLS,
+    VALID_THINKING_MODES,
+    BaseLLMProvider,
+    CacheConfig,
+    ThinkingConfig,
+)
 from src.provider.openai import OpenAIProvider
 from src.provider.presets import resolve_preset
 
@@ -55,6 +61,7 @@ def create_provider(config: Any) -> BaseLLMProvider:
             api_key=api_key,
             model=model,
             thinking_config=_build_thinking_config(getattr(config, "thinking", None)),
+            cache_config=_build_cache_config(getattr(config, "cache", None)),
         )
 
     base_url = getattr(provider_config, "base_url", None) or preset.default_base_url
@@ -71,6 +78,37 @@ def _validated_thinking_mode(mode: str) -> Literal["enabled", "adaptive", "disab
         logging.warning("Invalid thinking mode %r, falling back to 'adaptive'", mode)
         return "adaptive"
     return cast(Literal["enabled", "adaptive", "disabled"], mode)
+
+
+def _validated_cache_ttl(ttl: str) -> Literal["5m", "1h"]:
+    if ttl not in VALID_CACHE_TTLS:
+        logging.warning("Invalid cache ttl %r, falling back to '5m'", ttl)
+        return "5m"
+    return cast(Literal["5m", "1h"], ttl)
+
+
+def _build_cache_config(raw_config: Any) -> CacheConfig:
+    """Coerce a config-supplied cache section into a :class:`CacheConfig`.
+
+    ``None`` (e.g. a namespace without a cache attribute) yields the default
+    enabled instance so the app defaults to caching ON.
+    """
+    if raw_config is None:
+        return CacheConfig()
+    if isinstance(raw_config, CacheConfig):
+        return CacheConfig(
+            enabled=bool(raw_config.enabled),
+            ttl=_validated_cache_ttl(raw_config.ttl),
+        )
+    if isinstance(raw_config, dict):
+        return CacheConfig(
+            enabled=bool(raw_config.get("enabled", True)),
+            ttl=_validated_cache_ttl(str(raw_config.get("ttl", "5m"))),
+        )
+    return CacheConfig(
+        enabled=bool(getattr(raw_config, "enabled", True)),
+        ttl=_validated_cache_ttl(str(getattr(raw_config, "ttl", "5m"))),
+    )
 
 
 def _build_thinking_config(raw_config: Any) -> ThinkingConfig:
