@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/06-01-prompt-caching-anthropic/research/anthropic-prompt-caching-api.md", "reason": "核验实现对齐 API 契约：断点总数 ≤4、system 为 block 列表、5m/1h cache_control 形状正确、usage 字段名正确、缓存与 input_tokens 相加的计价口径无重复计、流式确从 get_final_message().usage 取数"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核验跨层数据流：三 provider 的 _parse_response 归一化后 LLMResponse 三字段语义一致（input=全价/cache_read=折扣/cache_write=写溢价），TokenTracker 不感知 provider 差异，/cost 数字与归一化口径自洽"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "核验未重复造轮子：家族倍率表复用 _longest_prefix_match 而非新写前缀匹配；CacheConfig 与 ThinkingConfig 穿透路径一致；无散落的魔法倍率常量"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核验向后兼容与防御：enabled=false 时 Anthropic 请求体字节级一致、非 Anthropic 永不注入 cache_control、[cache] 坏配置不崩 boot、usage 缺失字段安全降级为 0"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核验 ruff/pytest/pyright 全绿、缓存断点/归一化/计价测试覆盖充分、无过度设计、源码无 emoji、Conventional Commits、无新依赖"}
