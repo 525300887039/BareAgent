@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "审查质量基线：ruff/pytest 绿、反过度设计、纯逻辑单测覆盖、源码无 emoji、Conventional Commits"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核验 skill_create 错误处理、SAFE_TOOLS 档位、子代理 fail-closed 隔离、/skill never-raise、auto_generate=false 短路向后兼容"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核验落盘原子性 + safe_path 沙箱边界、pending 提升/裁剪、多根扫描与同名优先、配置容错不崩 boot"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核验跨层数据流：计数器累加/触发重置、子代理不触发、读取 .pending/ 不生效等边界是否一致"}
+{"file": "research/hermes-skill-autogen.md", "reason": "对照 PRD 取舍核验范围未越界（MVP 不做自进化/不引 frontmatter/不自动提升）"}

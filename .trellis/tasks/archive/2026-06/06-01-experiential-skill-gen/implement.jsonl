@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新增 skill_gen.py / skill_create handler / SkillStore 等模块要放对位置；明确 src/ 各层归属"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "草稿/生成 skill 落盘走 atomic_write + safe_path 沙箱；slug 派生、[skills] 配置分层、用户级目录约定全在这层范式内"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "skill_create 写工具的结构化错误、PermissionGuard SAFE_TOOLS / fail-closed 子代理隔离、/skill 命令 never-raise 派发"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Python 3.12+/ruff/pytest、Conventional Commits、反过度设计；纯逻辑模块可单测要求；源码禁 emoji"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "/skill 命令与自动起草提示走 AgentConsole/StreamPrinter，不用 logging"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "本任务大量复用：memory CRUD 范式、derive_memory_slug、SkillLoader、retry.py 纯模块范式、_dispatch_* 命令范式——改 config/建 helper 前先搜复用"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "特性跨 config→loop 触发→write 工具→storage→SkillLoader 读取→UI 命令多层，计数器/重置/向后兼容的数据流要跨层想清楚"}
+{"file": "research/hermes-skill-autogen.md", "reason": "对标 Hermes skill_manage 机制与本任务每项取舍的依据（半自动/项目隔离/轻格式/不做自进化的 why）"}
