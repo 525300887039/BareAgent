@@ -908,3 +908,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 28: Plan 模式工作流（exit_plan_mode 呈递审批 + 转执行）
+
+**Date**: 2026-06-05
+**Task**: Plan 模式工作流（exit_plan_mode 呈递审批 + 转执行）
+**Branch**: `main`
+
+### Summary
+
+把 PLAN 从只读权限闸升级为 plan→呈递→三选一审批→execute 闭环，对标 Claude Code ExitPlanMode。新增主循环专属 exit_plan_mode 工具（纯逻辑 handler + main 审批回调 + 模式翻转）、按 mode 的 <plan-mode> 指令注入、子代理三重隔离（不进全局集 + MAIN_LOOP_ONLY_TOOLS + filter_handlers）、边界 fail-closed。tests/test_plan_mode.py 28 项，全量 932 passed。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f4e13ae` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
