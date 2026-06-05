@@ -7,6 +7,23 @@ from pathlib import Path
 
 BASE_SYSTEM_PROMPT = "You are BareAgent, a terminal-based coding assistant."
 
+# Injected into the system context only while the permission mode is PLAN
+# (see ``main.py:_refresh_plan_directive``). Tells the model how the plan-mode
+# workflow works: research read-only, then present a plan via ``exit_plan_mode``
+# rather than blindly attempting write tools (which PLAN blocks).
+PLAN_MODE_DIRECTIVE = (
+    "You are in PLAN mode. Investigate and design only -- do NOT modify files, "
+    "run state-changing commands, or perform other side effects. Use the "
+    "read-only tools (read_file, glob, grep, web_fetch, web_search, load_skill) "
+    "to research the task thoroughly.\n"
+    "When your implementation plan is ready, call the exit_plan_mode tool with "
+    "the full plan as markdown to present it for approval. That tool is the only "
+    "way to leave plan mode -- do not ask for approval in plain prose.\n"
+    "If the user approves, the permission mode switches and you continue with the "
+    "implementation in this same conversation. If the user rejects, you stay in "
+    "PLAN mode: revise the plan using their feedback and call exit_plan_mode again."
+)
+
 
 def _normalize_workspace(workspace: Path) -> Path:
     return workspace.expanduser().resolve()

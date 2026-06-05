@@ -40,6 +40,16 @@ class AgentType:
     memory_writable: bool = True
 
 
+# Tools that only make sense in the main REPL loop and must never reach a
+# sub-agent, regardless of agent type. ``exit_plan_mode`` flips the *parent's*
+# permission mode through an interactive approval prompt -- a sub-agent has no
+# human to ask and no business mutating the parent's mode. ``skill_create`` stays
+# out of sub-agents by never joining the global tool set; ``exit_plan_mode`` does
+# live in the main loop's set, so it is stripped here as a centralized, agent-type
+# -independent guarantee (filter_handlers then drops the orphaned handler).
+MAIN_LOOP_ONLY_TOOLS = frozenset({"exit_plan_mode"})
+
+
 _READ_ONLY_DEFAULTS: dict[str, Any] = {
     # ``semantic_rename`` is a write tool that does not carry the ``lsp_`` name
     # prefix (so ``lsp_tools_enabled=True`` does not filter it). It must be
@@ -127,6 +137,8 @@ def filter_tools(
 
     def _keep(tool: dict[str, Any]) -> bool:
         name = str(tool.get("name"))
+        if name in MAIN_LOOP_ONLY_TOOLS:
+            return False
         if allowed is not None and name not in allowed:
             return False
         if denied is not None and name in denied:

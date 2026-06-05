@@ -19,7 +19,7 @@ from typing import Any, Literal, cast
 
 from src.concurrency.background import BackgroundManager
 from src.concurrency.scheduler import Scheduler, SchedulerError
-from src.core.context import assemble_system_prompt
+from src.core.context import PLAN_MODE_DIRECTIVE, assemble_system_prompt
 from src.core.fileutil import (
     atomic_write_text,
     generate_random_id,
@@ -29,6 +29,11 @@ from src.core.fileutil import (
     optional_string as _coerce_optional_string,
 )
 from src.core.handlers.bash import run_bash
+from src.core.handlers.plan import (
+    EXIT_PLAN_MODE_TOOL_SCHEMA,
+    PlanDecision,
+    run_exit_plan_mode,
+)
 from src.core.handlers.skill import SKILL_CREATE_TOOL_SCHEMA, run_skill_create
 from src.core.loop import LLMCallError, agent_loop
 from src.core.retry import RetryPolicy
@@ -803,6 +808,7 @@ def load_config(
 
 _NAG_REMINDER_PREFIX = "<nag-reminder>"
 _MEMORY_RECALL_PREFIX = "<memory-recall>"
+_PLAN_DIRECTIVE_PREFIX = "<plan-mode>"
 
 
 def _initial_messages(
@@ -915,11 +921,48 @@ def _refresh_memory_recall(
     messages.insert(insert_index + 1, {"role": "system", "content": section})
 
 
+def _refresh_plan_directive(
+    messages: list[dict[str, Any]],
+    permission: PermissionGuard,
+) -> None:
+    """Drop any stale plan-mode directive and re-inject it while in PLAN mode.
+
+    Mirrors :func:`_refresh_nag_reminder`. Because ``compact`` runs at the top
+    of every agent-loop iteration (``loop.py``), approving a plan mid-loop flips
+    ``permission.mode`` and the *next* iteration strips this block automatically
+    -- no stale plan guidance lingers once execution begins.
+    """
+    messages[:] = [
+        message
+        for message in messages
+        if not (
+            message.get("role") == "system"
+            and isinstance(message.get("content"), str)
+            and str(message["content"]).startswith(_PLAN_DIRECTIVE_PREFIX)
+        )
+    ]
+    if permission.mode != PermissionMode.PLAN:
+        return
+
+    directive = {
+        "role": "system",
+        "content": f"{_PLAN_DIRECTIVE_PREFIX}\n{PLAN_MODE_DIRECTIVE}\n</plan-mode>",
+    }
+    for index in range(len(messages) - 1, -1, -1):
+        msg = messages[index]
+        if msg.get("role") == "user" and not is_tool_result_message(msg):
+            messages.insert(index + 1, directive)
+            return
+
+    messages.append(directive)
+
+
 def _build_loop_compact(
     compact_fn: object,
     todo_manager: TodoManager,
     memory_manager: MemoryManager | None = None,
     recall_k: int = 0,
+    permission: PermissionGuard | None = None,
 ):
     def _compact(
         messages: list[dict[str, Any]],
@@ -927,6 +970,8 @@ def _build_loop_compact(
     ) -> None:
         _refresh_nag_reminder(messages, todo_manager.get_nag_reminder())
         _refresh_memory_recall(messages, memory_manager, recall_k)
+        if permission is not None:
+            _refresh_plan_directive(messages, permission)
         compact_fn(messages, force=force)  # type: ignore[misc]
 
     get_session_id = getattr(compact_fn, "get_session_id", None)
@@ -2005,6 +2050,89 @@ def _handle_mode_selection_stdio(
     ui_console.print_status("Invalid choice, mode unchanged.")
 
 
+def _make_plan_approval(
+    permission: PermissionGuard,
+    ui_console: AgentConsole,
+) -> Callable[[str], PlanDecision]:
+    """Build the ``exit_plan_mode`` approval callback.
+
+    Renders the proposed plan, then prompts the user for a three-way decision
+    (approve -> DEFAULT, approve+auto -> AUTO, reject -> stay in PLAN). On reject
+    it collects an optional free-text reason fed back to the model. This wiring
+    layer owns the permission-mode flip because it holds both the
+    ``PermissionGuard`` and the UI console; the handler stays pure.
+    """
+
+    def _approve(plan: str) -> PlanDecision:
+        # Defensive: the directive is injected only in PLAN mode, so a
+        # well-behaved model won't call exit_plan_mode otherwise. If it does,
+        # report a no-op rather than silently flipping an unrelated mode.
+        if permission.mode != PermissionMode.PLAN:
+            return PlanDecision("noop")
+        # Approving a plan elevates the permission mode, which is a form of
+        # approval -- a fail-closed guard must never grant it (error-handling.md).
+        # This path only ever holds the main guard (fail_closed=False), but the
+        # check keeps the invariant if the wiring ever changes.
+        if getattr(permission, "fail_closed", False) or not sys.stdin.isatty():
+            return PlanDecision("unavailable")
+
+        ui_console.print_status("Proposed plan:")
+        ui_console.print_assistant(plan)
+        ui_console.print_status(
+            "Approve this plan?\n"
+            "  1) Approve -- switch to DEFAULT (writes still confirmed)\n"
+            "  2) Approve & auto-accept -- switch to AUTO\n"
+            "  3) Reject -- stay in plan mode and revise"
+        )
+        try:
+            choice = _read_stdio_input().strip()
+        except (EOFError, KeyboardInterrupt):
+            ui_console.print_status("Plan approval cancelled; staying in plan mode.")
+            return PlanDecision("reject")
+
+        if choice == "1":
+            _switch_mode_after_approval(permission, ui_console, PermissionMode.DEFAULT)
+            return PlanDecision("approve-default")
+        if choice == "2":
+            _switch_mode_after_approval(permission, ui_console, PermissionMode.AUTO)
+            return PlanDecision("approve-auto")
+
+        # Anything else counts as reject. Collect an optional reason so the model
+        # can revise with guidance instead of guessing.
+        ui_console.print_status("Plan rejected. Optionally enter a reason (blank to skip):")
+        try:
+            reason = _read_stdio_input().strip()
+        except (EOFError, KeyboardInterrupt):
+            reason = ""
+        return PlanDecision("reject", reason)
+
+    return _approve
+
+
+def _switch_mode_after_approval(
+    permission: PermissionGuard,
+    ui_console: AgentConsole,
+    new_mode: PermissionMode,
+) -> None:
+    old = permission.mode
+    permission.mode = new_mode
+    ui_console.print_status(f"Permission mode: {old.value} -> {new_mode.value}")
+
+
+def _install_plan_handler(
+    handlers: dict[str, Any],
+    plan_approval: Callable[[str], PlanDecision],
+) -> None:
+    """Register the exit_plan_mode handler on a (re)built handler dict.
+
+    Called after every ``_build_handlers`` in the main loop -- session switches
+    (/new, /compact, /resume, /import) rebuild ``handlers`` from scratch and
+    would otherwise drop the main-loop-only exit_plan_mode handler, leaving its
+    schema in ``tools`` with no handler behind it.
+    """
+    handlers["exit_plan_mode"] = partial(run_exit_plan_mode, approve_fn=plan_approval)
+
+
 def _install_mcp_cleanup(mcp_manager: MCPManager) -> None:
     """Register exit-time + SIGTERM hooks so MCP subprocesses are reaped.
 
@@ -2447,6 +2575,7 @@ def _run_stdio_session(
         todo_manager,
         memory_manager=memory_manager,
         recall_k=config.memory.recall_k,
+        permission=permission,
     )
     # Hooks only fire in the main loop; sub-agents never receive the engine.
     hook_engine = HookEngine(config.hooks, console=ui_console)
@@ -2473,6 +2602,20 @@ def _run_stdio_session(
         lsp_manager=lsp_manager,
         memory_manager=memory_manager,
     )
+
+    # Plan-mode workflow: exit_plan_mode is a main-loop-only tool. ``tools`` stays
+    # the canonical base list fed to every _build_handlers call (sub-agent and
+    # teammate closures inherit it, so they never see exit_plan_mode); the
+    # augmented ``loop_tools`` is fed ONLY to the top-level agent_loop calls. Its
+    # handler is installed on the live dict (and re-installed after every session
+    # switch below, since those rebuild ``handlers`` from scratch). Defense in
+    # depth: filter_tools also strips MAIN_LOOP_ONLY_TOOLS for every agent type
+    # and filter_handlers drops the orphaned handler. ``plan_approval`` closes
+    # over the permission guard + console, so the same callback is reused on every
+    # rebuild.
+    plan_approval = _make_plan_approval(permission, ui_console)
+    loop_tools = [*tools, EXIT_PLAN_MODE_TOOL_SCHEMA]
+    _install_plan_handler(handlers, plan_approval)
 
     ui_console.console.print(
         f"BareAgent REPL ({config.provider.name}/{config.provider.model})",
@@ -2558,6 +2701,7 @@ def _run_stdio_session(
                     lsp_manager=lsp_manager,
                     memory_manager=memory_manager,
                 )
+                _install_plan_handler(handlers, plan_approval)
                 ui_console.print_status("New conversation started.")
                 continue
             if text == "/compact":
@@ -2584,6 +2728,7 @@ def _run_stdio_session(
                     lsp_manager=lsp_manager,
                     memory_manager=memory_manager,
                 )
+                _install_plan_handler(handlers, plan_approval)
                 continue
             if text == "/sessions":
                 sessions = transcript_mgr.list_sessions()
@@ -2636,6 +2781,7 @@ def _run_stdio_session(
                     lsp_manager=lsp_manager,
                     memory_manager=memory_manager,
                 )
+                _install_plan_handler(handlers, plan_approval)
                 _replay_stdio_transcript(messages, ui_console)
                 ui_console.print_status(f"Resumed session: {resumed_session}")
                 continue
@@ -2701,6 +2847,7 @@ def _run_stdio_session(
                     lsp_manager=lsp_manager,
                     memory_manager=memory_manager,
                 )
+                _install_plan_handler(handlers, plan_approval)
                 _replay_stdio_transcript(messages, ui_console)
                 _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
                 ui_console.print_status(
@@ -2808,7 +2955,7 @@ def _run_stdio_session(
                     agent_loop(
                         provider=provider,
                         messages=messages,
-                        tools=tools,
+                        tools=loop_tools,
                         handlers=handlers,
                         permission=permission,
                         compact_fn=compact_fn,
@@ -2858,7 +3005,7 @@ def _run_stdio_session(
                 agent_loop(
                     provider=provider,
                     messages=messages,
-                    tools=tools,
+                    tools=loop_tools,
                     handlers=handlers,
                     permission=permission,
                     compact_fn=compact_fn,

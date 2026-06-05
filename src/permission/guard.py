@@ -54,6 +54,11 @@ class PermissionGuard:
         # is exposed only inside the isolated reflection call (never the main
         # tool set / sub-agents), so prompting would be noise.
         "skill_create",
+        # exit_plan_mode is the *only* way out of PLAN mode; it MUST be allowed
+        # while in PLAN (a non-SAFE tool is blocked there). Its own action is the
+        # approval prompt, so a separate permission confirm would be redundant.
+        # It is a main-loop-only tool (never in the global set / sub-agents).
+        "exit_plan_mode",
     }
     AUTO_SAFE_PATTERNS = [
         re.compile(r"^(ls|cat|head|tail|wc|echo|pwd|date|which|type)\b"),
