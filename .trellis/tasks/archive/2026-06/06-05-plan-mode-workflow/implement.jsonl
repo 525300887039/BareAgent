@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新增 exit_plan_mode 的 schema/handler/工具注册要落在正确的 src/ 位置(core/schema.py、core/handlers/、core/tools.py),按既有分层放"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "exit_plan_mode 的失败路径(非交互/fail-closed 视为 reject、非 PLAN 调用 no-op、空 plan 报错)要遵循自定义异常 + 结构化 tool error + fail-closed 权限约定"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "计划呈递与审批交互的渲染走 AgentConsole/prompt 层,不得用裸 print/logging;指令注入复用 compact 刷新范式"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Python 3.12+、ruff、pytest、避免过度设计;源码禁 emoji(用纯文本标记)"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用既有 _ask_user_fn 审批通道、_refresh_nag_reminder 注入范式、可变 permission.mode,而非另造机制"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "本特性贯穿 permission(SAFE_TOOLS/审批)→ loop(compact 注入/工具结果回灌)→ main(REPL 审批回调/模式翻转)→ subagent(排除)多层,需保证数据流一致"}

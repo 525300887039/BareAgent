@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "验收按 ruff/pytest 通过、无过度设计、源码无 emoji、Conventional Commits 核对"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核验失败路径:非交互/fail-closed→reject、非 PLAN 调用 no-op、空 plan 报错、KeyboardInterrupt/EOF 优雅处理,均 fail-closed 不崩"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "核验审批/计划渲染走 AgentConsole 而非裸 print,符合既有输出层约定"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核验跨层数据流一致:模式翻转后下一迭代 compact 自动剥离计划指令、子代理拿不到 exit_plan_mode、非 PLAN 零回归"}
