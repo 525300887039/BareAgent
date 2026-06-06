@@ -1007,3 +1007,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 31: 完善 team/AutonomousAgent 子系统（回路闭合 + 异常隔离 + team_shutdown + 活性检测 + 提速）
+
+**Date**: 2026-06-06
+**Task**: 完善 team/AutonomousAgent 子系统（回路闭合 + 异常隔离 + team_shutdown + 活性检测 + 提速）
+**Branch**: `main`
+
+### Summary
+
+把 team 子系统从 LLM 用不上的半成品补到可用协作闭环（方向 A：仅修 team 自身）。team_send 改阻塞式复用 wait_response 回灌 LLM（main/未运行队友不阻塞、超时有提示）；drain 迟到回复经 pending_team_messages 在下一 user turn 前缀注入；两条通路用 MessageBus._delivered 去重（挂 bus 随会话自动重置）。异常隔离守护线程存活；新增 team_shutdown 工具+slash；BackgroundManager.is_running 活性探测；守护循环 wait_for_message 提速；[team] 配置段。trellis-check COMPLIANT 0 缺陷，全量 1021 passed。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e0e3c00` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
