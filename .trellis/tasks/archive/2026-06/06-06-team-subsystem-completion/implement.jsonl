@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "team 改动横跨多模块：team handler 接线落 main.py、is_running 落 concurrency、team_shutdown schema 落 core/tools.py、配置落 main.py + config.toml——需遵循既有放置约定"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Q3a 异常隔离（请求路径回 error response 不杀队友）+ Q2 阻塞 team_send 超时/目标不可达的 fail-soft 返回语义，是本任务核心，必须对齐错误处理规范"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "涉及 mailbox JSONL 读取游标、spawned_agents 状态、message-id 去重集的会话作用域重置、[team] 配置 restart-required 固化"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "队友请求异常隔离时需记日志（autonomous.py 已有 logging.exception 范式），新增 error response 路径的日志需一致"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "通用代码质量基线 + 本仓库禁止源码 emoji（含工具 schema 描述与日志文本）"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "改动横跨 team/ + main.py 接线 + concurrency + core/tools + config 五层，需保证跨层契约一致（如阻塞 send 与 drain 两条通路对同一邮箱的协调）"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用现成能力而非重造：ProtocolFSM.wait_response、MessageBus.wait_for_message、BackgroundManager.is_alive 剪枝逻辑、_parse_*_config 容错范式、team handler 注册/slash dispatch 模板"}

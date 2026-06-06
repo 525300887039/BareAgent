@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核对异常隔离回 error response、阻塞 team_send 超时/目标不可达的 fail-soft 返回、去重不丢迟到消息——本任务最易出错处"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核对 [team] 配置 restart-required 归类、去重集/邮箱游标的会话作用域重置（/new·/resume·/import）、team_list 活性状态与真实线程一致"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核对代码质量 + 禁 emoji（schema 描述/日志/注释）"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "核对异常隔离与 error response 路径的日志规范一致"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "核对新增 handler/schema/config/访问器的放置合规"}
