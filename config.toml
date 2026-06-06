@@ -235,3 +235,20 @@ max_turns = 25
 # 填一个更便宜的 model id（如 claude-haiku-4-5）则经 factory 单独构造评估 provider，
 # 省下每轮用主模型判定"是/否"的开销。boot 固化，改动 restart-required。
 evaluator_model = ""
+
+[workflow]
+# 确定性多智能体编排（task 06-06-workflow-deterministic-orchestration，对标 Claude Code
+# Workflow）：LLM 经一个「主循环专属」的 workflow 工具临场产出一张静态 DAG（nodes +
+# depends_on），相互独立的节点并发跑、依赖就绪才跑，上游产物经 {{node_id}} 占位喂给下游，
+# 收尾把每个节点 done/failed/skipped + 产物结构化聚合回灌 LLM。节点执行复用 run_subagent。
+# 安全语义：节点子代理 fail-closed 无人值守运行（worker 线程不弹确认，与后台子代理 / /loop
+# 一脉相承）——DEFAULT 下写操作被拒、AUTO 下自动放行、PLAN 下只读；workflow 工具不进全局
+# 工具集、子代理拿不到（无嵌套）；同步阻塞调用、Esc 可中断。失败语义：单节点失败 = 其传递
+# 下游 skip、独立分支继续。MVP 不做循环/条件/动态 fan-out、不做后台执行/resume、不做
+# worktree per-node 隔离（均为后续扩展位）。
+# 总开关：false 时 workflow 工具压根不注入，整特性短路。env 覆盖：BAREAGENT_WORKFLOW_ENABLED。
+enabled = true
+# 并发上限：同时运行的节点数（每个节点是一个完整子代理，保守取值）。
+max_concurrency = 8
+# 单张 DAG 的节点数上限，防止 LLM 产出超大图打爆线程池。
+max_nodes = 20

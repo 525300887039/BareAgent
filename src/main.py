@@ -10,6 +10,7 @@ import sys
 import tomllib
 from collections.abc import Callable
 from collections.abc import Set as AbstractSet
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from functools import partial
@@ -45,9 +46,17 @@ from src.core.handlers.plan import (
     run_exit_plan_mode,
 )
 from src.core.handlers.skill import SKILL_CREATE_TOOL_SCHEMA, run_skill_create
+from src.core.handlers.workflow import WORKFLOW_TOOL_SCHEMA, run_workflow_tool
 from src.core.loop import LLMCallError, agent_loop
 from src.core.retry import RetryPolicy
 from src.core.tools import get_handlers, get_tools
+from src.core.workflow import (
+    DEFAULT_MAX_CONCURRENCY,
+    DEFAULT_MAX_NODES,
+    NodeResult,
+    WorkflowNode,
+    build_node_prompt,
+)
 from src.debug.interaction_log import InteractionLogger
 from src.hooks import (
     HookConfigError,
@@ -87,6 +96,7 @@ from src.planning.skill_store import (
     resolve_generated_skills_root,
 )
 from src.planning.skills import LOAD_SKILL_TOOL_SCHEMAS, SkillLoader, resolve_skills_dir
+from src.planning.subagent import run_subagent
 from src.planning.tasks import TaskManager
 from src.planning.todo import TodoManager
 from src.provider.base import (
@@ -223,6 +233,21 @@ class GoalConfig:
 
 
 @dataclass(slots=True)
+class WorkflowConfig:
+    # Deterministic workflow orchestration (task
+    # 06-06-workflow-deterministic-orchestration): the LLM authors a static DAG of
+    # subagent nodes via the main-loop-only ``workflow`` tool; independent nodes
+    # run concurrently. ``enabled=false`` short-circuits the whole feature (the
+    # tool is never installed). Honors ``BAREAGENT_WORKFLOW_ENABLED``.
+    enabled: bool = True
+    # Max nodes that may run concurrently (each node is a full subagent).
+    max_concurrency: int = DEFAULT_MAX_CONCURRENCY
+    # Ceiling on declared nodes per workflow; guards the thread pool against an
+    # oversized DAG.
+    max_nodes: int = DEFAULT_MAX_NODES
+
+
+@dataclass(slots=True)
 class Config:
     provider: ProviderConfig
     permission: PermissionConfig
@@ -245,6 +270,7 @@ class Config:
     cache: CacheConfig = field(default_factory=CacheConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
     goal: GoalConfig = field(default_factory=GoalConfig)
+    workflow: WorkflowConfig = field(default_factory=WorkflowConfig)
 
 
 # Dotted config paths that ``/reload`` can hot-apply to live runtime objects.
@@ -641,6 +667,35 @@ def _parse_goal_config(goal_raw: dict) -> GoalConfig:
     )
 
 
+def _parse_workflow_config(workflow_raw: dict) -> WorkflowConfig:
+    """Parse the ``[workflow]`` config section (defensive, never crashes boot).
+
+    ``enabled`` honors ``BAREAGENT_WORKFLOW_ENABLED``; the integer caps are
+    config-only and fall back to their default when missing / malformed / < 1.
+    """
+    defaults = WorkflowConfig()
+    try:
+        enabled = _resolve_bool(
+            bool(workflow_raw.get("enabled", defaults.enabled)),
+            "BAREAGENT_WORKFLOW_ENABLED",
+        )
+    except (TypeError, ValueError):
+        enabled = defaults.enabled
+
+    def _positive_int(key: str, fallback: int) -> int:
+        try:
+            value = int(workflow_raw.get(key, fallback))
+        except (TypeError, ValueError):
+            return fallback
+        return value if value >= 1 else fallback
+
+    return WorkflowConfig(
+        enabled=enabled,
+        max_concurrency=_positive_int("max_concurrency", defaults.max_concurrency),
+        max_nodes=_positive_int("max_nodes", defaults.max_nodes),
+    )
+
+
 def _build_goal_provider(
     config: Config,
     session_provider: BaseLLMProvider,
@@ -839,6 +894,9 @@ def load_config(
     goal_raw = raw_config.get("goal", {})
     goal_config = _parse_goal_config(goal_raw if isinstance(goal_raw, dict) else {})
 
+    workflow_raw = raw_config.get("workflow", {})
+    workflow_config = _parse_workflow_config(workflow_raw if isinstance(workflow_raw, dict) else {})
+
     memory_raw = raw_config.get("memory", {})
     memory_config = MemoryConfig(
         enabled=_resolve_bool(
@@ -877,6 +935,7 @@ def load_config(
         cache=cache_config,
         skills=skills_config,
         goal=goal_config,
+        workflow=workflow_config,
     )
 
 
@@ -2210,6 +2269,97 @@ def _install_plan_handler(
     handlers["exit_plan_mode"] = partial(run_exit_plan_mode, approve_fn=plan_approval)
 
 
+def _run_node_batch(
+    thunks: list[Callable[[], NodeResult]],
+    max_concurrency: int,
+) -> list[NodeResult]:
+    """Run a batch of (never-raising) node thunks concurrently, preserving order.
+
+    A single node skips the thread-pool overhead. ``KeyboardInterrupt`` (delivered
+    to this main thread while blocked on results) cancels pending nodes and tears
+    the executor down without waiting, then propagates so the workflow tool call
+    aborts cleanly (in-flight nodes finish in the background). Worker threads only
+    run ``run_subagent`` (which is silent -- no console / messages), mirroring how
+    the ``/loop`` scheduler keeps execution off the REPL-owned UI thread.
+    """
+    if not thunks:
+        return []
+    if len(thunks) == 1:
+        return [thunks[0]()]
+
+    workers = max(1, min(max_concurrency, len(thunks)))
+    executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="wf-node")
+    futures = [executor.submit(thunk) for thunk in thunks]
+    try:
+        return [future.result() for future in futures]
+    except KeyboardInterrupt:
+        for future in futures:
+            future.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise
+    finally:
+        executor.shutdown(wait=False)
+
+
+def _install_workflow_handler(
+    handlers: dict[str, Any],
+    *,
+    enabled: bool,
+    provider: BaseLLMProvider,
+    base_tools: list[dict[str, Any]],
+    permission: PermissionGuard,
+    bg_manager: BackgroundManager,
+    console: AgentConsole,
+    retry_policy: RetryPolicy,
+    max_depth: int,
+    default_agent_type: str,
+    max_concurrency: int,
+    max_nodes: int,
+) -> None:
+    """Install the main-loop-only ``workflow`` handler on a (re)built handler dict.
+
+    Like ``_install_plan_handler``, this is re-run after every ``_build_handlers``
+    (session switches rebuild ``handlers`` from scratch). It binds the node
+    executor to *this* handler dict so nodes inherit the current tools/handlers;
+    ``run_subagent`` filters the main-loop-only tools (``workflow`` itself,
+    ``exit_plan_mode``) back out per node. Disabled config -> no install (the
+    schema is also withheld from ``loop_tools``), so the feature fully short
+    -circuits. Node subagents run fail-closed (no prompts from worker threads),
+    the same unattended stance as background subagents and ``/loop``.
+    """
+    if not enabled:
+        return
+    node_handlers = handlers
+
+    def execute_node(node: WorkflowNode, upstream: dict[str, NodeResult]) -> str:
+        node_permission: Any = permission
+        if isinstance(permission, PermissionGuard):
+            node_permission = permission.clone(fail_closed=True)
+        return run_subagent(
+            provider=provider,
+            task=build_node_prompt(node, upstream),
+            tools=base_tools,
+            handlers=node_handlers,
+            permission=node_permission,
+            max_depth=max_depth,
+            agent_type=node.agent_type,
+            bg_manager=bg_manager,
+            default_agent_type=default_agent_type,
+            retry_policy=retry_policy,
+        )
+
+    def handler(**kwargs: Any) -> str:
+        return run_workflow_tool(
+            nodes=kwargs.get("nodes"),
+            execute_node=execute_node,
+            map_concurrent=lambda thunks: _run_node_batch(thunks, max_concurrency),
+            on_progress=console.print_status,
+            max_nodes=max_nodes,
+        )
+
+    handlers["workflow"] = handler
+
+
 def _install_mcp_cleanup(mcp_manager: MCPManager) -> None:
     """Register exit-time + SIGTERM hooks so MCP subprocesses are reaped.
 
@@ -2836,7 +2986,29 @@ def _run_stdio_session(
     # rebuild.
     plan_approval = _make_plan_approval(permission, ui_console)
     loop_tools = [*tools, EXIT_PLAN_MODE_TOOL_SCHEMA]
+    # Workflow orchestration (task 06-06): ``workflow`` is a main-loop-only tool
+    # like ``exit_plan_mode`` -- its schema joins ``loop_tools`` (never the base
+    # ``tools`` fed to sub-agent closures) and its handler is (re)installed after
+    # every ``_build_handlers`` via ``install_workflow_handler``. When disabled the
+    # schema is withheld and the install is a no-op, so the feature short-circuits.
+    if config.workflow.enabled:
+        loop_tools.append(WORKFLOW_TOOL_SCHEMA)
+    install_workflow_handler = partial(
+        _install_workflow_handler,
+        enabled=config.workflow.enabled,
+        provider=provider,
+        base_tools=tools,
+        permission=permission,
+        bg_manager=bg_manager,
+        console=ui_console,
+        retry_policy=retry_policy,
+        max_depth=config.subagent.max_depth,
+        default_agent_type=config.subagent.default_type,
+        max_concurrency=config.workflow.max_concurrency,
+        max_nodes=config.workflow.max_nodes,
+    )
     _install_plan_handler(handlers, plan_approval)
+    install_workflow_handler(handlers)
 
     ui_console.console.print(
         f"BareAgent REPL ({config.provider.name}/{config.provider.model})",
@@ -2923,6 +3095,7 @@ def _run_stdio_session(
                     memory_manager=memory_manager,
                 )
                 _install_plan_handler(handlers, plan_approval)
+                install_workflow_handler(handlers)
                 ui_console.print_status("New conversation started.")
                 continue
             if text == "/compact":
@@ -2950,6 +3123,7 @@ def _run_stdio_session(
                     memory_manager=memory_manager,
                 )
                 _install_plan_handler(handlers, plan_approval)
+                install_workflow_handler(handlers)
                 continue
             if text == "/sessions":
                 sessions = transcript_mgr.list_sessions()
@@ -3003,6 +3177,7 @@ def _run_stdio_session(
                     memory_manager=memory_manager,
                 )
                 _install_plan_handler(handlers, plan_approval)
+                install_workflow_handler(handlers)
                 _replay_stdio_transcript(messages, ui_console)
                 ui_console.print_status(f"Resumed session: {resumed_session}")
                 continue
@@ -3069,6 +3244,7 @@ def _run_stdio_session(
                     memory_manager=memory_manager,
                 )
                 _install_plan_handler(handlers, plan_approval)
+                install_workflow_handler(handlers)
                 _replay_stdio_transcript(messages, ui_console)
                 _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
                 ui_console.print_status(
