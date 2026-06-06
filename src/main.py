@@ -46,6 +46,7 @@ from src.core.handlers.plan import (
     run_exit_plan_mode,
 )
 from src.core.handlers.skill import SKILL_CREATE_TOOL_SCHEMA, run_skill_create
+from src.core.handlers.subagent_send import SUBAGENT_SEND_TOOL_SCHEMA, run_subagent_send
 from src.core.handlers.workflow import WORKFLOW_TOOL_SCHEMA, run_workflow_tool
 from src.core.loop import LLMCallError, agent_loop
 from src.core.retry import RetryPolicy
@@ -97,6 +98,7 @@ from src.planning.skill_store import (
 )
 from src.planning.skills import LOAD_SKILL_TOOL_SCHEMAS, SkillLoader, resolve_skills_dir
 from src.planning.subagent import run_subagent
+from src.planning.subagent_registry import ResumableContext, SubagentRegistry
 from src.planning.tasks import TaskManager
 from src.planning.todo import TodoManager
 from src.provider.base import (
@@ -156,6 +158,10 @@ class UIConfig:
 class SubagentConfig:
     max_depth: int
     default_type: str
+    # Soft cap on resumable foreground subagent contexts held in the
+    # session-scoped registry; registering past it evicts the oldest. Config-only
+    # (no env override), restart-required.
+    max_resumable: int = 20
 
 
 @dataclass(slots=True)
@@ -824,6 +830,12 @@ def load_config(
         stream=_resolve_bool(ui_raw.get("stream", True), "BAREAGENT_UI_STREAM"),
         theme=_resolve_string(ui_raw.get("theme", "dark"), "BAREAGENT_UI_THEME"),
     )
+    try:
+        subagent_max_resumable = int(subagent_raw.get("max_resumable", 20))
+    except (TypeError, ValueError):
+        subagent_max_resumable = 20
+    if subagent_max_resumable < 1:
+        subagent_max_resumable = 20
     subagent = SubagentConfig(
         max_depth=_resolve_int(
             int(subagent_raw.get("max_depth", 3)),
@@ -837,6 +849,7 @@ def load_config(
             ),
             VALID_SUBAGENT_TYPES,
         ),
+        max_resumable=subagent_max_resumable,
     )
     thinking = ThinkingConfig(
         mode=cast(
@@ -1628,6 +1641,7 @@ def _build_handlers(
     lsp_manager: LanguageServerManager | None = None,
     memory_manager: MemoryManager | None = None,
     system_prompt_override: str | None = None,
+    subagent_registry: SubagentRegistry | None = None,
 ) -> dict[str, Callable[..., Any]]:
     system_prompt = system_prompt_override or _extract_system_prompt(messages)
     team_handlers = _make_team_handlers(
@@ -1662,6 +1676,7 @@ def _build_handlers(
         lsp_manager=lsp_manager,
         memory_manager=memory_manager,
         subagent_retry_policy=_build_retry_policy(config.retry),
+        subagent_registry=subagent_registry,
     )
 
 
@@ -2467,6 +2482,46 @@ def _install_workflow_handler(
     handlers["workflow"] = handler
 
 
+def _install_subagent_send_handler(
+    handlers: dict[str, Any],
+    *,
+    registry: SubagentRegistry,
+) -> None:
+    """Install the main-loop-only ``subagent_send`` handler on a (re)built dict.
+
+    Like ``_install_workflow_handler`` / ``_install_plan_handler``, this re-runs
+    after every ``_build_handlers`` (session switches rebuild ``handlers`` from
+    scratch). Everything needed to re-enter ``agent_loop`` lives in the stored
+    ``ResumableContext`` (provider / tools / handlers / permission / compactor /
+    turn budget / retry policy), so the closure only needs the registry. The
+    schema is also kept out of the base ``tools`` and listed in
+    ``MAIN_LOOP_ONLY_TOOLS``, so no sub-agent ever sees this tool.
+    """
+
+    def run_loop(context: ResumableContext) -> str:
+        return agent_loop(
+            provider=context.provider,
+            messages=context.messages,
+            tools=context.tools,
+            handlers=context.handlers,
+            permission=context.permission,
+            compact_fn=context.compact_fn,
+            bg_manager=None,
+            max_iterations=context.max_turns,
+            retry_policy=context.retry_policy,
+        )
+
+    def handler(agent_id: str = "", message: str = "", **_: Any) -> str:
+        return run_subagent_send(
+            agent_id,
+            message,
+            registry=registry,
+            run_loop=run_loop,
+        )
+
+    handlers["subagent_send"] = handler
+
+
 def _install_mcp_cleanup(mcp_manager: MCPManager) -> None:
     """Register exit-time + SIGTERM hooks so MCP subprocesses are reaped.
 
@@ -3020,6 +3075,10 @@ def _run_stdio_session(
         session_id,
     )
     spawned_agents: dict[str, AutonomousAgent] = {}
+    # Resumable foreground subagents (task 06-06): session-scoped, in-memory,
+    # one instance for the REPL lifetime. Cleared on /new / /resume / /import /
+    # /clear (mirroring spawned_agents) and preserved across /compact.
+    subagent_registry = SubagentRegistry(config.subagent.max_resumable)
     # Late / unsolicited teammate replies surfaced by the mailbox drain are
     # buffered here and prepended onto the next user turn (keeps role
     # alternation intact). Blocking team_send replies bypass this -- they return
@@ -3084,6 +3143,7 @@ def _run_stdio_session(
         mcp_manager=mcp_manager,
         lsp_manager=lsp_manager,
         memory_manager=memory_manager,
+        subagent_registry=subagent_registry,
     )
 
     # Plan-mode workflow: exit_plan_mode is a main-loop-only tool. ``tools`` stays
@@ -3105,6 +3165,15 @@ def _run_stdio_session(
     # schema is withheld and the install is a no-op, so the feature short-circuits.
     if config.workflow.enabled:
         loop_tools.append(WORKFLOW_TOOL_SCHEMA)
+    # subagent_send (task 06-06): main-loop-only continuation tool. Always on
+    # (no config gate); schema joins loop_tools only, handler re-installed after
+    # every _build_handlers below. The registry instance is stable for the REPL
+    # lifetime, so the bound install closure stays valid across rebuilds.
+    loop_tools.append(SUBAGENT_SEND_TOOL_SCHEMA)
+    install_subagent_send_handler = partial(
+        _install_subagent_send_handler,
+        registry=subagent_registry,
+    )
     install_workflow_handler = partial(
         _install_workflow_handler,
         enabled=config.workflow.enabled,
@@ -3121,6 +3190,7 @@ def _run_stdio_session(
     )
     _install_plan_handler(handlers, plan_approval)
     install_workflow_handler(handlers)
+    install_subagent_send_handler(handlers)
 
     ui_console.console.print(
         f"BareAgent REPL ({config.provider.name}/{config.provider.model})",
@@ -3188,6 +3258,7 @@ def _run_stdio_session(
                 )
                 spawned_agents = {}
                 pending_team_messages.clear()
+                subagent_registry.clear()
                 handlers = _build_handlers(
                     workspace_path=workspace_path,
                     todo_manager=todo_manager,
@@ -3207,9 +3278,11 @@ def _run_stdio_session(
                     mcp_manager=mcp_manager,
                     lsp_manager=lsp_manager,
                     memory_manager=memory_manager,
+                    subagent_registry=subagent_registry,
                 )
                 _install_plan_handler(handlers, plan_approval)
                 install_workflow_handler(handlers)
+                install_subagent_send_handler(handlers)
                 ui_console.print_status("New conversation started.")
                 continue
             if text == "/compact":
@@ -3235,9 +3308,11 @@ def _run_stdio_session(
                     mcp_manager=mcp_manager,
                     lsp_manager=lsp_manager,
                     memory_manager=memory_manager,
+                    subagent_registry=subagent_registry,
                 )
                 _install_plan_handler(handlers, plan_approval)
                 install_workflow_handler(handlers)
+                install_subagent_send_handler(handlers)
                 continue
             if text == "/sessions":
                 sessions = transcript_mgr.list_sessions()
@@ -3271,6 +3346,7 @@ def _run_stdio_session(
                     )
                     spawned_agents = {}
                     pending_team_messages.clear()
+                    subagent_registry.clear()
                 handlers = _build_handlers(
                     workspace_path=workspace_path,
                     todo_manager=todo_manager,
@@ -3290,9 +3366,11 @@ def _run_stdio_session(
                     mcp_manager=mcp_manager,
                     lsp_manager=lsp_manager,
                     memory_manager=memory_manager,
+                    subagent_registry=subagent_registry,
                 )
                 _install_plan_handler(handlers, plan_approval)
                 install_workflow_handler(handlers)
+                install_subagent_send_handler(handlers)
                 _replay_stdio_transcript(messages, ui_console)
                 ui_console.print_status(f"Resumed session: {resumed_session}")
                 continue
@@ -3339,6 +3417,7 @@ def _run_stdio_session(
                 )
                 spawned_agents = {}
                 pending_team_messages.clear()
+                subagent_registry.clear()
                 handlers = _build_handlers(
                     workspace_path=workspace_path,
                     todo_manager=todo_manager,
@@ -3358,9 +3437,11 @@ def _run_stdio_session(
                     mcp_manager=mcp_manager,
                     lsp_manager=lsp_manager,
                     memory_manager=memory_manager,
+                    subagent_registry=subagent_registry,
                 )
                 _install_plan_handler(handlers, plan_approval)
                 install_workflow_handler(handlers)
+                install_subagent_send_handler(handlers)
                 _replay_stdio_transcript(messages, ui_console)
                 _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
                 ui_console.print_status(

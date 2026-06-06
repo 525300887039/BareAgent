@@ -20,6 +20,10 @@ theme = "catppuccin-mocha"
 [subagent]
 max_depth = 3
 default_type = "general-purpose"
+# 可续跑前台子代理上下文的软上限（session 级、内存态）。subagent 跑完会注册一份
+# 可续跑上下文，LLM 用返回的 agent id 经 subagent_send 续跑；超过此数按最旧淘汰。
+# 仅前台、isolation="none" 的子代理可续跑（后台 / worktree 不注册）。restart-required。
+max_resumable = 20
 
 [thinking]
 mode = "adaptive"

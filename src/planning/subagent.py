@@ -18,6 +18,7 @@ from src.planning.agent_types import (
     filter_tools,
     resolve_agent_type,
 )
+from src.planning.subagent_registry import ResumableContext, SubagentRegistry
 from src.planning.worktree import (
     WorktreeError,
     WorktreeHandle,
@@ -119,6 +120,7 @@ def run_subagent(
     default_agent_type: str = DEFAULT_AGENT_TYPE,
     isolation: str = "none",
     retry_policy: Any = None,
+    registry: SubagentRegistry | None = None,
 ) -> str:
     if current_depth > max_depth:
         return f"Subagent refused: recursion depth {current_depth} exceeds limit {max_depth}."
@@ -153,6 +155,9 @@ def run_subagent(
                 default_agent_type=default_agent_type,
                 isolation=isolation,
                 retry_policy=retry_policy,
+                # Background subagents are fire-and-notify: their context is gone
+                # by the time a notification surfaces, so they are never resumable.
+                registry=None,
             ),
         )
         return f"Subagent {task_id} started in the background."
@@ -171,6 +176,7 @@ def run_subagent(
         default_agent_type=default_agent_type,
         isolation=isolation,
         retry_policy=retry_policy,
+        registry=registry,
     )
 
 
@@ -188,6 +194,7 @@ def _run_subagent_sync(
     default_agent_type: str,
     isolation: str = "none",
     retry_policy: Any = None,
+    registry: SubagentRegistry | None = None,
 ) -> str:
     filtered_tools = filter_tools(tools, resolved_type)
     child_handlers = filter_handlers(handlers, filtered_tools)
@@ -247,6 +254,9 @@ def _run_subagent_sync(
                 default_agent_type=default_agent_type,
                 isolation=isolation,
                 retry_policy=retry_policy,
+                # Nested subagents are not directly resumable from the main loop
+                # ("you can only continue agents you spawned"): never register.
+                registry=None,
             )
         )
 
@@ -275,6 +285,32 @@ def _run_subagent_sync(
     finally:
         if handle is not None:
             footnote = _finalize_worktree(handle)
+
+    # Register a resumable context only for a foreground, non-worktree subagent
+    # that completed successfully (reaching here means agent_loop did not raise).
+    # ``messages`` is the live list agent_loop mutated, so resuming re-enters the
+    # same conversation. Worktree subagents are excluded: their isolated tree is
+    # finalized above, so a later resume would write into the wrong place.
+    if registry is not None and isolation == "none":
+        agent_id = registry.generate_id()
+        registry.register(
+            ResumableContext(
+                agent_id=agent_id,
+                messages=messages,
+                provider=provider,
+                tools=filtered_tools,
+                handlers=child_handlers,
+                permission=permission,
+                compact_fn=compact_fn,
+                max_turns=resolved_type.max_turns,
+                retry_policy=retry_policy,
+            )
+        )
+        footnote += (
+            f"\n\n[subagent id {agent_id}: resumable -- "
+            "continue this conversation with subagent_send]"
+        )
+
     return result + footnote
 
 

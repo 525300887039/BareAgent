@@ -568,6 +568,7 @@ def get_handlers(
     lsp_manager: LanguageServerManager | None = None,
     memory_manager: MemoryManager | None = None,
     subagent_retry_policy: Any = None,
+    subagent_registry: Any = None,
 ) -> dict[str, Callable[..., Any]]:
     # Hybrid auto-diagnostics hook: built once per ``get_handlers`` call so
     # edit_file / write_file share the same closure. ``None`` when LSP isn't
@@ -640,6 +641,9 @@ def get_handlers(
                 default_agent_type=subagent_default_type,
                 isolation=isolation,
                 retry_policy=subagent_retry_policy,
+                # Only top-level (main-loop) subagents register a resumable
+                # context; nested spawns pass registry=None inside run_subagent.
+                registry=subagent_registry,
             )
         )
 

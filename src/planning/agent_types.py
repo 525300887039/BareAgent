@@ -45,11 +45,14 @@ class AgentType:
 # permission mode through an interactive approval prompt -- a sub-agent has no
 # human to ask and no business mutating the parent's mode. ``workflow`` fans out
 # its own subagents; letting a sub-agent call it would allow unbounded nesting
-# (out of scope for the MVP). ``skill_create`` stays out of sub-agents by never
-# joining the global tool set; ``exit_plan_mode`` / ``workflow`` do live in the
-# main loop's set, so they are stripped here as a centralized, agent-type
-# -independent guarantee (filter_handlers then drops the orphaned handler).
-MAIN_LOOP_ONLY_TOOLS = frozenset({"exit_plan_mode", "workflow"})
+# (out of scope for the MVP). ``subagent_send`` resumes a foreground subagent
+# from the REPL-scoped registry; only the main loop spawns resumable contexts,
+# so a sub-agent has nothing to continue. ``skill_create`` stays out of
+# sub-agents by never joining the global tool set; ``exit_plan_mode`` /
+# ``workflow`` / ``subagent_send`` do live in the main loop's set, so they are
+# stripped here as a centralized, agent-type-independent guarantee
+# (filter_handlers then drops the orphaned handler).
+MAIN_LOOP_ONLY_TOOLS = frozenset({"exit_plan_mode", "workflow", "subagent_send"})
 
 
 _READ_ONLY_DEFAULTS: dict[str, Any] = {
