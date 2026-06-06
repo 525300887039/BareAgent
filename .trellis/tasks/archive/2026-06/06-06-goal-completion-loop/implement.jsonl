@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新增纯模块 src/core/goal.py + 评估器工具 handler + main.py REPL 接线/配置，需遵守 src/ 布局与新代码归属约定"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "评估器 never-raise、goal_verdict 结构化裁决、循环 LLMCallError/KeyboardInterrupt 回滚、fail-closed 不自动升级权限——全是错误处理约定的核心"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "[goal] 配置段解析、逐字段容错、env 覆盖(BAREAGENT_GOAL_MAX_TURNS)、config 分层与 boot 固化语义需对齐既有范式"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "DEFAULT 模式 /auto 引导提示、goal 状态/进度输出走 AgentConsole 而非 logging，需对齐输出层约定"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Python 3.12+ / ruff / pytest / 反过度设计 / 源码禁 emoji 的质量基线，纯模块可单测设计需符合"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "本任务大量复用 _run_skill_reflection 隔离评估范式、retry.py/skill_gen.py 纯模块范式、skill_create 唯一工具范式，需用复用思维避免重复造轮子"}

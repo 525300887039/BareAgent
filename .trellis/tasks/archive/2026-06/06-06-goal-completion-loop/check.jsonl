@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核对 ruff/pytest 通过、反过度设计、源码禁 emoji、纯模块测试覆盖等质量基线"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核对评估器 never-raise、循环中断回滚、goal_verdict 结构化错误、fail-closed 权限语义是否落实"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核对 [goal] 配置逐字段容错不崩 boot、env 覆盖、restart-required(不进热重载 hot 集) 是否正确"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "核对新代码归属与 src/ 布局约定"}
