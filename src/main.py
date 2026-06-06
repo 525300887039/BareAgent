@@ -248,6 +248,18 @@ class WorkflowConfig:
 
 
 @dataclass(slots=True)
+class TeamConfig:
+    # Multi-agent teammate coordination (task 06-06-team-subsystem-completion).
+    # ``poll_interval`` is how long an idle teammate daemon waits between
+    # task-scan wakeups (it also wakes immediately on incoming mail via the
+    # mailbox condition variable). ``response_timeout`` is how long a blocking
+    # ``team_send`` waits for a teammate's reply before returning a timeout note.
+    # Both are baked into spawned teammates / send calls at boot -> restart-required.
+    poll_interval: float = 1.0
+    response_timeout: float = 60.0
+
+
+@dataclass(slots=True)
 class Config:
     provider: ProviderConfig
     permission: PermissionConfig
@@ -271,6 +283,7 @@ class Config:
     skills: SkillsConfig = field(default_factory=SkillsConfig)
     goal: GoalConfig = field(default_factory=GoalConfig)
     workflow: WorkflowConfig = field(default_factory=WorkflowConfig)
+    team: TeamConfig = field(default_factory=TeamConfig)
 
 
 # Dotted config paths that ``/reload`` can hot-apply to live runtime objects.
@@ -696,6 +709,27 @@ def _parse_workflow_config(workflow_raw: dict) -> WorkflowConfig:
     )
 
 
+def _parse_team_config(team_raw: dict) -> TeamConfig:
+    """Parse the ``[team]`` config section (defensive, never crashes boot).
+
+    Both fields are config-only positive floats; a missing / malformed / <= 0
+    value falls back to its default.
+    """
+    defaults = TeamConfig()
+
+    def _positive_float(key: str, fallback: float) -> float:
+        try:
+            value = float(team_raw.get(key, fallback))
+        except (TypeError, ValueError):
+            return fallback
+        return value if value > 0 else fallback
+
+    return TeamConfig(
+        poll_interval=_positive_float("poll_interval", defaults.poll_interval),
+        response_timeout=_positive_float("response_timeout", defaults.response_timeout),
+    )
+
+
 def _build_goal_provider(
     config: Config,
     session_provider: BaseLLMProvider,
@@ -897,6 +931,9 @@ def load_config(
     workflow_raw = raw_config.get("workflow", {})
     workflow_config = _parse_workflow_config(workflow_raw if isinstance(workflow_raw, dict) else {})
 
+    team_raw = raw_config.get("team", {})
+    team_config = _parse_team_config(team_raw if isinstance(team_raw, dict) else {})
+
     memory_raw = raw_config.get("memory", {})
     memory_config = MemoryConfig(
         enabled=_resolve_bool(
@@ -936,6 +973,7 @@ def load_config(
         skills=skills_config,
         goal=goal_config,
         workflow=workflow_config,
+        team=team_config,
     )
 
 
@@ -1185,7 +1223,7 @@ _HELP_TEXT = (
     "  /loop      Schedule a shell command to repeat every N seconds "
     "(list|cancel <id>|clear); runs WITHOUT permission prompts\n"
     "  /log       Debug log viewer (status|serve|open|<seq>)\n"
-    "  /team      Manage team agents (list | spawn | send)\n"
+    "  /team      Manage team agents (list | spawn | send | shutdown)\n"
     "  /mcp       Manage MCP servers (status | list | reload <name>)\n"
     "  /mcp:      Invoke an MCP prompt (e.g. /mcp:server:prompt key=value)\n"
     "  /lsp       Manage LSP servers (status | list | reload <language>)\n"
@@ -1680,11 +1718,17 @@ def _make_team_handlers(
 ) -> dict[str, Callable[..., Any]]:
     provider_factory = _make_teammate_provider_factory(config)
 
+    def _teammate_task_id(teammate_name: str) -> str:
+        return f"team:{runtime_id}:{teammate_name}"
+
     def _team_list() -> list[dict[str, object]]:
         return [
             {
                 **teammate.to_dict(),
-                "running": teammate.name in spawned_agents,
+                # Source of truth is the live background thread, not the
+                # spawned_agents dict (which never prunes crashed/finished
+                # teammates).
+                "running": bg_manager.is_running(_teammate_task_id(teammate.name)),
             }
             for teammate in teammate_manager.list()
         ]
@@ -1703,7 +1747,32 @@ def _make_team_handlers(
                 timestamp="",
             )
         )
-        return f"Sent message {message_id} to {normalized_target}"
+        # The main agent has no autonomous responder, so never block on it.
+        if normalized_target == MAIN_AGENT_NAME:
+            return f"Sent message {message_id} to {normalized_target}."
+        # A teammate that is not running will never reply; return now instead of
+        # waiting out the full timeout. (If it is spawned later, a reply would
+        # surface via the mailbox drain on a subsequent turn.)
+        if not bg_manager.is_running(_teammate_task_id(normalized_target)):
+            return (
+                f"Sent message {message_id} to {normalized_target}, but it is not "
+                "running. Spawn it first (team_spawn / /team spawn) to get a reply."
+            )
+        # Block for the reply and hand it back to the caller. Mark the response
+        # delivered so the polling drain does not surface it to the LLM twice.
+        timeout = config.team.response_timeout
+        response = ProtocolFSM(message_bus, agent_name).wait_response(
+            message_id, timeout=timeout
+        )
+        if response is None:
+            return (
+                f"Sent message {message_id} to {normalized_target}; no reply within "
+                f"{timeout:.0f}s. It may still be working -- a late reply will "
+                "surface on a later turn."
+            )
+        message_bus.mark_delivered(response.id)
+        _, body = decode_protocol_content(response.content)
+        return f"Reply from {normalized_target}: {body}"
 
     def _team_spawn(name: str) -> str:
         teammate_name = name.strip()
@@ -1737,19 +1806,36 @@ def _make_team_handlers(
             task_manager=task_manager,
             permission=teammate_permission,
             system_prompt=agent_instance.system_prompt,
-            poll_interval=1.0,
+            poll_interval=config.team.poll_interval,
         )
         try:
-            bg_manager.submit(f"team:{runtime_id}:{teammate_name}", autonomous_agent.run)
+            bg_manager.submit(_teammate_task_id(teammate_name), autonomous_agent.run)
         except ValueError:
             return f"Teammate {teammate_name} is already running."
         spawned_agents[teammate_name] = autonomous_agent
         return f"Spawned teammate {teammate_name} ({agent_instance.role})"
 
+    def _team_shutdown(name: str) -> str:
+        teammate_name = name.strip()
+        if not teammate_name:
+            return "Error: teammate name must not be empty."
+        if not bg_manager.is_running(_teammate_task_id(teammate_name)):
+            spawned_agents.pop(teammate_name, None)
+            return f"Teammate {teammate_name} is not running."
+        # SHUTDOWN is honored regardless of msg_type (checked before the request
+        # filter in AutonomousAgent._handle_messages); wait_for_message wakes the
+        # daemon immediately so it stops promptly.
+        ProtocolFSM(message_bus, agent_name).request(
+            teammate_name, Protocol.SHUTDOWN, "Stop requested."
+        )
+        spawned_agents.pop(teammate_name, None)
+        return f"Sent shutdown to teammate {teammate_name}."
+
     return {
         "team_list": _team_list,
         "team_send": _team_send,
         "team_spawn": _team_spawn,
+        "team_shutdown": _team_shutdown,
     }
 
 
@@ -1837,11 +1923,19 @@ def _handle_team_command(
             result = team_handlers["team_send"](target, content)  # type: ignore[index, operator]
             ui_console.print_status(str(result))
             return
+
+        if subcommand == "shutdown" and len(parts) >= 2:
+            result = team_handlers["team_shutdown"](parts[1])  # type: ignore[index, operator]
+            ui_console.print_status(str(result))
+            return
     except Exception as exc:
         ui_console.print_error(str(exc))
         return
 
-    ui_console.print_status("Usage: /team list | /team spawn <name> | /team send <name> <message>")
+    ui_console.print_status(
+        "Usage: /team list | /team spawn <name> | /team send <name> <message> "
+        "| /team shutdown <name>"
+    )
 
 
 _MCP_PROMPT_USAGE = "Usage: /mcp:<server>:<prompt> [key=value ...]"
@@ -2022,17 +2116,30 @@ def _drain_team_mailbox(
     *,
     message_bus: MessageBus,
     since: str | None,
+    sink: list[str] | None = None,
 ) -> str | None:
+    """Surface new main-mailbox messages to the console and (optionally) the LLM.
+
+    Messages already delivered out of band (a blocking ``team_send`` that
+    returned the reply to the caller) are skipped so the LLM never sees them
+    twice. When ``sink`` is provided, each surfaced message's text is appended to
+    it; the REPL prepends those onto the next user turn so late / unsolicited
+    teammate replies enter the conversation without breaking role alternation.
+    """
     messages = message_bus.receive(MAIN_AGENT_NAME, since_id=since)
     if not messages:
         return since
 
     for message in messages:
+        if message_bus.was_delivered(message.id):
+            continue
         protocol, content = decode_protocol_content(message.content)
         label = f"Team {message.msg_type} from {message.from_agent}"
         if protocol is not None:
             label = f"{label} [{protocol.value}]"
         ui_console.print_status(f"{label}: {content}")
+        if sink is not None:
+            sink.append(f"[{label}] {content}")
 
     return messages[-1].id
 
@@ -2913,6 +3020,11 @@ def _run_stdio_session(
         session_id,
     )
     spawned_agents: dict[str, AutonomousAgent] = {}
+    # Late / unsolicited teammate replies surfaced by the mailbox drain are
+    # buffered here and prepended onto the next user turn (keeps role
+    # alternation intact). Blocking team_send replies bypass this -- they return
+    # straight to the LLM as the tool result.
+    pending_team_messages: list[str] = []
     messages = _initial_messages(
         workspace_path,
         skill_summary=skill_loader.get_skill_list_prompt(),
@@ -3028,6 +3140,7 @@ def _run_stdio_session(
                 ui_console,
                 message_bus=message_bus,
                 since=main_mailbox_cursor,
+                sink=pending_team_messages,
             )
             current_config_mtimes = _config_mtimes(config)
             if current_config_mtimes != last_config_mtimes:
@@ -3074,6 +3187,7 @@ def _run_stdio_session(
                     current_bus=message_bus,
                 )
                 spawned_agents = {}
+                pending_team_messages.clear()
                 handlers = _build_handlers(
                     workspace_path=workspace_path,
                     todo_manager=todo_manager,
@@ -3156,6 +3270,7 @@ def _run_stdio_session(
                         current_bus=message_bus,
                     )
                     spawned_agents = {}
+                    pending_team_messages.clear()
                 handlers = _build_handlers(
                     workspace_path=workspace_path,
                     todo_manager=todo_manager,
@@ -3223,6 +3338,7 @@ def _run_stdio_session(
                     current_bus=message_bus,
                 )
                 spawned_agents = {}
+                pending_team_messages.clear()
                 handlers = _build_handlers(
                     workspace_path=workspace_path,
                     todo_manager=todo_manager,
@@ -3397,6 +3513,7 @@ def _run_stdio_session(
                         ui_console,
                         message_bus=message_bus,
                         since=main_mailbox_cursor,
+                        sink=pending_team_messages,
                     )
                 except LLMCallError:
                     del messages[snapshot_len:]
@@ -3423,6 +3540,14 @@ def _run_stdio_session(
                     continue
                 _, _, forget_arg = text.partition(" ")
                 text = build_forget_instruction(forget_arg.strip())
+
+            # Prepend any buffered late/unsolicited teammate replies onto this
+            # user turn so the LLM sees them (without injecting standalone user
+            # messages that would break role alternation).
+            if pending_team_messages:
+                team_context = "\n".join(pending_team_messages)
+                pending_team_messages.clear()
+                text = f"{team_context}\n\n{text}" if text else team_context
 
             messages.append({"role": "user", "content": text})
             snapshot_len = len(messages) - 1
@@ -3464,6 +3589,7 @@ def _run_stdio_session(
                     ui_console,
                     message_bus=message_bus,
                     since=main_mailbox_cursor,
+                    sink=pending_team_messages,
                 )
             except LLMCallError:
                 del messages[snapshot_len:]

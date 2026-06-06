@@ -252,3 +252,16 @@ enabled = true
 max_concurrency = 8
 # 单张 DAG 的节点数上限，防止 LLM 产出超大图打爆线程池。
 max_nodes = 20
+
+[team]
+# 多智能体队友协调（task 06-06-team-subsystem-completion）：把 team 子系统补到
+# 「LLM 真正能用的协作闭环」。team_send 现在阻塞等队友回复并把回复作为工具结果回灌 LLM
+# （队友未运行 / 目标为 main 则立即返回，不干等超时）；迟到 / 未经请求的回复经邮箱 drain
+# 回灌到下一个 user turn。队友请求处理异常被隔离（回 error response、守护线程存活）；
+# team_shutdown <name> 可单独停一个队友；team_list 经后台线程存活探测反映真实运行状态。
+# 安全语义：队友以 fail-closed 权限无人值守运行（与后台子代理 / /loop 一脉相承）。
+# 两个字段均为 config-only 正数，boot 固化 -> 改动需重启（restart-required）。
+# 队友守护循环空闲时每隔 poll_interval 秒醒来扫一次待办任务（收到消息会立即唤醒）。
+poll_interval = 1.0
+# 阻塞式 team_send 等待队友回复的超时秒数；超时返回提示，迟到回复仍会在后续 turn 浮现。
+response_timeout = 60.0

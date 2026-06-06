@@ -2,11 +2,20 @@ from __future__ import annotations
 
 import threading
 import time
+import types
 from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
+from src.concurrency.background import BackgroundManager
+from src.main import (
+    MAIN_AGENT_NAME,
+    TeamConfig,
+    _drain_team_mailbox,
+    _make_team_handlers,
+    _parse_team_config,
+)
 from src.permission.guard import PermissionGuard, PermissionMode
 from src.planning.tasks import TaskManager
 from src.provider.base import BaseLLMProvider, LLMResponse, ToolCall
@@ -348,6 +357,323 @@ def _wait_for(predicate, timeout: float = 2) -> None:
             return
         time.sleep(0.01)
     raise AssertionError("Timed out waiting for condition")
+
+
+# --- task 06-06-team-subsystem-completion ---------------------------------
+
+
+class _FailingProvider(BaseLLMProvider):
+    def create(self, messages, tools, **kwargs) -> LLMResponse:
+        _ = messages, tools, kwargs
+        raise RuntimeError("boom")
+
+    def create_stream(self, messages, tools, **kwargs):
+        _ = messages, tools, kwargs
+        raise NotImplementedError
+
+
+class _FakeBg:
+    """Minimal stand-in for BackgroundManager.is_running / submit."""
+
+    def __init__(self, running: set[str] | None = None) -> None:
+        self.running: set[str] = set(running or ())
+        self.submitted: list[str] = []
+
+    def is_running(self, task_id: str) -> bool:
+        return task_id in self.running
+
+    def submit(self, task_id: str, fn, *args):
+        self.submitted.append(task_id)
+        return task_id
+
+
+class _FakeConsole:
+    def __init__(self) -> None:
+        self.statuses: list[str] = []
+
+    def print_status(self, message: str) -> None:
+        self.statuses.append(message)
+
+
+def _build_team_handlers(
+    tmp_path: Path,
+    *,
+    bus: MessageBus,
+    teammate_manager: TeammateManager,
+    bg: _FakeBg,
+    spawned: dict | None = None,
+    response_timeout: float = 0.3,
+    runtime_id: str = "sess1",
+    agent_name: str = MAIN_AGENT_NAME,
+) -> dict:
+    config = types.SimpleNamespace(
+        team=TeamConfig(poll_interval=0.01, response_timeout=response_timeout),
+        provider=types.SimpleNamespace(name="anthropic", model="m"),
+    )
+    return _make_team_handlers(
+        config=config,  # type: ignore[arg-type]
+        workspace_path=tmp_path,
+        todo_manager=None,  # type: ignore[arg-type]  # only used by team_spawn
+        task_manager=None,
+        skill_loader=None,  # type: ignore[arg-type]  # only used by team_spawn
+        permission=PermissionGuard(PermissionMode.DEFAULT),
+        bg_manager=bg,  # type: ignore[arg-type]
+        tools=[],
+        runtime_id=runtime_id,
+        teammate_manager=teammate_manager,
+        message_bus=bus,
+        spawned_agents=spawned if spawned is not None else {},
+        agent_name=agent_name,
+    )
+
+
+def test_background_manager_is_running(tmp_path: Path) -> None:
+    bg = BackgroundManager()
+    assert bg.is_running("never-submitted") is False
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def _work() -> None:
+        started.set()
+        release.wait(timeout=2)
+
+    bg.submit("job1", _work)
+    assert started.wait(timeout=2)
+    assert bg.is_running("job1") is True
+
+    release.set()
+    _wait_for(lambda: not bg.is_running("job1"))
+    assert bg.is_running("job1") is False
+
+
+def test_mailbox_mark_delivered_dedup(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    assert bus.was_delivered("m1") is False
+    bus.mark_delivered("m1")
+    assert bus.was_delivered("m1") is True
+    # Empty / whitespace ids are a no-op (never recorded, never matched).
+    bus.mark_delivered("   ")
+    assert bus.was_delivered("") is False
+
+
+def test_parse_team_config_defaults_values_and_fallbacks() -> None:
+    defaults = _parse_team_config({})
+    assert defaults.poll_interval == 1.0
+    assert defaults.response_timeout == 60.0
+
+    custom = _parse_team_config({"poll_interval": 0.5, "response_timeout": 30})
+    assert custom.poll_interval == 0.5
+    assert custom.response_timeout == 30.0
+
+    # Malformed and non-positive values fall back to defaults.
+    bad = _parse_team_config({"poll_interval": "nope", "response_timeout": 0})
+    assert bad.poll_interval == 1.0
+    assert bad.response_timeout == 60.0
+
+
+def test_autonomous_agent_isolates_request_failure(tmp_path: Path) -> None:
+    """A failing request must not kill the daemon; it replies with the error."""
+    bus = MessageBus(tmp_path / ".mailbox")
+    bus.ensure_mailbox("main")
+    agent = AutonomousAgent(
+        name="reviewer",
+        provider=_FailingProvider(),
+        tools=[],
+        handlers={},
+        bus=bus,
+        task_manager=None,
+    )
+    request_id = bus.send(
+        Message(
+            id="",
+            from_agent="main",
+            to_agent="reviewer",
+            content="do the thing",
+            msg_type="request",
+            timestamp="",
+        )
+    )
+    incoming = bus.receive("reviewer")
+    # Direct call (no thread): _handle_messages must swallow the error.
+    agent._handle_messages(incoming)
+
+    replies = bus.receive("main")
+    assert len(replies) == 1
+    assert replies[0].in_reply_to == request_id
+    assert "[error]" in replies[0].content
+
+
+def test_team_send_blocks_and_returns_reply(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    bus.ensure_mailbox(MAIN_AGENT_NAME)
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    teammate_manager.register("reviewer", "reviewer", "You review.")
+    bg = _FakeBg(running={"team:sess1:reviewer"})
+    handlers = _build_team_handlers(
+        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
+    )
+
+    stop = threading.Event()
+
+    def _responder() -> None:
+        fsm = ProtocolFSM(bus, "reviewer")
+        cursor: str | None = None
+        while not stop.is_set():
+            msgs = bus.receive("reviewer", since_id=cursor)
+            if msgs:
+                cursor = msgs[-1].id
+            for message in msgs:
+                if message.msg_type == "request":
+                    fsm.respond(message.id, f"done:{message.content}")
+            time.sleep(0.005)
+
+    thread = threading.Thread(target=_responder, daemon=True)
+    thread.start()
+    try:
+        result = handlers["team_send"]("reviewer", "hello")
+    finally:
+        stop.set()
+        thread.join(timeout=1)
+
+    assert result == "Reply from reviewer: done:hello"
+    # The consumed reply is marked delivered so the drain won't re-surface it.
+    main_inbox = bus.receive(MAIN_AGENT_NAME)
+    assert any(bus.was_delivered(m.id) for m in main_inbox)
+
+
+def test_team_send_skips_blocking_when_not_running(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    teammate_manager.register("reviewer", "reviewer", "You review.")
+    bg = _FakeBg(running=set())  # not running
+    handlers = _build_team_handlers(
+        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
+    )
+
+    start = time.time()
+    result = handlers["team_send"]("reviewer", "hello")
+    elapsed = time.time() - start
+
+    assert "not running" in result
+    assert elapsed < 0.2  # returned immediately, did not wait out the timeout
+
+
+def test_team_send_to_main_returns_immediately(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    bg = _FakeBg()
+    handlers = _build_team_handlers(
+        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
+    )
+
+    result = handlers["team_send"](MAIN_AGENT_NAME, "note")
+    assert result.startswith("Sent message")
+    assert MAIN_AGENT_NAME in result
+
+
+def test_team_send_times_out_without_reply(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    teammate_manager.register("reviewer", "reviewer", "You review.")
+    bg = _FakeBg(running={"team:sess1:reviewer"})
+    handlers = _build_team_handlers(
+        tmp_path,
+        bus=bus,
+        teammate_manager=teammate_manager,
+        bg=bg,
+        response_timeout=0.1,
+    )
+
+    result = handlers["team_send"]("reviewer", "hello")
+    assert "no reply within" in result
+
+
+def test_team_shutdown_signals_running_teammate(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    teammate_manager.register("reviewer", "reviewer", "You review.")
+    spawned: dict = {"reviewer": object()}
+    bg = _FakeBg(running={"team:sess1:reviewer"})
+    handlers = _build_team_handlers(
+        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg, spawned=spawned
+    )
+
+    result = handlers["team_shutdown"]("reviewer")
+    assert "shutdown" in result.lower()
+    assert "reviewer" not in spawned
+
+    inbox = bus.receive("reviewer")
+    assert any(
+        decode_protocol_content(m.content)[0] == Protocol.SHUTDOWN for m in inbox
+    )
+
+
+def test_team_shutdown_when_not_running(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    bg = _FakeBg(running=set())
+    handlers = _build_team_handlers(
+        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
+    )
+
+    result = handlers["team_shutdown"]("reviewer")
+    assert "not running" in result
+
+
+def test_team_list_reflects_real_liveness(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    teammate_manager.register("alive", "r", "p")
+    teammate_manager.register("dead", "r", "p")
+    bg = _FakeBg(running={"team:sess1:alive"})
+    handlers = _build_team_handlers(
+        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
+    )
+
+    listed = {item["name"]: item["running"] for item in handlers["team_list"]()}
+    assert listed == {"alive": True, "dead": False}
+
+
+def test_drain_team_mailbox_skips_delivered_and_collects_sink(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    bus.ensure_mailbox(MAIN_AGENT_NAME)
+    delivered_id = bus.send(
+        Message(
+            id="",
+            from_agent="reviewer",
+            to_agent=MAIN_AGENT_NAME,
+            content="already returned to the LLM",
+            msg_type="response",
+            timestamp="",
+        )
+    )
+    bus.mark_delivered(delivered_id)
+    bus.send(
+        Message(
+            id="",
+            from_agent="reviewer",
+            to_agent=MAIN_AGENT_NAME,
+            content="unsolicited late note",
+            msg_type="response",
+            timestamp="",
+        )
+    )
+
+    console = _FakeConsole()
+    sink: list[str] = []
+    cursor = _drain_team_mailbox(
+        console,  # type: ignore[arg-type]
+        message_bus=bus,
+        since=None,
+        sink=sink,
+    )
+
+    # The delivered message is skipped; only the unsolicited one is surfaced.
+    assert len(sink) == 1
+    assert "unsolicited late note" in sink[0]
+    assert all("already returned" not in status for status in console.statuses)
+    assert cursor is not None
 
 
 def test_message_bus_receive_does_not_lose_same_timestamp_messages(

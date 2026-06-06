@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from typing import Any
 
 from src.core.loop import agent_loop
@@ -58,10 +57,10 @@ class AutonomousAgent:
                     self._execute_task(claimed_task)
                     break
                 else:
-                    time.sleep(self.poll_interval)
+                    self.bus.wait_for_message(self.name, timeout=self.poll_interval)
                 continue
 
-            time.sleep(self.poll_interval)
+            self.bus.wait_for_message(self.name, timeout=self.poll_interval)
 
         return f"{self.name} stopped"
 
@@ -75,9 +74,17 @@ class AutonomousAgent:
             if message.msg_type != "request":
                 continue
 
-            response_text = self._run_prompt(
-                self._build_incoming_prompt(content, protocol=protocol)
-            )
+            # Isolate request handling: a single failing request must not kill
+            # the daemon thread (which would silently strand the teammate and
+            # leave a blocking ``team_send`` waiting out its full timeout). On
+            # error, reply with the reason so the requester learns immediately.
+            try:
+                response_text = self._run_prompt(
+                    self._build_incoming_prompt(content, protocol=protocol)
+                )
+            except Exception as exc:
+                logging.exception("Request handling failed in agent %s", self.name)
+                response_text = f"[error] {type(exc).__name__}: {exc}"
             self._protocol.respond(message.id, response_text)
 
     def _claim_task(self, task: Task) -> Task | None:

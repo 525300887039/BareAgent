@@ -64,6 +64,13 @@ class MessageBus:
         self._conds: dict[str, threading.Condition] = {}
         self._conds_guard = threading.Lock()
         self._signal_counts: dict[str, int] = {}
+        # Ids of messages already handed to the consumer out of band -- e.g. a
+        # blocking ``team_send`` that synchronously waited for and returned the
+        # reply. The polling drain consults this so it does not deliver the same
+        # message a second time. Bound to the bus instance, so it resets for free
+        # when a new session swaps in a fresh bus.
+        self._delivered: set[str] = set()
+        self._delivered_lock = threading.Lock()
 
     def send(self, msg: Message) -> str:
         resolved = self._prepare_message(msg)
@@ -181,6 +188,22 @@ class MessageBus:
                 lambda: self._signal_counts.get(agent_name, 0) != initial,
                 timeout=timeout,
             )
+
+    def mark_delivered(self, message_id: str) -> None:
+        """Record that ``message_id`` was already delivered out of band.
+
+        Used by a blocking consumer (e.g. ``team_send`` waiting for a reply) so
+        the polling drain does not surface the same message a second time.
+        """
+        normalized_id = message_id.strip()
+        if not normalized_id:
+            return
+        with self._delivered_lock:
+            self._delivered.add(normalized_id)
+
+    def was_delivered(self, message_id: str) -> bool:
+        with self._delivered_lock:
+            return message_id.strip() in self._delivered
 
     def _mailbox_path(self, agent_name: str) -> Path:
         return self.mailbox_dir / f"{agent_name}.jsonl"

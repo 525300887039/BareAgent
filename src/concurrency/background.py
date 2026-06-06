@@ -48,6 +48,18 @@ class BackgroundManager:
             thread.start()
             return task_id
 
+    def is_running(self, task_id: str) -> bool:
+        """Return True if a live (not-yet-finished) thread is registered for ``task_id``.
+
+        Read-only liveness probe used by callers that track long-lived background
+        work by id (e.g. team teammates registered as ``team:<session>:<name>``).
+        Mirrors the ``is_alive()`` checks already used by ``submit`` /
+        ``drain_notifications`` without mutating the thread registry.
+        """
+        with self._lock:
+            thread = self._threads.get(task_id)
+            return thread is not None and thread.is_alive()
+
     def _run(self, task_id: str, fn: Callable[..., Any], *args: Any) -> None:
         try:
             result = fn(*args)

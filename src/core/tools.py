@@ -61,6 +61,7 @@ DEFERRED_TOOLS = {
     "team_spawn",
     "team_send",
     "team_list",
+    "team_shutdown",
     "lsp_outline",
     "lsp_definition",
     "lsp_references",
@@ -106,7 +107,11 @@ TEAM_TOOL_SCHEMAS: list[dict[str, Any]] = [
     ),
     _schema(
         "team_send",
-        "Send a message to a teammate mailbox.",
+        (
+            "Send a message to a running teammate and wait for its reply, which is "
+            "returned to you. If the teammate is not running (or the target is the "
+            "main agent), returns immediately without waiting."
+        ),
         {
             "to_agent": {
                 "type": "string",
@@ -121,9 +126,20 @@ TEAM_TOOL_SCHEMAS: list[dict[str, Any]] = [
     ),
     _schema(
         "team_list",
-        "List registered teammates.",
+        "List registered teammates and whether each is currently running.",
         {},
         [],
+    ),
+    _schema(
+        "team_shutdown",
+        "Stop a single running teammate (sends a shutdown signal to its mailbox).",
+        {
+            "name": {
+                "type": "string",
+                "description": "Teammate name to stop.",
+            }
+        },
+        ["name"],
     ),
 ]
 MEMORY_TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -469,6 +485,7 @@ _TEAM_FALLBACK_HANDLERS: dict[str, Callable[..., Any]] = {
     "team_spawn": lambda name: f"Team spawning unavailable for {name}.",
     "team_send": lambda to_agent, content: f"Team messaging unavailable for {to_agent}.",
     "team_list": lambda: [],
+    "team_shutdown": lambda name: f"Team shutdown unavailable for {name}.",
 }
 
 
