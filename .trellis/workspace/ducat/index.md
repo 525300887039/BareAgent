@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 31
+- **Total Sessions**: 32
 - **Last Active**: 2026-06-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1042 | Active |
+| `journal-1.md` | ~1075 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 32 | 2026-06-06 | 子代理 SendMessage 续跑 | `279e20b` | `main` |
 | 31 | 2026-06-06 | 完善 team/AutonomousAgent 子系统（回路闭合 + 异常隔离 + team_shutdown + 活性检测 + 提速） | `e0e3c00` | `main` |
 | 30 | 2026-06-06 | Workflow 确定性编排（声明式 DAG + 并行 fan-out） | `fd179ff` | `main` |
 | 29 | 2026-06-06 | goal 完成条件循环（/goal） | `5d13562` | `main` |

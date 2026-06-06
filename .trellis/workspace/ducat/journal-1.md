@@ -1040,3 +1040,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 32: 子代理 SendMessage 续跑
+
+**Date**: 2026-06-06
+**Task**: 子代理 SendMessage 续跑
+**Branch**: `main`
+
+### Summary
+
+实现子代理 SendMessage 续跑（对标 Claude Code SendMessage）：前台 isolation=none 子代理跑完注册到会话级 SubagentRegistry（FIFO 软上限 move-to-end 淘汰），返回带续跑 ID 脚注；新增主循环专属工具 subagent_send(agent_id,message) 追加消息、原样保留上下文重入 agent_loop。三重隔离（MAIN_LOOP_ONLY_TOOLS+不进全局集+filter_handlers 丢孤儿），不入 SAFE_TOOLS。只注册主循环直接 spawn 的前台子代理（后台/嵌套/worktree registry=None）。注册表 session-scope 四点 clear、/compact 保留。配置 [subagent] max_resumable=20。brainstorm Q1-Q4 全决策，trellis-check COMPLIANT（自修 1 处 schema 复用），16 新测试，全量 1037 passed。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `279e20b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
