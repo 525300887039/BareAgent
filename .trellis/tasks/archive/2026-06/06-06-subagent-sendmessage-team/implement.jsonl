@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新增 src/planning/subagent_registry.py 与 src/core/handlers/subagent_send.py，需按既有分层（planning 纯逻辑 / core.handlers 工具处理器）正确落位"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "续跑工具 never-raise：不存在/已淘汰 ID、空 agent_id/空 message 均返回结构化 Error 字符串而非抛异常；注册仅在 loop 成功完成时"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "SubagentRegistry 是 session-scope in-memory 状态，/new·/resume·/import·/clear 清空、/compact 保留，FIFO 软上限淘汰——生命周期需对齐 spawned_agents"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "注册表/续跑路径若有日志（淘汰、异常），遵循项目日志约定（logging 而非 print，无 emoji）"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "源码禁 emoji、清晰类型注解、保持简洁避免过度设计；纯模块 + 注入回调可单测范式"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "改动横跨 subagent/tools/agent_types/main/permission 五层，需保证主循环专属工具的三重隔离保障一致贯通"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用既有范式：_install_workflow_handler 安装、MAIN_LOOP_ONLY_TOOLS 隔离、spawned_agents 生命周期、retry/goal/workflow 的纯模块可单测结构——不重造轮子"}

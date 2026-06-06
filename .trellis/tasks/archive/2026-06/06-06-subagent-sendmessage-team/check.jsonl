@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "复核续跑工具 never-raise（不存在 ID/空参 → Error 字符串）+ 仅成功完成才注册的边界是否落实"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "复核 registry session-scope 生命周期（4 个切换点 clear、/compact 保留）+ FIFO 软上限淘汰是否对齐 spawned_agents"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "复核无 emoji、类型注解、简洁度、纯模块可单测"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "复核新模块（subagent_registry / handlers.subagent_send）落位是否符合分层"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复核是否复用既有安装/隔离/生命周期范式而非重造，主循环专属工具三重隔离是否完整"}
