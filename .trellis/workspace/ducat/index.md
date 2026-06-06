@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 28
-- **Last Active**: 2026-06-05
+- **Total Sessions**: 29
+- **Last Active**: 2026-06-06
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~943 | Active |
+| `journal-1.md` | ~976 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 29 | 2026-06-06 | goal 完成条件循环（/goal） | `5d13562` | `main` |
 | 28 | 2026-06-05 | Plan 模式工作流（exit_plan_mode 呈递审批 + 转执行） | `f4e13ae` | `main` |
 | 27 | 2026-06-01 | skill 自进化 (agent 更新已有 skill) | `d631ea6`, `2cc9265` | `main` |
 | 26 | 2026-06-01 | 经验式技能生成 (agent 从经验自动长 skill) | `140e0f2`, `f60686d` | `main` |

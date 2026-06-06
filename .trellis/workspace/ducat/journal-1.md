@@ -941,3 +941,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 29: goal 完成条件循环（/goal）
+
+**Date**: 2026-06-06
+**Task**: goal 完成条件循环（/goal）
+**Branch**: `main`
+
+### Summary
+
+调研 Claude Code 新能力（ROADMAP 已收官）后选定 /goal 方向：对标 Claude Code 的完成条件循环。brainstorm 敲定 MVP（transcript-only 评估器 + 可配 evaluator_model 默认回退会话 provider + max_turns 25/--max-turns 覆盖 + 权限 fail-closed 不自动升级 + 同步不持久化、去掉 status/clear）。实现：纯模块 src/core/goal.py（GoalState/Verdict/GoalCommand/GoalOutcome + parse_verdict + parse_goal_command + prompt 构造 + run_goal_loop 注入回调驱动器）、goal_verdict 工具（不进全局集，仿 skill_create，入 SAFE_TOOLS）、main.py 接线（GoalConfig + _parse_goal_config + _build_goal_provider + _run_goal_evaluator 隔离评估 never-raise + _drive_goal + /goal dispatch）、[goal] 配置 + CLAUDE.md 架构段。trellis-check 规格合规无缺陷、自修 3 测试缺口；35 测试 + 全量 967 绿；已提交并推送 origin/main。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5d13562` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
