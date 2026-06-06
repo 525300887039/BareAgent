@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新增 src/core/workflow.py（纯逻辑引擎）+ src/core/handlers/workflow.py（工具）+ tests/test_workflow.py，需遵循既有 src/ 布局与放置约定（仿 goal.py / handlers/goal.py 的位置）"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "失败语义(b)（节点抛错→failed、下游→skipped）、driver never-raise、环/校验返回结构化 Error、权限 fail-closed 不升级、工具结果错误回灌格式——全是本特性的错误处理核心"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Python 3.12+、ruff、anti-over-engineering（MVP 砍脚本运行时/resume）、Conventional Commits、源码禁 emoji、新增行为补 pytest"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "本特性明确复用 run_subagent / agent_types / Scheduler 线程安全范式 / goal.py 纯逻辑+注入驱动形态，不另起子代理执行栈——是 code-reuse 的典型场景"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "特性横跨 core/workflow + core/handlers + core/loop（主循环注入）+ planning/subagent（节点执行器）+ planning/agent_types（MAIN_LOOP_ONLY_TOOLS）+ permission/guard + concurrency（线程池）+ main.py（config/install），跨 6+ 层数据流"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "[workflow] 配置段的 config 分层/逐字段容错解析范式，以及佐证 MVP 非持久化（无 resume/journaling）的取舍"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "on_progress 经 AgentConsole 在主线程输出（线程安全）、节点子代理 console=None 静默、warning 走 tracer/console 而非 logging——并发输出的日志约定"}

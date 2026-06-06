@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "复核：纯引擎单测齐全、ruff 干净、MVP 不过度设计、源码无 emoji、Conventional Commits"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "复核：失败语义(b) 下游 skip 传播正确、driver never-raise、环/超 max_nodes 结构化 Error、权限 fail-closed 不自动升级、enabled=false 短路"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复核：确实复用 run_subagent/agent_types/Scheduler 范式而非重复造执行栈与线程安全逻辑"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "复核：工具三重隔离（不进全局集 + MAIN_LOOP_ONLY_TOOLS + filter_handlers 丢孤儿）、节点静默/driver 独占 console 的层边界不变量成立"}
