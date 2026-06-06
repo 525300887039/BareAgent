@@ -974,3 +974,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 30: Workflow 确定性编排（声明式 DAG + 并行 fan-out）
+
+**Date**: 2026-06-06
+**Task**: Workflow 确定性编排（声明式 DAG + 并行 fan-out）
+**Branch**: `main`
+
+### Summary
+
+对标 Claude Code Workflow 的 MVP：LLM 经主循环专属 workflow 工具临场产出静态声明式 DAG（节点+depends_on），纯引擎拓扑就绪集调度、独立节点并发跑、上游产物穿线、失败语义(b)跳下游、结构化聚合回灌。决策 Q1=B 声明式DAG via LLM工具 / Q2=同步阻塞 / Q3=fail-soft / Q4=MVP。节点复用 run_subagent + fail_closed clone（无人值守，绝不自动升级），工具三重隔离，enabled=false 短路。新增 src/core/workflow.py(纯引擎) + handlers/workflow.py + 42 测试；trellis-check COMPLIANT 0 缺陷；全量 1009 passed。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fd179ff` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
