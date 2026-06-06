@@ -54,6 +54,11 @@ class PermissionGuard:
         # is exposed only inside the isolated reflection call (never the main
         # tool set / sub-agents), so prompting would be noise.
         "skill_create",
+        # goal_verdict only records the evaluator's judgement into an in-memory
+        # sink (no workspace side effects) and is exposed only inside the
+        # isolated goal-evaluator call (never the main tool set / sub-agents),
+        # so prompting would be noise.
+        "goal_verdict",
         # exit_plan_mode is the *only* way out of PLAN mode; it MUST be allowed
         # while in PLAN (a non-SAFE tool is blocked there). Its own action is the
         # approval prompt, so a separate permission confirm would be redundant.

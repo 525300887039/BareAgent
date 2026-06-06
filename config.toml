@@ -221,3 +221,17 @@ max_pending = 10
 # 生成 skill 根目录覆盖（留空 = ~/.bareagent/projects/<workspace-slug>/skills/，
 # 与仓库 checked-in 的 skills/ 正典分离，项目隔离，不进版本控制）。
 dir = ""
+
+[goal]
+# 完成条件循环：/goal [--max-turns N] <condition> 让 agent 自驱动一轮接一轮地工作，
+# 每轮由一个独立评估器（只看对话 transcript）判定条件是否满足，未达标把理由回灌继续，
+# 达标或触达 max_turns 即停。安全语义：/goal 尊重当前权限模式、绝不自动升级——
+# DEFAULT 下写操作仍每轮弹确认（命令会提示用 /auto 切到无人值守）；循环命令同步阻塞
+# REPL，Esc 可中断。
+# 轮数上限（防止评估器一直判不达标导致无限循环 + 失控成本）。env 覆盖：
+# BAREAGENT_GOAL_MAX_TURNS；行内 --max-turns N 覆盖单次调用。
+max_turns = 25
+# 评估器模型（可选）。留空 = 复用会话 provider/模型（开箱即用、不依赖某家 provider）；
+# 填一个更便宜的 model id（如 claude-haiku-4-5）则经 factory 单独构造评估 provider，
+# 省下每轮用主模型判定"是/否"的开销。boot 固化，改动 restart-required。
+evaluator_model = ""

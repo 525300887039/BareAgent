@@ -10,7 +10,7 @@ import sys
 import tomllib
 from collections.abc import Callable
 from collections.abc import Set as AbstractSet
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from functools import partial
 from pathlib import Path
@@ -28,7 +28,17 @@ from src.core.fileutil import (
 from src.core.fileutil import (
     optional_string as _coerce_optional_string,
 )
+from src.core.goal import (
+    DEFAULT_MAX_TURNS,
+    GoalOutcome,
+    GoalState,
+    Verdict,
+    build_evaluator_prompt,
+    parse_goal_command,
+    run_goal_loop,
+)
 from src.core.handlers.bash import run_bash
+from src.core.handlers.goal import GOAL_VERDICT_TOOL_SCHEMA, run_goal_verdict
 from src.core.handlers.plan import (
     EXIT_PLAN_MODE_TOOL_SCHEMA,
     PlanDecision,
@@ -202,6 +212,17 @@ class SkillsConfig:
 
 
 @dataclass(slots=True)
+class GoalConfig:
+    # Goal completion loop (task 06-06-goal-completion-loop): /goal <condition>
+    # drives turns until an isolated evaluator judges the condition met.
+    # Turn-budget safety valve; an inline `--max-turns N` overrides per invocation.
+    max_turns: int = DEFAULT_MAX_TURNS
+    # Optional cheaper model for the per-turn evaluator. Empty -> reuse the
+    # session provider/model (no extra client, works for any provider).
+    evaluator_model: str = ""
+
+
+@dataclass(slots=True)
 class Config:
     provider: ProviderConfig
     permission: PermissionConfig
@@ -223,6 +244,7 @@ class Config:
     # provider.base so the factory/provider share one type, mirroring thinking.
     cache: CacheConfig = field(default_factory=CacheConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
+    goal: GoalConfig = field(default_factory=GoalConfig)
 
 
 # Dotted config paths that ``/reload`` can hot-apply to live runtime objects.
@@ -596,6 +618,54 @@ def _build_skillgen_config(skills: SkillsConfig) -> SkillGenConfig:
     )
 
 
+def _parse_goal_config(goal_raw: dict) -> GoalConfig:
+    """Parse the ``[goal]`` config section (defensive, never crashes boot).
+
+    ``max_turns`` honors ``BAREAGENT_GOAL_MAX_TURNS`` (mirrors ``[retry]``);
+    ``evaluator_model`` is config-only. A malformed value falls back to the
+    default per field.
+    """
+    defaults = GoalConfig()
+    try:
+        max_turns = _resolve_int(
+            int(goal_raw.get("max_turns", defaults.max_turns)),
+            "BAREAGENT_GOAL_MAX_TURNS",
+        )
+    except (TypeError, ValueError):
+        max_turns = defaults.max_turns
+    if max_turns < 1:
+        max_turns = defaults.max_turns
+    return GoalConfig(
+        max_turns=max_turns,
+        evaluator_model=str(goal_raw.get("evaluator_model", defaults.evaluator_model)).strip(),
+    )
+
+
+def _build_goal_provider(
+    config: Config,
+    session_provider: BaseLLMProvider,
+) -> BaseLLMProvider:
+    """Provider for the goal evaluator: a cheaper model if configured, else reuse.
+
+    ``[goal] evaluator_model`` empty -> reuse the session provider (no extra
+    client). Otherwise build a sibling provider with that model via the factory
+    (same provider family / credentials). On any build failure, warn and fall
+    back to the session provider so a bad model id never blocks ``/goal``.
+    """
+    model = config.goal.evaluator_model.strip()
+    if not model:
+        return session_provider
+    try:
+        eval_config = replace(config, provider=replace(config.provider, model=model))
+        return create_provider(eval_config)
+    except Exception as exc:  # noqa: BLE001 - never block /goal on evaluator setup
+        _log.warning(
+            "Goal evaluator provider build failed (%s); reusing session provider.",
+            exc,
+        )
+        return session_provider
+
+
 def load_config(
     config_path: Path,
     *,
@@ -766,6 +836,9 @@ def load_config(
     skills_raw = raw_config.get("skills", {})
     skills_config = _parse_skills_config(skills_raw if isinstance(skills_raw, dict) else {})
 
+    goal_raw = raw_config.get("goal", {})
+    goal_config = _parse_goal_config(goal_raw if isinstance(goal_raw, dict) else {})
+
     memory_raw = raw_config.get("memory", {})
     memory_config = MemoryConfig(
         enabled=_resolve_bool(
@@ -803,6 +876,7 @@ def load_config(
         retry=retry_config,
         cache=cache_config,
         skills=skills_config,
+        goal=goal_config,
     )
 
 
@@ -1017,6 +1091,7 @@ _SLASH_COMMANDS = [
     "/export",
     "/import",
     "/cost",
+    "/goal",
     "/loop",
     "/log",
     "/team",
@@ -1046,6 +1121,8 @@ _HELP_TEXT = (
     "  /export    Export conversation (markdown default | json) [path]\n"
     "  /import    Import a conversation file (.json/.jsonl) into a new session\n"
     "  /cost      Show token usage and estimated cost for this session\n"
+    "  /goal      Drive the agent until a condition is met "
+    "(/goal [--max-turns N] <condition>); respects current permission mode\n"
     "  /loop      Schedule a shell command to repeat every N seconds "
     "(list|cancel <id>|clear); runs WITHOUT permission prompts\n"
     "  /log       Debug log viewer (status|serve|open|<seq>)\n"
@@ -2380,6 +2457,147 @@ def _run_skill_reflection(
         console.print_status(f"Pruned old pending drafts: {', '.join(removed)}")
 
 
+def _run_goal_evaluator(
+    *,
+    provider: BaseLLMProvider,
+    messages: list[dict[str, Any]],
+    condition: str,
+    console: AgentConsole,
+    token_tracker: Any,
+    permission: Any,
+) -> Verdict:
+    """Isolated evaluator: judge whether ``condition`` is met from the transcript.
+
+    Mirrors :func:`_run_skill_reflection`: runs ``agent_loop`` on a COPY of the
+    messages with ``goal_verdict`` as the only tool, so real history / turn
+    results stay clean. Never raises for ordinary failures — an LLM error or a
+    missing verdict yields a malformed (= not met) verdict so the loop falls
+    through to its ``max_turns`` guard rather than crashing. ``KeyboardInterrupt``
+    propagates so the user can abort the whole goal loop.
+    """
+    sink: list[Verdict] = []
+    eval_messages = list(messages)
+    eval_messages.append({"role": "user", "content": build_evaluator_prompt(condition)})
+    try:
+        agent_loop(
+            provider=provider,
+            messages=eval_messages,
+            tools=[GOAL_VERDICT_TOOL_SCHEMA],
+            handlers={"goal_verdict": partial(run_goal_verdict, sink=sink)},
+            permission=permission,
+            stream=False,
+            console=console,
+            max_iterations=3,
+            token_tracker=token_tracker,
+            skill_gen=None,
+        )
+    except KeyboardInterrupt:
+        raise
+    except Exception as exc:  # noqa: BLE001 - evaluator failure must not break the loop
+        console.print_error(f"Goal evaluator failed: {type(exc).__name__}: {exc}")
+        return Verdict(met=False, reason="evaluator error", malformed=True)
+    if not sink:
+        return Verdict(met=False, reason="evaluator returned no verdict", malformed=True)
+    return sink[-1]
+
+
+def _drive_goal(
+    command: Any,
+    *,
+    provider: BaseLLMProvider,
+    evaluator_provider: BaseLLMProvider,
+    messages: list[dict[str, Any]],
+    loop_tools: list[dict[str, Any]],
+    handlers: dict[str, Any],
+    permission: PermissionGuard,
+    compact_fn: Any,
+    bg_manager: Any,
+    config: Config,
+    ui_console: AgentConsole,
+    interaction_logger: Any,
+    token_tracker: Any,
+    hook_engine: Any,
+    retry_policy: RetryPolicy,
+    transcript_mgr: Any,
+) -> None:
+    """Run the synchronous self-driving goal loop for a parsed ``run`` command.
+
+    Each turn runs the real ``agent_loop`` (sharing the main loop's tools /
+    handlers / permission), then an isolated evaluator decides whether to stop.
+    The loop respects the current permission mode (never auto-escalates); in
+    DEFAULT it warns that writes still prompt each turn. ``skill_gen`` is omitted
+    so the inner turns never trigger skill reflection. Interrupts / LLM errors
+    roll back the in-flight turn and abort the loop, leaving completed turns.
+    """
+    state = GoalState(condition=command.condition, max_turns=command.max_turns)
+    if permission.mode == PermissionMode.DEFAULT:
+        ui_console.print_status(
+            "Goal set in DEFAULT mode: write operations still prompt each turn. "
+            "Use /auto first for an unattended run."
+        )
+    ui_console.print_status(f"Goal: {state.condition}  (max {state.max_turns} turns)")
+
+    def run_turn(prompt: str) -> None:
+        snapshot = len(messages)
+        messages.append({"role": "user", "content": prompt})
+        try:
+            agent_loop(
+                provider=provider,
+                messages=messages,
+                tools=loop_tools,
+                handlers=handlers,
+                permission=permission,
+                compact_fn=compact_fn,
+                bg_manager=bg_manager,
+                stream=config.ui.stream,
+                console=ui_console,
+                interaction_logger=interaction_logger,
+                token_tracker=token_tracker,
+                hook_engine=hook_engine,
+                retry_policy=retry_policy,
+                skill_gen=None,
+            )
+            _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
+        except (LLMCallError, KeyboardInterrupt):
+            del messages[snapshot:]
+            raise
+
+    def evaluate() -> Verdict:
+        return _run_goal_evaluator(
+            provider=evaluator_provider,
+            messages=messages,
+            condition=state.condition,
+            console=ui_console,
+            token_tracker=token_tracker,
+            permission=permission,
+        )
+
+    try:
+        outcome, verdict = run_goal_loop(
+            state,
+            run_turn=run_turn,
+            evaluate=evaluate,
+            on_progress=ui_console.print_status,
+        )
+    except KeyboardInterrupt:
+        ui_console.print_status(f"Goal aborted after {state.turns_used} turn(s).")
+        return
+    except LLMCallError:
+        ui_console.print_error(
+            f"Goal aborted: LLM call failed after {state.turns_used} turn(s)."
+        )
+        return
+
+    if outcome is GoalOutcome.MET:
+        ui_console.print_status(f"Goal met after {state.turns_used} turn(s).")
+    else:
+        last_reason = verdict.reason if verdict else ""
+        msg = f"Goal not met after {state.turns_used} turn(s) (max turns reached)."
+        if last_reason:
+            msg += f" Last evaluator note: {last_reason}"
+        ui_console.print_status(msg)
+
+
 def _print_skill_list(store: SkillStore, loader: SkillLoader, console: AgentConsole) -> None:
     live = [meta.skill_name for meta in loader.scan()]
     live_set = set(live)
@@ -2582,6 +2800,9 @@ def _run_stdio_session(
     # Sub-agents *do* inherit the retry policy (D6) so background agents weather
     # transient failures too; threaded through _build_handlers -> get_handlers.
     retry_policy = _build_retry_policy(config.retry)
+    # Provider for the /goal completion evaluator: a cheaper model if configured,
+    # else the session provider (built once; reused across goal turns).
+    goal_evaluator_provider = _build_goal_provider(config, provider)
     handlers = _build_handlers(
         workspace_path=workspace_path,
         todo_manager=todo_manager,
@@ -2856,6 +3077,34 @@ def _run_stdio_session(
                 continue
             if text == "/cost":
                 ui_console.print_status(token_tracker.summary(config.cost.prices))
+                continue
+            if text == "/goal" or text.startswith("/goal "):
+                goal_cmd = parse_goal_command(
+                    text[len("/goal") :], default_max_turns=config.goal.max_turns
+                )
+                if goal_cmd.action == "run":
+                    _drive_goal(
+                        goal_cmd,
+                        provider=provider,
+                        evaluator_provider=goal_evaluator_provider,
+                        messages=messages,
+                        loop_tools=loop_tools,
+                        handlers=handlers,
+                        permission=permission,
+                        compact_fn=compact_fn,
+                        bg_manager=bg_manager,
+                        config=config,
+                        ui_console=ui_console,
+                        interaction_logger=interaction_logger,
+                        token_tracker=token_tracker,
+                        hook_engine=hook_engine,
+                        retry_policy=retry_policy,
+                        transcript_mgr=transcript_mgr,
+                    )
+                elif goal_cmd.action == "error":
+                    ui_console.print_error(goal_cmd.message)
+                else:  # usage
+                    ui_console.print_status(goal_cmd.message)
                 continue
             if text == "/loop" or text.startswith("/loop "):
                 _dispatch_loop_command(text, scheduler=scheduler, ui_console=ui_console)
