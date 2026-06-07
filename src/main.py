@@ -260,9 +260,14 @@ class TeamConfig:
     # task-scan wakeups (it also wakes immediately on incoming mail via the
     # mailbox condition variable). ``response_timeout`` is how long a blocking
     # ``team_send`` waits for a teammate's reply before returning a timeout note.
-    # Both are baked into spawned teammates / send calls at boot -> restart-required.
+    # ``memory_enabled`` (task 06-08-team-stateful-memory) makes a teammate carry
+    # conversational memory across *requests* (a per-teammate Compactor is injected
+    # to bound growth); off restores the old per-request stateless behavior.
+    # All three are baked into spawned teammates / send calls at boot ->
+    # restart-required.
     poll_interval: float = 1.0
     response_timeout: float = 60.0
+    memory_enabled: bool = True
 
 
 @dataclass(slots=True)
@@ -718,8 +723,10 @@ def _parse_workflow_config(workflow_raw: dict) -> WorkflowConfig:
 def _parse_team_config(team_raw: dict) -> TeamConfig:
     """Parse the ``[team]`` config section (defensive, never crashes boot).
 
-    Both fields are config-only positive floats; a missing / malformed / <= 0
-    value falls back to its default.
+    ``poll_interval`` / ``response_timeout`` are config-only positive floats; a
+    missing / malformed / <= 0 value falls back to its default. ``memory_enabled``
+    honors the ``BAREAGENT_TEAM_MEMORY_ENABLED`` env override (mirrors retry /
+    cache / workflow ``enabled`` knobs).
     """
     defaults = TeamConfig()
 
@@ -730,9 +737,18 @@ def _parse_team_config(team_raw: dict) -> TeamConfig:
             return fallback
         return value if value > 0 else fallback
 
+    try:
+        memory_enabled = _resolve_bool(
+            bool(team_raw.get("memory_enabled", defaults.memory_enabled)),
+            "BAREAGENT_TEAM_MEMORY_ENABLED",
+        )
+    except (TypeError, ValueError):
+        memory_enabled = defaults.memory_enabled
+
     return TeamConfig(
         poll_interval=_positive_float("poll_interval", defaults.poll_interval),
         response_timeout=_positive_float("response_timeout", defaults.response_timeout),
+        memory_enabled=memory_enabled,
     )
 
 
@@ -1812,6 +1828,17 @@ def _make_team_handlers(
             agent_name=teammate_name,
             system_prompt_override=agent_instance.system_prompt,
         )
+        # Conversational memory across requests (task 06-08): inject a per-teammate
+        # Compactor (its own provider, no transcript persistence) so the growing
+        # history stays bounded. Disabled -> no-op compaction + stateless behavior.
+        memory_enabled = config.team.memory_enabled
+        teammate_compact_fn = None
+        if memory_enabled:
+            teammate_compact_fn = Compactor(
+                provider=agent_instance.provider,
+                transcript_mgr=None,
+                session_id=f"team:{teammate_name}",
+            )
         autonomous_agent = AutonomousAgent(
             name=agent_instance.name,
             provider=agent_instance.provider,
@@ -1822,6 +1849,8 @@ def _make_team_handlers(
             permission=teammate_permission,
             system_prompt=agent_instance.system_prompt,
             poll_interval=config.team.poll_interval,
+            compact_fn=teammate_compact_fn,
+            memory_enabled=memory_enabled,
         )
         try:
             bg_manager.submit(_teammate_task_id(teammate_name), autonomous_agent.run)

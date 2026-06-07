@@ -269,3 +269,8 @@ max_nodes = 20
 poll_interval = 1.0
 # 阻塞式 team_send 等待队友回复的超时秒数；超时返回提示，迟到回复仍会在后续 turn 浮现。
 response_timeout = 60.0
+# 队友有状态记忆（task 06-08-team-stateful-memory）：开启后队友跨 request 保留对话上下文
+# （连续 team_send 续在同一条会话上，注入 per-teammate Compactor 按 token 阈值压缩防无界增长）；
+# 自认领的 task 仍逐个无状态执行。关掉则回退到逐请求无状态的旧行为。
+# 走 env 覆盖 BAREAGENT_TEAM_MEMORY_ENABLED，boot 固化 -> restart-required。
+memory_enabled = true

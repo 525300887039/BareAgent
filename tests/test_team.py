@@ -710,3 +710,152 @@ def test_message_bus_receive_does_not_lose_same_timestamp_messages(
     assert len(messages) == 1
     assert messages[0].id == msg2_id
     assert messages[0].content == "second"
+
+
+# --- task 06-08-team-stateful-memory --------------------------------------
+
+
+def _memory_agent(
+    tmp_path: Path,
+    *,
+    memory_enabled: bool,
+    provider,
+    compact_fn=None,
+    system_prompt: str = "sys",
+    task_manager=None,
+) -> AutonomousAgent:
+    bus = MessageBus(tmp_path / ".mailbox")
+    bus.ensure_mailbox("main")
+    return AutonomousAgent(
+        name="reviewer",
+        provider=provider,
+        tools=[],
+        handlers={},
+        bus=bus,
+        task_manager=task_manager,
+        system_prompt=system_prompt,
+        poll_interval=0.01,
+        compact_fn=compact_fn,
+        memory_enabled=memory_enabled,
+    )
+
+
+def test_memory_enabled_accumulates_context_across_requests(tmp_path: Path) -> None:
+    """Two consecutive requests share one growing conversation (Q1)."""
+    provider = ReplayProvider(["r1", "r2"])
+    agent = _memory_agent(tmp_path, memory_enabled=True, provider=provider)
+
+    assert agent._messages == [{"role": "system", "content": "sys"}]
+
+    assert agent._run_request("req1") == "r1"
+    assert agent._run_request("req2") == "r2"
+
+    # The second LLM call sees the first turn (user req1 + assistant r1).
+    second_call_text = str(provider.calls[1]["messages"])
+    assert "req1" in second_call_text
+    assert "r1" in second_call_text
+    # System prompt seeded exactly once; alternation ends on an assistant turn.
+    roles = [m["role"] for m in agent._messages]
+    assert roles[0] == "system"
+    assert roles.count("system") == 1
+    assert agent._messages[-1]["role"] == "assistant"
+
+
+def test_memory_disabled_is_stateless_per_request(tmp_path: Path) -> None:
+    """Default (memory off) keeps today's per-request fresh-messages behavior."""
+    provider = ReplayProvider(["r1", "r2"])
+    agent = _memory_agent(tmp_path, memory_enabled=False, provider=provider)
+
+    # No persistent buffer is seeded when memory is disabled.
+    assert agent._messages == []
+
+    agent.bus.send(
+        Message(
+            id="",
+            from_agent="main",
+            to_agent="reviewer",
+            content="req1",
+            msg_type="request",
+            timestamp="",
+        )
+    )
+    agent._handle_messages(agent.bus.receive("reviewer"))
+    # Fresh [system, user] each call; nothing accrues on the instance.
+    first_call = provider.calls[0]["messages"]
+    assert [m["role"] for m in first_call] == ["system", "user"]  # type: ignore[index]
+    assert agent._messages == []
+
+
+def test_memory_request_injects_compact_fn(tmp_path: Path, monkeypatch) -> None:
+    """The injected compact_fn runs against the live persistent buffer."""
+    seen: list[object] = []
+
+    def _fake_compact(messages, force: bool = False) -> None:
+        _ = force
+        seen.append(messages)
+
+    def _fake_loop(*, messages, compact_fn, **_kw) -> str:
+        compact_fn(messages)
+        return "ok"
+
+    monkeypatch.setattr("src.team.autonomous.agent_loop", _fake_loop)
+    agent = _memory_agent(
+        tmp_path, memory_enabled=True, provider=object(), compact_fn=_fake_compact
+    )
+
+    assert agent._run_request("hello") == "ok"
+    # compact_fn was invoked with the agent's own persistent message list.
+    assert seen and seen[0] is agent._messages
+
+
+def test_memory_request_rolls_back_on_failure(tmp_path: Path, monkeypatch) -> None:
+    """A failed turn must not poison the buffer's alternation invariant."""
+
+    def _boom(**_kw) -> str:
+        raise RuntimeError("loop blew up")
+
+    monkeypatch.setattr("src.team.autonomous.agent_loop", _boom)
+    agent = _memory_agent(tmp_path, memory_enabled=True, provider=object())
+    before = list(agent._messages)
+
+    with pytest.raises(RuntimeError, match="loop blew up"):
+        agent._run_request("doomed")
+
+    # The in-flight user turn is rolled back; buffer is byte-identical to before.
+    assert agent._messages == before
+    assert agent._messages == [{"role": "system", "content": "sys"}]
+
+
+def test_self_claimed_task_stays_stateless_even_with_memory_on(tmp_path: Path) -> None:
+    """Tasks always run on fresh messages (Q1), never touching request memory."""
+    task_manager = TaskManager(tmp_path / ".tasks.json")
+    task = task_manager.create("Review", description="inspect things")
+    provider = ReplayProvider(["task done"])
+    agent = _memory_agent(
+        tmp_path,
+        memory_enabled=True,
+        provider=provider,
+        task_manager=task_manager,
+    )
+    task_manager.update(task.id, status="in_progress", expected_status="pending")
+
+    agent._execute_task(task)
+
+    # The task ran on a fresh [system, user] list; the request buffer is untouched.
+    assert agent._messages == [{"role": "system", "content": "sys"}]
+    last_call = provider.calls[-1]["messages"]
+    assert [m["role"] for m in last_call] == ["system", "user"]  # type: ignore[index]
+    assert "inspect things" in str(last_call)
+    assert task_manager.get(task.id).status == "done"
+
+
+def test_parse_team_config_memory_enabled_default_and_env(monkeypatch) -> None:
+    monkeypatch.delenv("BAREAGENT_TEAM_MEMORY_ENABLED", raising=False)
+    assert _parse_team_config({}).memory_enabled is True
+    assert _parse_team_config({"memory_enabled": False}).memory_enabled is False
+
+    # Env override wins over the file value (mirrors retry/cache/workflow knobs).
+    monkeypatch.setenv("BAREAGENT_TEAM_MEMORY_ENABLED", "0")
+    assert _parse_team_config({"memory_enabled": True}).memory_enabled is False
+    monkeypatch.setenv("BAREAGENT_TEAM_MEMORY_ENABLED", "on")
+    assert _parse_team_config({"memory_enabled": False}).memory_enabled is True

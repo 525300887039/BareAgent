@@ -10,6 +10,10 @@ from src.team.protocols import Protocol, ProtocolFSM, decode_protocol_content
 from src.tracing import tracer as global_tracer
 
 
+def _noop_compact(_messages: list[dict[str, Any]]) -> None:
+    """Default compaction hook: do nothing (stateless / test-friendly)."""
+
+
 class AutonomousAgent:
     """Daemon-friendly idle-poll-claim-work loop for teammate agents."""
 
@@ -25,6 +29,8 @@ class AutonomousAgent:
         permission: Any = None,
         system_prompt: str = "",
         poll_interval: float = 5.0,
+        compact_fn: Any = None,
+        memory_enabled: bool = False,
     ) -> None:
         self.name = name
         self.provider = provider
@@ -35,6 +41,16 @@ class AutonomousAgent:
         self.permission = permission
         self.system_prompt = system_prompt.strip()
         self.poll_interval = poll_interval
+        self._memory_enabled = memory_enabled
+        # Injected per-teammate Compactor (mirrors the main loop's compact_fn).
+        # A no-op default keeps stateless teammates and unit tests simple while
+        # decoupling AutonomousAgent from the Compactor implementation.
+        self._compact_fn = compact_fn if compact_fn is not None else _noop_compact
+        # Conversational memory accrues across *requests* only (Q1); the system
+        # prompt is seeded once here so it is not re-prepended every turn.
+        self._messages: list[dict[str, Any]] = []
+        if self._memory_enabled and self.system_prompt:
+            self._messages.append({"role": "system", "content": self.system_prompt})
         self._shutdown = False
         self.bus.ensure_mailbox(name)
         self._last_seen_id: str | None = self.bus.latest_message_id(name)
@@ -79,9 +95,13 @@ class AutonomousAgent:
             # leave a blocking ``team_send`` waiting out its full timeout). On
             # error, reply with the reason so the requester learns immediately.
             try:
-                response_text = self._run_prompt(
-                    self._build_incoming_prompt(content, protocol=protocol)
-                )
+                prompt = self._build_incoming_prompt(content, protocol=protocol)
+                # Requests accrue conversational memory (Q1) when enabled; tasks
+                # always stay stateless (handled in _execute_task).
+                if self._memory_enabled:
+                    response_text = self._run_request(prompt)
+                else:
+                    response_text = self._run_prompt(prompt)
             except Exception as exc:
                 logging.exception("Request handling failed in agent %s", self.name)
                 response_text = f"[error] {type(exc).__name__}: {exc}"
@@ -112,6 +132,30 @@ class AutonomousAgent:
             return
 
         self.task_manager.update(task.id, status="done")
+
+    def _run_request(self, prompt: str) -> str:
+        """Stateful request turn: append onto the persistent conversation, run.
+
+        On failure roll the in-flight turn back so a transient error cannot
+        poison the memory list's user/assistant alternation (mirrors the
+        ``/goal`` ``_drive_goal`` rollback). The injected ``compact_fn`` keeps
+        the accumulated history bounded.
+        """
+        snapshot = len(self._messages)
+        self._messages.append({"role": "user", "content": prompt})
+        try:
+            with global_tracer.trace("teammate_run", tags={"agent": self.name}):
+                return agent_loop(
+                    provider=self.provider,
+                    messages=self._messages,
+                    tools=self.tools,
+                    handlers=self.handlers,
+                    permission=self.permission,
+                    compact_fn=self._compact_fn,
+                )
+        except BaseException:
+            del self._messages[snapshot:]
+            raise
 
     def _run_prompt(self, prompt: str) -> str:
         messages: list[dict[str, Any]] = []
