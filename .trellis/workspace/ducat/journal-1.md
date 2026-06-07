@@ -1073,3 +1073,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 33: team 队友有状态记忆（跨 request 对话续跑 + per-teammate Compactor）
+
+**Date**: 2026-06-08
+**Task**: team 队友有状态记忆（跨 request 对话续跑 + per-teammate Compactor）
+**Branch**: `main`
+
+### Summary
+
+把 team 队友从逐请求无状态升级为跨 team_send request 保留对话上下文（SendMessage 母题落到 team）。Q1 仅 request 续记忆、自认领 task 永远无状态；Q2 AutonomousAgent 注入 compact_fn(默认 _noop) + memory_enabled，_team_spawn 建 per-teammate Compactor；Q3 _run_request snapshot + del 回滚复刻 /goal 范式。配置 [team] memory_enabled 默认 True + env，restart-required。+6 测试，全量 1043 passed，trellis-check COMPLIANT。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8dcfbe8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
