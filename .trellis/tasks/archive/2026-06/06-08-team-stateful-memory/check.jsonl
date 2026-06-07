@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核验 self._messages 的 in-memory 语义、随线程生命周期、不跨 /resume 落盘；memory_enabled=False 时不累积、行为与今天一致"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核验失败回滚正确性：snapshot 位置（append user 之前）、del 范围、re-raise；异常后角色交替不变量保持、下条 request 不崩"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核验源码无 emoji、类型注解、无过度设计；向后兼容默认值、注入式可单测结构"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "核验改动落在 autonomous.py / main.py 既有分层、无错位新增"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "核验确实复用了 Compactor 与既有注入/回滚/配置范式，而非重复实现压缩或新造一套状态管理"}

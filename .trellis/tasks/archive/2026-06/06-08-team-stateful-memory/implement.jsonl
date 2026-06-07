@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "改动落在既有分层：src/team/autonomous.py（队友守护循环 + 记忆列表 + 注入 compact_fn）与 src/main.py（_team_spawn 接线 + TeamConfig），无新增模块，需按现有结构正确放置"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "本任务核心就是状态：self._messages 是进程内、随队友 daemon 线程生命周期的有状态记忆，不跨 /resume 落盘；需明确生命周期边界与 in-memory 语义"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "request 路径失败安全：snapshot + del self._messages[snapshot:] 回滚后 re-raise，单次 turn 抛异常不破坏角色交替不变量；_handle_messages 现有 try/except respond 错误文本保持不变"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "autonomous.py 已有 logging.exception（请求/任务失败隔离），改动需沿用 logging 约定、无 emoji、不引入 print"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "源码禁 emoji、清晰类型注解、保持简洁避免过度设计；注入 compact_fn（默认 no-op）+ memory_enabled 默认关的向后兼容设计、纯逻辑可单测范式"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "改动横跨 team.autonomous（记忆+回滚+注入点）↔ main（per-teammate Compactor 构造+配置+env+_team_spawn 注入）↔ memory.compact（复用 Compactor）三层，需保证注入与生命周期一致贯通"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用既有范式：直接复用 memory/compact.py 的 Compactor 不另造、注入回调可单测对齐 retry/goal/subagent_send、snapshot 回滚复刻 /goal 的 _drive_goal、配置 env 覆盖对齐 retry/cache/workflow 的 enabled 旋钮——不重造轮子"}
