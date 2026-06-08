@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from collections.abc import Callable
@@ -12,6 +13,8 @@ from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCal
 from src.tracing import tracer as global_tracer
 from src.ui.protocol import StreamProtocol, UIProtocol
 from src.ui.stream import StreamPrinter
+
+logger = logging.getLogger(__name__)
 
 
 class LLMCallError(Exception):
@@ -112,6 +115,8 @@ def agent_loop(
         if response.text and console is not None and not streamed_output:
             console.print_assistant(response.text)
         if not response.has_tool_calls:
+            if not response.text:
+                _warn_empty_response(response, console)
             if skill_gen is not None:
                 skill_gen.note_turn(turn_tool_calls)
             return response.text or ""
@@ -184,6 +189,26 @@ def agent_loop(
     if console is not None:
         console.print_error(msg)
     raise LLMCallError(msg)
+
+
+def _warn_empty_response(response: LLMResponse, console: UIProtocol | None) -> None:
+    """Surface a non-fatal diagnostic for a degenerate empty response.
+
+    Fires when the model stops normally yet produced neither text nor tool
+    calls -- usually a wire_api/model mismatch, a relay returning an empty
+    output array, or the model declining to answer. This does not change the
+    loop's control flow: it still returns "" as before. Always logged (so
+    console-less sub-agents/teammates leave a trace); also shown on the console
+    when one is attached.
+    """
+    message = (
+        "LLM returned an empty response (no text or tool calls) -- "
+        f"stop_reason={response.stop_reason!r}, output_tokens={response.output_tokens}. "
+        "Possible wire_api/model mismatch or relay issue."
+    )
+    logger.warning(message)
+    if console is not None:
+        console.print_status(message)
 
 
 def _invoke_provider(

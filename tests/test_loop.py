@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Generator
 from copy import deepcopy
 from typing import Any
@@ -808,3 +809,108 @@ def test_no_hook_engine_preserves_existing_behavior() -> None:
     tool_result = provider.calls[1]["messages"][-1]["content"][0]
     assert tool_result["content"] == "handled hi"
     assert "is_error" not in tool_result
+
+
+# --- task 06-08-provider-empty-response-diagnostic ------------------------
+
+
+def _empty_response() -> LLMResponse:
+    return LLMResponse(
+        text="",
+        tool_calls=[],
+        stop_reason="completed",
+        input_tokens=4404,
+        output_tokens=5,
+    )
+
+
+def test_agent_loop_warns_on_empty_response(caplog) -> None:
+    """A normal stop with no text and no tool calls fires a non-fatal diagnostic."""
+    provider = MockProvider([_empty_response()])
+    console = FakeConsole()
+    messages = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "hi"},
+    ]
+
+    with caplog.at_level(logging.WARNING, logger="src.core.loop"):
+        result = agent_loop(
+            provider=provider, messages=messages, tools=[], handlers={}, console=console
+        )
+
+    # Control flow unchanged: still returns "" and appends the assistant turn.
+    assert result == ""
+    # Diagnostic surfaced on both channels with stop_reason + output_tokens.
+    assert len(console.statuses) == 1
+    assert "empty response" in console.statuses[0]
+    assert "completed" in console.statuses[0]
+    assert "output_tokens=5" in console.statuses[0]
+    assert console.errors == []  # warning, not an error
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("empty response" in r.getMessage() for r in warnings)
+
+
+def test_agent_loop_no_warning_on_normal_text(caplog) -> None:
+    provider = MockProvider(
+        [LLMResponse(text="Hello.", tool_calls=[], stop_reason="end_turn",
+                     input_tokens=5, output_tokens=2)]
+    )
+    console = FakeConsole()
+    with caplog.at_level(logging.WARNING, logger="src.core.loop"):
+        result = agent_loop(
+            provider=provider,
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            handlers={},
+            console=console,
+        )
+
+    assert result == "Hello."
+    assert console.statuses == []
+    assert not [r for r in caplog.records if "empty response" in r.getMessage()]
+
+
+def test_agent_loop_empty_response_without_console_still_logs(caplog) -> None:
+    """Console-less paths (sub-agents/teammates) still leave a logged trace."""
+    provider = MockProvider([_empty_response()])
+    with caplog.at_level(logging.WARNING, logger="src.core.loop"):
+        result = agent_loop(
+            provider=provider,
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            handlers={},
+        )
+
+    assert result == ""
+    assert any("empty response" in r.getMessage() for r in caplog.records)
+
+
+def test_agent_loop_no_warning_on_tool_only_turn(caplog) -> None:
+    """An empty-text turn that carries tool calls is normal -- no diagnostic."""
+    provider = MockProvider(
+        [
+            LLMResponse(
+                text="",
+                tool_calls=[ToolCall(id="t1", name="echo", input={"value": "hi"})],
+                stop_reason="tool_use",
+                input_tokens=5,
+                output_tokens=3,
+            ),
+            LLMResponse(text="Done.", tool_calls=[], stop_reason="end_turn",
+                        input_tokens=5, output_tokens=2),
+        ]
+    )
+    console = FakeConsole()
+    with caplog.at_level(logging.WARNING, logger="src.core.loop"):
+        result = agent_loop(
+            provider=provider,
+            messages=[{"role": "user", "content": "go"}],
+            tools=[],
+            handlers={"echo": lambda value: f"handled {value}"},
+            permission=PermissionGuard(PermissionMode.BYPASS),
+            console=console,
+        )
+
+    assert result == "Done."
+    assert console.statuses == []
+    assert not [r for r in caplog.records if "empty response" in r.getMessage()]
