@@ -62,6 +62,8 @@ DEFERRED_TOOLS = {
     "team_send",
     "team_list",
     "team_shutdown",
+    "team_register",
+    "team_request_review",
     "lsp_outline",
     "lsp_definition",
     "lsp_references",
@@ -140,6 +142,59 @@ TEAM_TOOL_SCHEMAS: list[dict[str, Any]] = [
             }
         },
         ["name"],
+    ),
+    _schema(
+        "team_register",
+        (
+            "Register a new teammate definition (persisted to .team.json) so it can "
+            "later be spawned with team_spawn. This only defines the teammate; it does "
+            "not start it. Omit provider/model to inherit the session provider."
+        ),
+        {
+            "name": {
+                "type": "string",
+                "description": "Unique teammate name.",
+            },
+            "role": {
+                "type": "string",
+                "description": "Short role label, e.g. 'code reviewer'.",
+            },
+            "system_prompt": {
+                "type": "string",
+                "description": "System prompt defining the teammate's behavior.",
+            },
+            "provider": {
+                "type": "string",
+                "description": (
+                    "Optional LLM provider name (e.g. 'openai', 'anthropic'). "
+                    "Inherits the session provider when omitted."
+                ),
+            },
+            "model": {
+                "type": "string",
+                "description": "Optional model id. Inherits the session model when omitted.",
+            },
+        },
+        ["name", "role", "system_prompt"],
+    ),
+    _schema(
+        "team_request_review",
+        (
+            "Send a plan or proposal to a running teammate for approval and wait for "
+            "its verdict, which is returned to you. If the teammate is not running (or "
+            "the target is the main agent), returns immediately without waiting."
+        ),
+        {
+            "to_agent": {
+                "type": "string",
+                "description": "Target teammate name (the reviewer).",
+            },
+            "plan": {
+                "type": "string",
+                "description": "The plan or proposal to review and approve/reject.",
+            },
+        },
+        ["to_agent", "plan"],
     ),
 ]
 MEMORY_TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -486,6 +541,12 @@ _TEAM_FALLBACK_HANDLERS: dict[str, Callable[..., Any]] = {
     "team_send": lambda to_agent, content: f"Team messaging unavailable for {to_agent}.",
     "team_list": lambda: [],
     "team_shutdown": lambda name: f"Team shutdown unavailable for {name}.",
+    "team_register": lambda name, role, system_prompt, provider="", model="": (
+        f"Team registration unavailable for {name}."
+    ),
+    "team_request_review": lambda to_agent, plan: (
+        f"Team review unavailable for {to_agent}."
+    ),
 }
 
 

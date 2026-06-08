@@ -1252,7 +1252,7 @@ _HELP_TEXT = (
     "  /loop      Schedule a shell command to repeat every N seconds "
     "(list|cancel <id>|clear); runs WITHOUT permission prompts\n"
     "  /log       Debug log viewer (status|serve|open|<seq>)\n"
-    "  /team      Manage team agents (list | spawn | send | shutdown)\n"
+    "  /team      Manage team agents (list | spawn | send | shutdown | register | review)\n"
     "  /mcp       Manage MCP servers (status | list | reload <name>)\n"
     "  /mcp:      Invoke an MCP prompt (e.g. /mcp:server:prompt key=value)\n"
     "  /lsp       Manage LSP servers (status | list | reload <language>)\n"
@@ -1875,11 +1875,80 @@ def _make_team_handlers(
         spawned_agents.pop(teammate_name, None)
         return f"Sent shutdown to teammate {teammate_name}."
 
+    def _team_register(
+        name: str = "",
+        role: str = "",
+        system_prompt: str = "",
+        provider: str = "",
+        model: str = "",
+    ) -> str:
+        # Build a sparse provider override; an empty config inherits the session
+        # provider (the teammate provider factory fills the gaps).
+        provider_config: dict[str, Any] = {}
+        provider_name = (provider or "").strip()
+        model_id = (model or "").strip()
+        if provider_name:
+            provider_config["name"] = provider_name
+        if model_id:
+            provider_config["model"] = model_id
+        try:
+            teammate = teammate_manager.register(
+                name, role, system_prompt, provider_config=provider_config or None
+            )
+        except ValueError as exc:
+            return f"Error: {exc}"
+        return (
+            f"Registered teammate {teammate.name} ({teammate.role}). "
+            "Spawn it with team_spawn to start it."
+        )
+
+    def _team_request_review(to_agent: str, plan: str) -> str:
+        normalized_target = to_agent.strip()
+        if not normalized_target:
+            return "Error: to_agent must not be empty."
+        if not isinstance(plan, str) or not plan.strip():
+            return "Error: plan must not be empty."
+        # The main agent has no autonomous responder, so it cannot review.
+        if normalized_target == MAIN_AGENT_NAME:
+            return "Cannot request review from the main agent (no autonomous responder)."
+        try:
+            teammate_manager.get(normalized_target)
+        except ValueError:
+            return (
+                f"Error: unknown teammate {normalized_target}. "
+                "Register it first with team_register."
+            )
+        # A teammate that is not running will never reply; return now instead of
+        # waiting out the full timeout (mirrors team_send).
+        if not bg_manager.is_running(_teammate_task_id(normalized_target)):
+            return (
+                f"Teammate {normalized_target} is not running. Spawn it first "
+                "(team_spawn / /team spawn) to request a review."
+            )
+        # Send a PLAN_APPROVAL protocol request (the receiving teammate wraps it as
+        # a plan-review prompt) and block for the verdict, deduping the reply so the
+        # mailbox drain does not surface it to the LLM twice.
+        fsm = ProtocolFSM(message_bus, agent_name)
+        message_id = fsm.request(normalized_target, Protocol.PLAN_APPROVAL, plan)
+        timeout = config.team.response_timeout
+        response = fsm.wait_response(message_id, timeout=timeout)
+        if response is None:
+            return (
+                f"Sent review request {message_id} to {normalized_target}; no verdict "
+                f"within {timeout:.0f}s. It may still be reviewing -- a late reply will "
+                "surface on a later turn."
+            )
+        message_bus.mark_delivered(response.id)
+        _, verdict = decode_protocol_content(response.content)
+        return f"Review verdict from {normalized_target}: {verdict}"
+
     return {
         "team_list": _team_list,
         "team_send": _team_send,
         "team_spawn": _team_spawn,
         "team_shutdown": _team_shutdown,
+        "team_register": _team_register,
+        "team_request_review": _team_request_review,
     }
 
 
@@ -1972,13 +2041,34 @@ def _handle_team_command(
             result = team_handlers["team_shutdown"](parts[1])  # type: ignore[index, operator]
             ui_console.print_status(str(result))
             return
+
+        if subcommand == "register":
+            # name + role + system_prompt (the prompt is free text with spaces).
+            reg_parts = raw_args.split(" ", 3)
+            if len(reg_parts) < 4 or not reg_parts[1].strip() or not reg_parts[3].strip():
+                raise ValueError("Usage: /team register <name> <role> <system_prompt>")
+            result = team_handlers["team_register"](  # type: ignore[index, operator]
+                reg_parts[1], reg_parts[2], reg_parts[3]
+            )
+            ui_console.print_status(str(result))
+            return
+
+        if subcommand == "review" and len(parts) >= 3:
+            target = parts[1].strip()
+            plan = parts[2].strip()
+            if not target or not plan:
+                raise ValueError("Usage: /team review <name> <plan>")
+            result = team_handlers["team_request_review"](target, plan)  # type: ignore[index, operator]
+            ui_console.print_status(str(result))
+            return
     except Exception as exc:
         ui_console.print_error(str(exc))
         return
 
     ui_console.print_status(
         "Usage: /team list | /team spawn <name> | /team send <name> <message> "
-        "| /team shutdown <name>"
+        "| /team shutdown <name> | /team register <name> <role> <system_prompt> "
+        "| /team review <name> <plan>"
     )
 
 

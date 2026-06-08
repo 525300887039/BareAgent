@@ -859,3 +859,131 @@ def test_parse_team_config_memory_enabled_default_and_env(monkeypatch) -> None:
     assert _parse_team_config({"memory_enabled": True}).memory_enabled is False
     monkeypatch.setenv("BAREAGENT_TEAM_MEMORY_ENABLED", "on")
     assert _parse_team_config({"memory_enabled": False}).memory_enabled is True
+
+
+# --- task 06-08-team-register-and-plan-approval ---------------------------
+
+
+def test_team_register_persists_and_lists(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    bg = _FakeBg()
+    handlers = _build_team_handlers(
+        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
+    )
+
+    result = handlers["team_register"]("reviewer", "code reviewer", "You review code.")
+
+    assert "Registered teammate reviewer" in result
+    assert teammate_manager.get("reviewer").role == "code reviewer"
+    # Visible via team_list, not running until spawned.
+    listed = {t["name"]: t["running"] for t in handlers["team_list"]()}
+    assert listed == {"reviewer": False}
+
+
+def test_team_register_empty_field_returns_error(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    handlers = _build_team_handlers(
+        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=_FakeBg()
+    )
+
+    result = handlers["team_register"]("", "role", "prompt")
+    assert result.startswith("Error:")
+    assert teammate_manager.list() == []
+
+
+def test_team_register_with_provider_model_override(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    handlers = _build_team_handlers(
+        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=_FakeBg()
+    )
+
+    handlers["team_register"]("r", "role", "prompt", "openai", "gpt-x")
+    assert teammate_manager.get("r").provider_config == {"name": "openai", "model": "gpt-x"}
+
+
+def test_team_request_review_not_running_returns_immediately(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    teammate_manager.register("reviewer", "reviewer", "You review.")
+    handlers = _build_team_handlers(
+        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=_FakeBg(running=set())
+    )
+
+    start = time.time()
+    result = handlers["team_request_review"]("reviewer", "ship plan")
+    assert "not running" in result
+    assert time.time() - start < 0.2  # did not wait out the timeout
+
+
+def test_team_request_review_rejects_main_and_unknown(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    handlers = _build_team_handlers(
+        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=_FakeBg()
+    )
+
+    assert "main agent" in handlers["team_request_review"](MAIN_AGENT_NAME, "plan")
+    ghost = handlers["team_request_review"]("ghost", "plan")
+    assert ghost.startswith("Error:") and "unknown teammate" in ghost
+
+
+def test_team_request_review_blocks_and_returns_verdict(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    bus.ensure_mailbox(MAIN_AGENT_NAME)
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    teammate_manager.register("reviewer", "reviewer", "You review.")
+    bg = _FakeBg(running={"team:sess1:reviewer"})
+    handlers = _build_team_handlers(
+        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
+    )
+
+    seen: list[tuple] = []
+    stop = threading.Event()
+
+    def _responder() -> None:
+        fsm = ProtocolFSM(bus, "reviewer")
+        cursor: str | None = None
+        while not stop.is_set():
+            msgs = bus.receive("reviewer", since_id=cursor)
+            if msgs:
+                cursor = msgs[-1].id
+            for message in msgs:
+                if message.msg_type == "request":
+                    seen.append(decode_protocol_content(message.content))
+                    fsm.respond(message.id, "APPROVED: looks good")
+            time.sleep(0.005)
+
+    thread = threading.Thread(target=_responder, daemon=True)
+    thread.start()
+    try:
+        result = handlers["team_request_review"]("reviewer", "ship plan X")
+    finally:
+        stop.set()
+        thread.join(timeout=1)
+
+    assert result == "Review verdict from reviewer: APPROVED: looks good"
+    # The teammate received a PLAN_APPROVAL-encoded request (so it is wrapped as a
+    # plan review on the receiving side), carrying the plan verbatim.
+    assert seen == [(Protocol.PLAN_APPROVAL, "ship plan X")]
+    # The consumed verdict is marked delivered so the drain won't re-surface it.
+    assert any(bus.was_delivered(m.id) for m in bus.receive(MAIN_AGENT_NAME))
+
+
+def test_team_request_review_times_out(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    teammate_manager.register("reviewer", "reviewer", "You review.")
+    bg = _FakeBg(running={"team:sess1:reviewer"})
+    handlers = _build_team_handlers(
+        tmp_path,
+        bus=bus,
+        teammate_manager=teammate_manager,
+        bg=bg,
+        response_timeout=0.1,
+    )
+
+    result = handlers["team_request_review"]("reviewer", "plan")
+    assert "no verdict within" in result
