@@ -1139,3 +1139,36 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 ### Next Steps
 
 - None - task complete
+
+
+## Session 35: team 收口：team_register 动态建队友 + PLAN_APPROVAL 发送侧接线
+
+**Date**: 2026-06-08
+**Task**: team 收口：team_register 动态建队友 + PLAN_APPROVAL 发送侧接线
+**Branch**: `main`
+
+### Summary
+
+补齐 06-06 列为 Out of Scope 的两个 team 半成品，复用现成机制仅补接线。team_register(name,role,system_prompt,provider?,model?) 接 TeammateManager.register 落 .team.json，never-raise，不自动 spawn。team_request_review(to_agent,plan) 复刻 _team_send 阻塞骨架 + ProtocolFSM.request(PLAN_APPROVAL)，接通 06-06 只接收侧的审批协议，main/unknown/not-running 立即返回、decode 取裁决、mark_delivered 去重。两工具五处接线 + /team register|review slash + 非 SAFE 权限。+7 测试，全量 1054 passed，trellis-check COMPLIANT。team 子系统收口为 LLM 全自助创建+审批闭环。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d7dccc8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
