@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 36
+- **Total Sessions**: 37
 - **Last Active**: 2026-06-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1207 | Active |
+| `journal-1.md` | ~1240 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 37 | 2026-06-08 | Workflow 后台执行 + /workflows 面板 + resume + token budget | `f5aba62` | `main` |
 | 36 | 2026-06-08 | 语义/向量记忆召回（可插拔 embedding backend + 词法回退） | `7799a0d` | `main` |
 | 35 | 2026-06-08 | team 收口：team_register 动态建队友 + PLAN_APPROVAL 发送侧接线 | `d7dccc8` | `main` |
 | 34 | 2026-06-08 | provider 空响应诊断（completed 但 text+tool 皆空时非致命 warn） | `a980bcd` | `main` |

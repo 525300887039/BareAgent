@@ -1205,3 +1205,36 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 ### Next Steps
 
 - None - task complete
+
+
+## Session 37: Workflow 后台执行 + /workflows 面板 + resume + token budget
+
+**Date**: 2026-06-08
+**Task**: Workflow 后台执行 + /workflows 面板 + resume + token budget
+**Branch**: `main`
+
+### Summary
+
+补齐 workflow MVP(06-06) 砍掉的四扩展位：run_in_background 后台 daemon + 完整 summary drain 回灌；/workflows 面板(list/detail/clear)；resume_from 复用未变 DONE 节点+下游级联重跑(compute_resume_plan)；token_budget 层间软护栏(每节点独立 TokenTracker 锁内累加)。新建 WorkflowRegistry(内存级带锁/FIFO/会话作用域)；token_tracker 透传 run_subagent→agent_loop；inject_notifications 跳过 wf-。+27 测试，全套 1108 passed。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f5aba62` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
