@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核验诊断非致命：仍 return 空串、不抛、不重试、控制流与正常路径零变化；正常响应零行为变化"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "核验 logging.warning 用法合规（module logger、级别、无 emoji、非 print），双通道（console=None 仍 logging）"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核验无 emoji、类型注解、条件最简无过度设计、无多余配置"}

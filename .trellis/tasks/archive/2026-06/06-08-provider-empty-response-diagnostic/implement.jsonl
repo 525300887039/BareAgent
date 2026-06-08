@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "本任务核心是给 src/core/loop.py 新增 logging.warning（loop 此前不用 logging）——需遵循项目日志约定：用 module logger、warning 级别、无 emoji、不用 print，与 console.print_status 双通道并存"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "诊断必须非致命：检测到退化空响应只发 warning，仍照常 return 空串，不抛异常、不重试、不改控制流——fail-open 心智对齐 hooks/worktree（诊断是便利层，绝不改安全/控制流）"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "源码禁 emoji、清晰类型注解、保持简洁避免过度设计；条件用最简 not text and not has_tool_calls，不加配置旋钮"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "改动落在既有 src/core/loop.py 单点 + tests/，无新增模块，确认正确放置不错位"}
