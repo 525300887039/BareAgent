@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/06-08-semantic-memory-recall/research/local-embedding-libs.md", "reason": "本任务的库选型依据：fastembed 0.8（ONNX 无 torch，BAAI/bge-small-en-v1.5 384维，自带 numpy）vs sentence-transformers/model2vec 对比 + 确切 extra 行 + 最小 embed 调用片段"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新增 src/memory/embedding.py（Embedder 抽象 + 两 backend + 磁盘缓存 + 纯 Python 余弦），需按 memory 子系统分层正确放置；recall 内核仍在 persistent.py"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "fail-open 是核心：backend 初始化/调用失败、无 key、缺 fastembed extra、离线 → 一律回退现有词法 recall()，绝不崩、绝不阻塞 loop；对齐 hooks/worktree/retry 的便利层兜底心智"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "embedding 磁盘缓存是持久化状态：content-hash 失效（文件改了重算）、backend+model 身份变更整体失效；缓存落记忆根单个 JSON，需明确失效与并发语义"}
+{"file": ".trellis/spec/backend/code-reuse-thinking-guide.md", "reason": "复用：recall()/recall_section()/RecalledMemory 工具表面不变（docstring 已承诺 vector backend 替换 method body）、词法 _relevance 作回退保留、lazy-import 可选 extra 范式（对齐 pdf/lsp）、openai client 复用做 /embeddings"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "源码禁 emoji、清晰类型注解、保持简洁；纯 Python 余弦避免给 openai backend 强引 numpy；可插拔抽象注入可单测（假 embedder）；不过度设计（无向量 DB）"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "改动横跨 memory.embedding（新）↔ memory.persistent（recall 注入 embedder）↔ main（[memory] 配置 + 建 embedder 穿透 MemoryManager）↔ pyproject（[embeddings] extra），需保证 fail-open 与配置穿透一致贯通"}

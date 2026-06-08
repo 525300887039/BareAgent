@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核验 fail-open：embedder 不可用/抛错/无 key/缺 extra → 回退词法 recall()，结果与今天一致、不崩；semantic_recall=false 时字节级兼容"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核验 embedding 缓存按 content-hash 失效、backend+model 身份变更整体失效、落盘原子性与读回健壮（坏缓存不崩）"}
+{"file": ".trellis/spec/backend/code-reuse-thinking-guide.md", "reason": "核验 recall 工具表面不变、词法回退保留、lazy-import extra 范式（fastembed 未装不崩）、openai client 复用，而非重造"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核验无 emoji、类型注解、纯 Python 余弦不强引 numpy、可插拔抽象注入可测、无过度设计"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核验 embedding↔persistent↔main↔pyproject 四层配置穿透 + fail-open 一致贯通"}
