@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核验 team_register never-raise（空字段返回 Error）、team_request_review 的 not-running/main 立即返回 + 超时提示、阻塞不无限等"}
+{"file": ".trellis/spec/backend/code-reuse-thinking-guide.md", "reason": "核验确实复用 TeammateManager.register / ProtocolFSM PLAN_APPROVAL / _team_send 骨架，而非重复实现持久化或协议或阻塞逻辑"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核验两工具五处接线齐备且一致（schema/DEFERRED/fallback/handlers/slash）、权限档对齐非 SAFE"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核验无 emoji、类型注解、扁平 schema 不过度设计、schema 走 tool_schema helper"}

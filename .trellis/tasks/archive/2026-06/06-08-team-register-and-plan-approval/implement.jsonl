@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "两个新 team 工具走既有五处接线（core/tools.py schema+DEFERRED+fallback、main.py _make_team_handlers+_handle_team_command），无新增模块；需按现有 team 工具分层正确放置"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "team_register never-raise（空必填字段返回结构化 Error 而非抛）；team_request_review 复刻 _team_send 的 not-running/main 立即返回 + 超时提示，阻塞但不无限等；与现有 team 异常隔离一致"}
+{"file": ".trellis/spec/backend/code-reuse-thinking-guide.md", "reason": "复用既有：TeammateManager.register（不重写持久化）、ProtocolFSM.request(PLAN_APPROVAL)+wait_response+decode（接收侧已存在不动）、_team_send 阻塞骨架（not-running 预判/wait_response/mark_delivered 去重）、team_spawn/team_send 五处接线范式——不重造轮子"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "源码禁 emoji、清晰类型注解、扁平 schema 不过度设计；工具 schema 走 _schema=tool_schema canonical helper（勿手搓 dict）"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "改动横跨 core/tools（schema+DEFERRED+fallback）↔ main（handlers+slash）↔ team（manager/protocols 复用），需保证工具注册/权限档/slash 三处一致贯通"}
