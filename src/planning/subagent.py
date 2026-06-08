@@ -121,6 +121,7 @@ def run_subagent(
     isolation: str = "none",
     retry_policy: Any = None,
     registry: SubagentRegistry | None = None,
+    token_tracker: Any = None,
 ) -> str:
     if current_depth > max_depth:
         return f"Subagent refused: recursion depth {current_depth} exceeds limit {max_depth}."
@@ -158,6 +159,7 @@ def run_subagent(
                 # Background subagents are fire-and-notify: their context is gone
                 # by the time a notification surfaces, so they are never resumable.
                 registry=None,
+                token_tracker=token_tracker,
             ),
         )
         return f"Subagent {task_id} started in the background."
@@ -177,6 +179,7 @@ def run_subagent(
         isolation=isolation,
         retry_policy=retry_policy,
         registry=registry,
+        token_tracker=token_tracker,
     )
 
 
@@ -195,6 +198,7 @@ def _run_subagent_sync(
     isolation: str = "none",
     retry_policy: Any = None,
     registry: SubagentRegistry | None = None,
+    token_tracker: Any = None,
 ) -> str:
     filtered_tools = filter_tools(tools, resolved_type)
     child_handlers = filter_handlers(handlers, filtered_tools)
@@ -257,6 +261,7 @@ def _run_subagent_sync(
                 # Nested subagents are not directly resumable from the main loop
                 # ("you can only continue agents you spawned"): never register.
                 registry=None,
+                token_tracker=token_tracker,
             )
         )
 
@@ -280,6 +285,7 @@ def _run_subagent_sync(
                 bg_manager=None,
                 max_iterations=resolved_type.max_turns,
                 retry_policy=retry_policy,
+                token_tracker=token_tracker,
             )
             span.set_content_tag("result", result[:500])
     finally:

@@ -259,7 +259,13 @@ evaluator_model = ""
 # 安全语义：节点子代理 fail-closed 无人值守运行（worker 线程不弹确认，与后台子代理 / /loop
 # 一脉相承）——DEFAULT 下写操作被拒、AUTO 下自动放行、PLAN 下只读；workflow 工具不进全局
 # 工具集、子代理拿不到（无嵌套）；同步阻塞调用、Esc 可中断。失败语义：单节点失败 = 其传递
-# 下游 skip、独立分支继续。MVP 不做循环/条件/动态 fan-out、不做后台执行/resume、不做
+# 下游 skip、独立分支继续。
+# 扩展（task 06-08-workflow-background-panel-resume-budget）：workflow 工具新增三个可选字段——
+# run_in_background（后台 daemon 跑、立即返回 run id、完成后完整 summary 在下个 turn 回灌 LLM）、
+# resume_from（给上次 run id，复用未变的已完成节点、只重跑变更/失败/新增节点及其下游）、
+# token_budget（软上限，层间检查，超限后剩余节点 skip）。REPL 配套面板 /workflows（list | <run-id>
+# | clear）。run 记录内存级、会话作用域（/new·/resume·/import clear、/compact 保留）。
+# MVP 不做循环/条件/动态 fan-out、不做落盘跨重启 resume、不做取消运行中 workflow、不做
 # worktree per-node 隔离（均为后续扩展位）。
 # 总开关：false 时 workflow 工具压根不注入，整特性短路。env 覆盖：BAREAGENT_WORKFLOW_ENABLED。
 enabled = true
@@ -267,6 +273,12 @@ enabled = true
 max_concurrency = 8
 # 单张 DAG 的节点数上限，防止 LLM 产出超大图打爆线程池。
 max_nodes = 20
+# 缺省 token 预算：workflow 调用未带 token_budget 时的兜底上限，0 = 不限；per-call 字段优先。
+# env 覆盖：BAREAGENT_WORKFLOW_DEFAULT_TOKEN_BUDGET。
+default_token_budget = 0
+# 保留的 run 记录数（面板历史 + resume 来源）上限，FIFO 超出裁剪最旧（优先裁已完成的）。
+# env 覆盖：BAREAGENT_WORKFLOW_MAX_RUNS。
+max_runs = 50
 
 [team]
 # 多智能体队友协调（task 06-06-team-subsystem-completion）：把 team 子系统补到

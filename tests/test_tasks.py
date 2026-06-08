@@ -113,6 +113,21 @@ def test_inject_notifications_appends_user_message() -> None:
     assert "job-2" in str(messages[-2]["content"])
 
 
+def test_inject_notifications_skips_workflow_runs() -> None:
+    # Workflow runs (wf- ids) are delivered by the dedicated drain, so they must
+    # NOT also be injected through the generic truncated notification path.
+    manager = BackgroundManager()
+    manager.notify("wf-abc123", "Workflow finished", status="done")
+    messages = [
+        {"role": "system", "content": "You are BareAgent."},
+        {"role": "user", "content": "hi"},
+    ]
+    inject_notifications(messages, manager)
+    # Only the wf- notification was queued -> nothing injected.
+    assert len(messages) == 2
+    assert all("wf-abc123" not in str(m.get("content", "")) for m in messages)
+
+
 def test_background_run_marks_failed_shell_commands_as_failed(tmp_path: Path) -> None:
     manager = BackgroundManager()
     handlers = get_handlers(tmp_path, bg_manager=manager)

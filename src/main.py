@@ -7,6 +7,8 @@ import logging
 import os
 import signal
 import sys
+import threading
+import time
 import tomllib
 from collections.abc import Callable
 from collections.abc import Set as AbstractSet
@@ -47,7 +49,11 @@ from src.core.handlers.plan import (
 )
 from src.core.handlers.skill import SKILL_CREATE_TOOL_SCHEMA, run_skill_create
 from src.core.handlers.subagent_send import SUBAGENT_SEND_TOOL_SCHEMA, run_subagent_send
-from src.core.handlers.workflow import WORKFLOW_TOOL_SCHEMA, run_workflow_tool
+from src.core.handlers.workflow import (
+    WORKFLOW_TOOL_SCHEMA,
+    run_workflow_tool,
+    validate_workflow_input,
+)
 from src.core.loop import LLMCallError, agent_loop
 from src.core.retry import RetryPolicy
 from src.core.tools import get_handlers, get_tools
@@ -55,8 +61,15 @@ from src.core.workflow import (
     DEFAULT_MAX_CONCURRENCY,
     DEFAULT_MAX_NODES,
     NodeResult,
+    NodeStatus,
     WorkflowNode,
     build_node_prompt,
+)
+from src.core.workflow_registry import (
+    DEFAULT_MAX_RUNS,
+    RunStatus,
+    WorkflowRegistry,
+    WorkflowRun,
 )
 from src.debug.interaction_log import InteractionLogger
 from src.hooks import (
@@ -264,6 +277,13 @@ class WorkflowConfig:
     # Ceiling on declared nodes per workflow; guards the thread pool against an
     # oversized DAG.
     max_nodes: int = DEFAULT_MAX_NODES
+    # Default token ceiling per run when the ``workflow`` call omits
+    # ``token_budget``; 0 = unlimited. The per-call field overrides this. Honors
+    # ``BAREAGENT_WORKFLOW_DEFAULT_TOKEN_BUDGET``.
+    default_token_budget: int = 0
+    # FIFO cap on retained run records (panel history + resume source); evicting
+    # the oldest beyond this. Honors ``BAREAGENT_WORKFLOW_MAX_RUNS``.
+    max_runs: int = DEFAULT_MAX_RUNS
 
 
 @dataclass(slots=True)
@@ -726,10 +746,34 @@ def _parse_workflow_config(workflow_raw: dict) -> WorkflowConfig:
             return fallback
         return value if value >= 1 else fallback
 
+    # default_token_budget allows 0 (unlimited), so it is parsed as non-negative
+    # rather than positive; env override mirrors the enabled knob.
+    try:
+        default_budget = _resolve_int(
+            int(workflow_raw.get("default_token_budget", defaults.default_token_budget)),
+            "BAREAGENT_WORKFLOW_DEFAULT_TOKEN_BUDGET",
+        )
+    except (TypeError, ValueError):
+        default_budget = defaults.default_token_budget
+    if default_budget < 0:
+        default_budget = defaults.default_token_budget
+
+    try:
+        max_runs = _resolve_int(
+            int(workflow_raw.get("max_runs", defaults.max_runs)),
+            "BAREAGENT_WORKFLOW_MAX_RUNS",
+        )
+    except (TypeError, ValueError):
+        max_runs = defaults.max_runs
+    if max_runs < 1:
+        max_runs = defaults.max_runs
+
     return WorkflowConfig(
         enabled=enabled,
         max_concurrency=_positive_int("max_concurrency", defaults.max_concurrency),
         max_nodes=_positive_int("max_nodes", defaults.max_nodes),
+        default_token_budget=default_budget,
+        max_runs=max_runs,
     )
 
 
@@ -1284,6 +1328,7 @@ _SLASH_COMMANDS = [
     "/cost",
     "/goal",
     "/loop",
+    "/workflows",
     "/log",
     "/team",
     "/mcp",
@@ -1316,6 +1361,7 @@ _HELP_TEXT = (
     "(/goal [--max-turns N] <condition>); respects current permission mode\n"
     "  /loop      Schedule a shell command to repeat every N seconds "
     "(list|cancel <id>|clear); runs WITHOUT permission prompts\n"
+    "  /workflows List/inspect workflow runs (list | <run-id> | clear)\n"
     "  /log       Debug log viewer (status|serve|open|<seq>)\n"
     "  /team      Manage team agents (list | spawn | send | shutdown | register | review)\n"
     "  /mcp       Manage MCP servers (status | list | reload <name>)\n"
@@ -2343,6 +2389,35 @@ def _drain_team_mailbox(
     return messages[-1].id
 
 
+def _drain_workflow_results(
+    ui_console: AgentConsole,
+    *,
+    registry: WorkflowRegistry,
+    sink: list[str],
+) -> None:
+    """Inject finished background workflows' full summaries into the next turn.
+
+    Mirrors ``_drain_team_mailbox``: ``take_undelivered`` returns each finished,
+    not-yet-delivered run exactly once (marking it delivered), so a background
+    workflow's full aggregated summary reaches the LLM precisely once and never
+    twice. The summary is appended to ``sink`` (the REPL prepends it onto the next
+    user turn, keeping role alternation intact) untruncated -- the generic
+    background-task notification path skips ``wf-`` ids precisely so this drain is
+    the single delivery channel. Sync runs are marked delivered but not injected:
+    they already returned their summary as the tool result.
+    """
+    for run in registry.take_undelivered():
+        if not run.background:
+            continue
+        counts = run.counts()
+        ui_console.print_status(
+            f"Workflow {run.run_id} finished "
+            f"({counts['done']} done, {counts['failed']} failed, {counts['skipped']} skipped)."
+        )
+        body = run.summary.strip() or "(no summary)"
+        sink.append(f'<workflow-result run="{run.run_id}">\n{body}\n</workflow-result>')
+
+
 def _broadcast_team_shutdown(message_bus: MessageBus) -> None:
     ProtocolFSM(message_bus, MAIN_AGENT_NAME).broadcast(
         Protocol.SHUTDOWN,
@@ -2621,6 +2696,8 @@ def _install_workflow_handler(
     default_agent_type: str,
     max_concurrency: int,
     max_nodes: int,
+    registry: WorkflowRegistry,
+    default_token_budget: int,
 ) -> None:
     """Install the main-loop-only ``workflow`` handler on a (re)built handler dict.
 
@@ -2632,36 +2709,115 @@ def _install_workflow_handler(
     schema is also withheld from ``loop_tools``), so the feature fully short
     -circuits. Node subagents run fail-closed (no prompts from worker threads),
     the same unattended stance as background subagents and ``/loop``.
+
+    Each call registers a :class:`WorkflowRun` so the ``/workflows`` panel and
+    ``resume`` can see it. ``run_in_background`` runs the whole DAG in a daemon
+    thread (the result is injected later by ``_drain_workflow_results``);
+    ``resume_from`` reuses a prior run's unchanged nodes; ``token_budget`` (with
+    the per-node ``TokenTracker``s summed under a lock) caps the run at layer
+    boundaries.
     """
     if not enabled:
         return
     node_handlers = handlers
 
-    def execute_node(node: WorkflowNode, upstream: dict[str, NodeResult]) -> str:
-        node_permission: Any = permission
-        if isinstance(permission, PermissionGuard):
-            node_permission = permission.clone(fail_closed=True)
-        return run_subagent(
-            provider=provider,
-            task=build_node_prompt(node, upstream),
-            tools=base_tools,
-            handlers=node_handlers,
-            permission=node_permission,
-            max_depth=max_depth,
-            agent_type=node.agent_type,
-            bg_manager=bg_manager,
-            default_agent_type=default_agent_type,
-            retry_policy=retry_policy,
-        )
-
     def handler(**kwargs: Any) -> str:
-        return run_workflow_tool(
-            nodes=kwargs.get("nodes"),
-            execute_node=execute_node,
-            map_concurrent=lambda thunks: _run_node_batch(thunks, max_concurrency),
-            on_progress=console.print_status,
-            max_nodes=max_nodes,
+        validated = validate_workflow_input(kwargs.get("nodes"), max_nodes=max_nodes)
+        if isinstance(validated, str):
+            return validated  # immediate feedback for a malformed DAG (sync or bg)
+        spec = validated
+
+        tool_budget = kwargs.get("token_budget")
+        valid_budget = (
+            isinstance(tool_budget, int) and not isinstance(tool_budget, bool) and tool_budget > 0
         )
+        effective_budget = int(tool_budget) if valid_budget else default_token_budget
+        resume_from = kwargs.get("resume_from")
+        background = bool(kwargs.get("run_in_background"))
+
+        run_id = registry.generate_id()
+        registry.start(run_id, spec, background=background, token_budget=effective_budget)
+
+        # Per-run token accounting. Each node uses its OWN TokenTracker (thread
+        # -local, no shared mutation); its total is folded into a locked
+        # accumulator after the node returns, so the layer-boundary budget check
+        # reads a consistent figure even with nodes running concurrently.
+        budget_lock = threading.Lock()
+        spent = [0]
+
+        def tokens_spent() -> int:
+            with budget_lock:
+                return spent[0]
+
+        def execute_node(node: WorkflowNode, upstream: dict[str, NodeResult]) -> str:
+            node_permission: Any = permission
+            if isinstance(permission, PermissionGuard):
+                node_permission = permission.clone(fail_closed=True)
+            node_tracker = TokenTracker()
+            output = run_subagent(
+                provider=provider,
+                task=build_node_prompt(node, upstream),
+                tools=base_tools,
+                handlers=node_handlers,
+                permission=node_permission,
+                max_depth=max_depth,
+                agent_type=node.agent_type,
+                bg_manager=bg_manager,
+                default_agent_type=default_agent_type,
+                retry_policy=retry_policy,
+                token_tracker=node_tracker,
+            )
+            with budget_lock:
+                spent[0] += node_tracker.total_tokens
+                current = spent[0]
+            registry.set_tokens(run_id, current)
+            return output
+
+        # Background nodes run off the REPL thread, so progress must NOT touch the
+        # console (thread-safety rule, see Scheduler); the panel reflects status
+        # instead. Sync runs keep the live console progress.
+        progress = (lambda _message: None) if background else console.print_status
+
+        def drive() -> str:
+            summary = run_workflow_tool(
+                spec=spec,
+                resume_from=resume_from if isinstance(resume_from, str) else None,
+                token_budget=effective_budget,
+                execute_node=execute_node,
+                map_concurrent=lambda thunks: _run_node_batch(thunks, max_concurrency),
+                on_progress=progress,
+                on_node_status=lambda node_id, result: registry.update_node(
+                    run_id, node_id, result
+                ),
+                resolve_prior=registry.get_for_resume,
+                tokens_spent=tokens_spent,
+                max_nodes=max_nodes,
+            )
+            registry.finish(run_id, summary=summary, tokens_spent=tokens_spent())
+            return summary
+
+        if background:
+
+            def background_runner() -> str:
+                try:
+                    return drive()
+                except Exception as exc:  # noqa: BLE001 - surface, don't lose, a bg crash
+                    registry.finish(
+                        run_id,
+                        summary=f"Error: workflow crashed: {type(exc).__name__}: {exc}",
+                        tokens_spent=tokens_spent(),
+                        status=RunStatus.FAILED,
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
+                    return ""
+
+            bg_manager.submit(run_id, background_runner)
+            return (
+                f"Workflow {run_id} started in the background ({len(spec.nodes)} node(s)). "
+                "Watch it with /workflows; its result will be delivered when it finishes."
+            )
+
+        return drive() + f"\n\n[workflow run id: {run_id}]"
 
     handlers["workflow"] = handler
 
@@ -2881,6 +3037,97 @@ def _dispatch_loop_command(
         f"Scheduled {job.job_id}: every {job.interval_sec:g}s — {job.command}\n"
         "Warning: this command runs WITHOUT permission confirmation in the background."
     )
+
+
+_WORKFLOWS_COMMAND_USAGE = "Usage: /workflows [list] | /workflows <run-id> | /workflows clear"
+
+
+def _humanize_age(seconds: float) -> str:
+    """Render an elapsed-seconds duration compactly (e.g. ``5s``, ``3m``, ``1h2m``)."""
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, sec = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m{sec}s" if sec else f"{minutes}m"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h{minutes}m" if minutes else f"{hours}h"
+
+
+def _format_workflow_run_line(run: WorkflowRun, now: float) -> str:
+    """One-line panel summary of a run (pure; ``now`` injected for testability)."""
+    counts = run.counts()
+    parts = [f"{counts['done']} done"]
+    if counts["reused"]:
+        parts.append(f"{counts['reused']} reused")
+    if counts["failed"]:
+        parts.append(f"{counts['failed']} failed")
+    if counts["skipped"]:
+        parts.append(f"{counts['skipped']} skipped")
+    if counts["running"]:
+        parts.append(f"{counts['running']} running")
+    total = len(run.spec.nodes)
+    budget = f"/{run.token_budget}" if run.token_budget else ""
+    flag = " [bg]" if run.background else ""
+    age = _humanize_age(now - run.started_at)
+    return (
+        f"{run.run_id}: {run.status.value}{flag} — {total} node(s) "
+        f"[{', '.join(parts)}], {run.tokens_spent}{budget} tok, {age} ago"
+    )
+
+
+def _format_workflow_run_detail(run: WorkflowRun, now: float, *, preview: int = 200) -> str:
+    """Multi-line per-node detail of one run (pure; ``now`` injected)."""
+    lines = [_format_workflow_run_line(run, now)]
+    for node in run.spec.nodes:
+        result = run.results.get(node.id)
+        if result is None:
+            continue
+        marker = "reused" if result.reused else result.status.value
+        head = f"  [{marker}] {node.id}"
+        if node.phase:
+            head += f" (phase: {node.phase})"
+        if node.label:
+            head += f" - {node.label}"
+        lines.append(head)
+        body = (result.output if result.status is NodeStatus.DONE else result.error).strip()
+        if body:
+            snippet = body[:preview] + ("..." if len(body) > preview else "")
+            lines.append(f"      {snippet}")
+    return "\n".join(lines)
+
+
+def _dispatch_workflows_command(
+    text: str,
+    *,
+    registry: WorkflowRegistry,
+    ui_console: AgentConsole,
+) -> None:
+    """Handle the ``/workflows`` REPL command (panel; never raises).
+
+    Forms: ``/workflows`` / ``/workflows list`` (list this session's runs),
+    ``/workflows <run-id>`` (per-node detail), ``/workflows clear`` (drop finished
+    runs). Read-only over the in-memory registry -- no LLM, no permission gate.
+    """
+    rest = text[len("/workflows") :].strip()
+    now = time.time()
+    if not rest or rest == "list":
+        runs = registry.snapshot()
+        if not runs:
+            ui_console.print_status(f"(no workflow runs)\n{_WORKFLOWS_COMMAND_USAGE}")
+            return
+        for run in runs:
+            ui_console.print_status(_format_workflow_run_line(run, now))
+        return
+    if rest == "clear":
+        removed = registry.clear_finished()
+        ui_console.print_status(f"Cleared {removed} finished workflow run(s).")
+        return
+    run = registry.get(rest)
+    if run is None:
+        ui_console.print_error(f"No workflow run found: {rest}\n{_WORKFLOWS_COMMAND_USAGE}")
+        return
+    ui_console.print_status(_format_workflow_run_detail(run, now))
 
 
 def _run_skill_reflection(
@@ -3263,11 +3510,20 @@ def _run_stdio_session(
     # one instance for the REPL lifetime. Cleared on /new / /resume / /import /
     # /clear (mirroring spawned_agents) and preserved across /compact.
     subagent_registry = SubagentRegistry(config.subagent.max_resumable)
+    # Workflow runs (task 06-08): session-scoped, in-memory, thread-safe store
+    # backing the /workflows panel + resume. Same lifecycle as subagent_registry
+    # / spawned_agents -- cleared on /new / /resume / /import / /clear, kept
+    # across /compact.
+    workflow_registry = WorkflowRegistry(config.workflow.max_runs)
     # Late / unsolicited teammate replies surfaced by the mailbox drain are
     # buffered here and prepended onto the next user turn (keeps role
     # alternation intact). Blocking team_send replies bypass this -- they return
     # straight to the LLM as the tool result.
     pending_team_messages: list[str] = []
+    # Finished background workflows' full summaries, buffered the same way and
+    # prepended onto the next user turn (see _drain_workflow_results). Same
+    # lifecycle as pending_team_messages.
+    pending_workflow_messages: list[str] = []
     messages = _initial_messages(
         workspace_path,
         skill_summary=skill_loader.get_skill_list_prompt(),
@@ -3371,6 +3627,8 @@ def _run_stdio_session(
         default_agent_type=config.subagent.default_type,
         max_concurrency=config.workflow.max_concurrency,
         max_nodes=config.workflow.max_nodes,
+        registry=workflow_registry,
+        default_token_budget=config.workflow.default_token_budget,
     )
     _install_plan_handler(handlers, plan_approval)
     install_workflow_handler(handlers)
@@ -3442,7 +3700,9 @@ def _run_stdio_session(
                 )
                 spawned_agents = {}
                 pending_team_messages.clear()
+                pending_workflow_messages.clear()
                 subagent_registry.clear()
+                workflow_registry.clear()
                 handlers = _build_handlers(
                     workspace_path=workspace_path,
                     todo_manager=todo_manager,
@@ -3530,7 +3790,9 @@ def _run_stdio_session(
                     )
                     spawned_agents = {}
                     pending_team_messages.clear()
+                    pending_workflow_messages.clear()
                     subagent_registry.clear()
+                    workflow_registry.clear()
                 handlers = _build_handlers(
                     workspace_path=workspace_path,
                     todo_manager=todo_manager,
@@ -3601,7 +3863,9 @@ def _run_stdio_session(
                 )
                 spawned_agents = {}
                 pending_team_messages.clear()
+                pending_workflow_messages.clear()
                 subagent_registry.clear()
+                workflow_registry.clear()
                 handlers = _build_handlers(
                     workspace_path=workspace_path,
                     todo_manager=todo_manager,
@@ -3665,6 +3929,11 @@ def _run_stdio_session(
                 continue
             if text == "/loop" or text.startswith("/loop "):
                 _dispatch_loop_command(text, scheduler=scheduler, ui_console=ui_console)
+                continue
+            if text == "/workflows" or text.startswith("/workflows "):
+                _dispatch_workflows_command(
+                    text, registry=workflow_registry, ui_console=ui_console
+                )
                 continue
             if text == "/log" or text.startswith("/log "):
                 viewer_server = _handle_log_command(
@@ -3806,13 +4075,22 @@ def _run_stdio_session(
                 _, _, forget_arg = text.partition(" ")
                 text = build_forget_instruction(forget_arg.strip())
 
-            # Prepend any buffered late/unsolicited teammate replies onto this
-            # user turn so the LLM sees them (without injecting standalone user
-            # messages that would break role alternation).
-            if pending_team_messages:
-                team_context = "\n".join(pending_team_messages)
+            # Surface any finished background workflows into the buffer (idempotent;
+            # also prints a console status line) before consuming it.
+            _drain_workflow_results(
+                ui_console, registry=workflow_registry, sink=pending_workflow_messages
+            )
+
+            # Prepend any buffered late/unsolicited teammate replies and finished
+            # background-workflow summaries onto this user turn so the LLM sees
+            # them (without injecting standalone user messages that would break
+            # role alternation).
+            pending_context = pending_team_messages + pending_workflow_messages
+            if pending_context:
+                prepended = "\n".join(pending_context)
                 pending_team_messages.clear()
-                text = f"{team_context}\n\n{text}" if text else team_context
+                pending_workflow_messages.clear()
+                text = f"{prepended}\n\n{text}" if text else prepended
 
             messages.append({"role": "user", "content": text})
             snapshot_len = len(messages) - 1

@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any
 
@@ -51,6 +51,11 @@ DEFAULT_MAX_CONCURRENCY = 8
 # Matches ``{{ node_id }}`` placeholders in a node prompt for upstream-result
 # substitution. Ids are restricted to a safe identifier-ish charset.
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z0-9_.\-]+)\s*\}\}")
+
+# Sentinel embedded in a node's ``error`` when it was skipped because the run hit
+# its token budget. ``format_summary`` matches this to surface a budget note, so
+# it must stay in sync between the writer (``run_workflow``) and the reader.
+_BUDGET_EXHAUSTED_REASON = "token budget exhausted"
 
 
 class WorkflowError(Exception):
@@ -83,12 +88,18 @@ class WorkflowNode:
 
 @dataclass(slots=True)
 class NodeResult:
-    """Terminal (or in-flight PENDING) state of a node after the scheduler runs."""
+    """Terminal (or in-flight PENDING) state of a node after the scheduler runs.
+
+    ``reused`` marks a result carried over from a prior run by :func:`compute_resume_plan`
+    (the node did not execute this run, so it consumed no token budget); the
+    status is still ``DONE`` so downstream scheduling is unaffected.
+    """
 
     id: str
     status: NodeStatus
     output: str = ""
     error: str = ""
+    reused: bool = False
 
 
 @dataclass(slots=True)
@@ -267,6 +278,58 @@ def propagate_skips(spec: WorkflowSpec, results: dict[str, NodeResult]) -> set[s
     return newly_skipped
 
 
+def compute_resume_plan(
+    spec: WorkflowSpec,
+    prior_spec: WorkflowSpec,
+    prior_results: dict[str, NodeResult],
+) -> dict[str, NodeResult]:
+    """Return the prior results that may be reused when resuming ``spec``.
+
+    A node is reusable iff it is a *direct cache hit* -- the same ``id`` existed
+    in ``prior_spec`` with an identical (raw, pre-substitution) ``prompt`` and
+    completed ``DONE`` last run -- *and* every one of its (transitive)
+    dependencies is also reusable. The cascade is the load-bearing rule: if any
+    upstream node must re-run (changed prompt, was FAILED/SKIPPED, or is new),
+    the downstream's cached output is stale and must be recomputed even when the
+    downstream's own prompt is unchanged.
+
+    Returned results are copies marked ``reused=True`` (status stays ``DONE``);
+    the caller seeds them so the scheduler skips them and threads their output
+    into dependents. Assumes ``spec`` is acyclic (validated upstream); a cache
+    guard still prevents re-entrancy if that ever breaks.
+    """
+    prior_prompts = {node.id: node.prompt for node in prior_spec.nodes if node.id}
+    node_by_id = {node.id: node for node in spec.nodes if node.id}
+    cache: dict[str, bool] = {}
+
+    def _is_reusable(node_id: str) -> bool:
+        cached = cache.get(node_id)
+        if cached is not None:
+            return cached
+        # Default to False before recursing so a (validated-away) cycle cannot
+        # loop forever.
+        cache[node_id] = False
+        node = node_by_id.get(node_id)
+        if node is None:
+            return False
+        prior = prior_results.get(node_id)
+        direct_hit = (
+            node_id in prior_prompts
+            and prior_prompts[node_id] == node.prompt
+            and prior is not None
+            and prior.status is NodeStatus.DONE
+        )
+        result = direct_hit and all(_is_reusable(dep) for dep in node.depends_on)
+        cache[node_id] = result
+        return result
+
+    reuse: dict[str, NodeResult] = {}
+    for node in spec.nodes:
+        if node.id and _is_reusable(node.id):
+            reuse[node.id] = replace(prior_results[node.id], reused=True)
+    return reuse
+
+
 def build_node_prompt(node: WorkflowNode, upstream: dict[str, NodeResult]) -> str:
     """Build a node's prompt, threading in its upstream dependency outputs.
 
@@ -301,14 +364,26 @@ def format_summary(spec: WorkflowSpec, results: dict[str, NodeResult]) -> str:
     done = sum(1 for n in spec.nodes if results[n.id].status is NodeStatus.DONE)
     failed = sum(1 for n in spec.nodes if results[n.id].status is NodeStatus.FAILED)
     skipped = sum(1 for n in spec.nodes if results[n.id].status is NodeStatus.SKIPPED)
+    reused = sum(1 for n in spec.nodes if results[n.id].reused)
+    budget_hit = any(
+        results[n.id].status is NodeStatus.SKIPPED
+        and _BUDGET_EXHAUSTED_REASON in results[n.id].error
+        for n in spec.nodes
+    )
 
-    blocks = [
+    headline = (
         f"Workflow finished: {done} done, {failed} failed, {skipped} skipped "
         f"(of {len(spec.nodes)} nodes)."
-    ]
+    )
+    if reused:
+        headline += f" {reused} reused from a prior run."
+    if budget_hit:
+        headline += " Stopped early: token budget exhausted."
+    blocks = [headline]
     for node in spec.nodes:
         result = results[node.id]
-        title = f"## [{result.status.value}] {node.id}"
+        marker = "reused" if result.reused else result.status.value
+        title = f"## [{marker}] {node.id}"
         if node.phase:
             title += f" (phase: {node.phase})"
         if node.label:
@@ -356,6 +431,10 @@ def run_workflow(
     execute_node: Callable[[WorkflowNode, dict[str, NodeResult]], Any],
     map_concurrent: Callable[[list[Callable[[], NodeResult]]], list[NodeResult]],
     on_progress: Callable[[str], None] | None = None,
+    on_node_status: Callable[[str, NodeResult], None] | None = None,
+    reused_results: dict[str, NodeResult] | None = None,
+    token_budget: int = 0,
+    tokens_spent: Callable[[], int] | None = None,
 ) -> dict[str, NodeResult]:
     """Drive a validated DAG to completion, returning each node's terminal result.
 
@@ -365,6 +444,19 @@ def run_workflow(
       raise) concurrently and returns their results in order. Tests inject a
       synchronous map; ``main.py`` injects a thread-pool-backed one.
     - ``on_progress`` receives human-readable progress lines (main thread only).
+    - ``on_node_status(node_id, result)`` fires whenever a node reaches a terminal
+      state (reused-seed, executed, or skipped). ``main.py`` wires this to a
+      locked registry update so the ``/workflows`` panel shows live progress;
+      tests can assert the transition sequence. Unlike ``on_progress`` it carries
+      structured data, not prose.
+    - ``reused_results`` seeds DONE results carried over from a prior run (see
+      :func:`compute_resume_plan`); those nodes are not executed and consume no
+      budget.
+    - ``token_budget`` (>0) caps the run: before launching each layer, if
+      ``tokens_spent()`` has reached the budget, every remaining PENDING node is
+      marked SKIPPED ("token budget exhausted") and the run stops. Already-running
+      layers finish (the check is at layer boundaries, not mid-node). ``0`` (or a
+      missing ``tokens_spent``) means unlimited -- the legacy behavior.
 
     Must be called on a spec that passed :func:`validate_workflow` (acyclic, all
     deps resolved), otherwise the scheduler could stall.
@@ -375,15 +467,49 @@ def run_workflow(
         if on_progress is not None:
             on_progress(message)
 
+    def set_result(result: NodeResult) -> None:
+        results[result.id] = result
+        if on_node_status is not None:
+            on_node_status(result.id, result)
+
+    # Seed reused results from a prior run before scheduling so the scheduler
+    # treats them as already DONE (skips execution, threads their output into
+    # dependents).
+    if reused_results:
+        reused_ids = [n.id for n in spec.nodes if n.id in reused_results]
+        for node_id in reused_ids:
+            set_result(reused_results[node_id])
+        if reused_ids:
+            emit(f"Reusing {len(reused_ids)} node(s) from a prior run: " + ", ".join(reused_ids))
+
+    def _budget_exhausted() -> bool:
+        return token_budget > 0 and tokens_spent is not None and tokens_spent() >= token_budget
+
     while True:
-        propagate_skips(spec, results)
+        for node_id in propagate_skips(spec, results):
+            result = results[node_id]
+            emit(f"  skipped: {node_id} ({result.error})")
+            if on_node_status is not None:
+                on_node_status(node_id, result)
+        if _budget_exhausted():
+            spent = tokens_spent() if tokens_spent is not None else 0
+            reason = f"{_BUDGET_EXHAUSTED_REASON} ({spent} >= {token_budget} tokens)"
+            pending = [n.id for n in spec.nodes if results[n.id].status is NodeStatus.PENDING]
+            if pending:
+                emit(
+                    f"Token budget exhausted ({spent} >= {token_budget}); "
+                    "skipping remaining node(s)."
+                )
+            for node_id in pending:
+                set_result(NodeResult(id=node_id, status=NodeStatus.SKIPPED, error=reason))
+            break
         ready = compute_ready(spec, results)
         if not ready:
             break
         emit("Running " + str(len(ready)) + " node(s): " + ", ".join(n.id for n in ready))
         batch = map_concurrent([_make_node_thunk(node, results, execute_node) for node in ready])
         for result in batch:
-            results[result.id] = result
+            set_result(result)
             if result.status is NodeStatus.DONE:
                 emit(f"  done: {result.id}")
             else:

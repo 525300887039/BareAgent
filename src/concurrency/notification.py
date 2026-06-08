@@ -17,8 +17,15 @@ def inject_notifications(
         return
 
     lines = ["后台任务更新："]
+    surfaced = 0
     for notification in notifications:
         task_id = str(notification.get("task_id", "unknown"))
+        # Workflow runs (task_id ``wf-<id>``) are delivered in full by the
+        # dedicated _drain_workflow_results channel; skip them here so their
+        # summary is not also injected truncated through this generic path.
+        if task_id.startswith("wf-"):
+            continue
+        surfaced += 1
         status = str(notification.get("status", "unknown"))
         detail = ""
         if "result" in notification:
@@ -30,6 +37,11 @@ def inject_notifications(
             if error_text:
                 detail = f" - {error_text[:500]}"
         lines.append(f"- Task {task_id}: {status}{detail}")
+
+    # Every notification was a workflow run (delivered elsewhere) -> nothing to
+    # inject here.
+    if surfaced == 0:
+        return
 
     notification_message = {
         "role": "system",
