@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 33
+- **Total Sessions**: 34
 - **Last Active**: 2026-06-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1108 | Active |
+| `journal-1.md` | ~1141 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 34 | 2026-06-08 | provider 空响应诊断（completed 但 text+tool 皆空时非致命 warn） | `a980bcd` | `main` |
 | 33 | 2026-06-08 | team 队友有状态记忆（跨 request 对话续跑 + per-teammate Compactor） | `8dcfbe8` | `main` |
 | 32 | 2026-06-06 | 子代理 SendMessage 续跑 | `279e20b` | `main` |
 | 31 | 2026-06-06 | 完善 team/AutonomousAgent 子系统（回路闭合 + 异常隔离 + team_shutdown + 活性检测 + 提速） | `e0e3c00` | `main` |

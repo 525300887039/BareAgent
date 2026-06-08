@@ -1106,3 +1106,36 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 34: provider 空响应诊断（completed 但 text+tool 皆空时非致命 warn）
+
+**Date**: 2026-06-08
+**Task**: provider 空响应诊断（completed 但 text+tool 皆空时非致命 warn）
+**Branch**: `main`
+
+### Summary
+
+agent loop 在模型正常停止却既无文本又无工具调用时，此前静默 return ""；现在单一收口点（src/core/loop.py 的 no-tool-calls 分支、return 前）发非致命诊断：logging.warning 始终发 + console 在时 print_status，消息含 stop_reason/output_tokens/wire_api hint，仍 return "" 不抛不重试。来自本会话调试第三方 relay 时 responses wire 返回空 output 的坑。落 logging-guidelines 豁免条款。+4 测试，全量 1047 passed，trellis-check COMPLIANT。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a980bcd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
