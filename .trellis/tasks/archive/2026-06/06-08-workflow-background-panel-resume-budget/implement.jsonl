@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "决定纯逻辑（resume 计算/budget 截断/on_node_status 回调进 core/workflow.py）与副作用（registry/后台 drive/面板/drain 留 main.py）各自落在哪"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "WorkflowRegistry 内存进程级 + 会话作用域生命周期（/new·/resume·/import clear、/compact 保留）+ 配置分层（[workflow] 新字段 + env 旋钮）对齐现有 SubagentRegistry/Scheduler 范式"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "工具 handler never-raise 返回 Error: 字符串、resume_from 失效 fail-open 整图重跑、节点 fail-closed 权限、面板/drain 容错不崩"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "进度走 AgentConsole.print_status（同步路径主线程）而非 logging；后台线程绝不碰 console，线程安全铁律参考 Scheduler"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "纯模块注入式回调（execute_node/map_concurrent/on_node_status/tokens_spent）可单测 vs main.py 持有 console/registry 副作用的分层契约"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用 SubagentRegistry（FIFO/clear）、_drain_team_mailbox+pending 缓冲（异步回灌去重）、/loop list/cancel/clear+/reload（命令登记三件套）、token_tracker 透传等现成范式而非新造"}

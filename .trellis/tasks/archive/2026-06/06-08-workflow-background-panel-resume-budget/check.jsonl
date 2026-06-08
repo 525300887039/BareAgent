@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "验收 ruff check 干净/只 format 改动文件/源码不带 emoji/pytest 覆盖纯逻辑/反过度设计（MVP 不越界做 Out of Scope）"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核查 handler never-raise、resume_from fail-open、budget 耗尽标 SKIPPED、节点 fail-closed、面板/drain 容错语义是否守约"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核查 WorkflowRegistry 会话切换 clear 点完整（/new·/resume·/import）、/compact 保留、FIFO max_runs 上限、配置容错解析不崩 boot"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核查纯逻辑/副作用分层未被打破、后台线程不碰 console/messages（线程安全）、共享 TokenTracker/registry 加锁正确"}
