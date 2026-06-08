@@ -1172,3 +1172,36 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 ### Next Steps
 
 - None - task complete
+
+
+## Session 36: 语义/向量记忆召回（可插拔 embedding backend + 词法回退）
+
+**Date**: 2026-06-08
+**Task**: 语义/向量记忆召回（可插拔 embedding backend + 词法回退）
+**Branch**: `main`
+
+### Summary
+
+持久记忆召回从词法升级为可插拔语义召回（embedding 余弦 top-K），不可用 fail-open 回退词法、默认关字节级兼容。新模块 src/memory/embedding.py：Embedder Protocol + OpenAIEmbedder/LocalEmbedder(fastembed,[embeddings] extra) + build_embedder(fail-open 工厂) + 纯 Python cosine(不引 numpy) + EmbeddingCache(content-hash/identity 失效)。persistent.recall 分派 + _semantic_recall 懒算缓存；工具表面不变(score int->float)。[memory] semantic_recall 默认 false opt-in + backend/model/端点/key 配置。trellis-check 抓修 1 个 keyless-provider fail-open boot 崩溃 bug。+18 测试，全量 1072 passed。Q1=c 可插拔抽象，本地库 fastembed 经 trellis-research 选型。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7799a0d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
