@@ -29,6 +29,7 @@ otel = [
 all-tracing = ["bareagent[langfuse,otel]"]
 lsp = ["multilspy>=0.0.15"]
 pdf = ["pypdf>=4.0"]
+embeddings = ["fastembed>=0.8"]
 
 [project.scripts]
 bareagent = "src.main:main"

@@ -75,6 +75,7 @@ from src.mcp import MCPCallError, MCPConfig, MCPError, MCPManager, parse_mcp_con
 from src.mcp.registry import _flatten_content as _mcp_flatten_content
 from src.memory.compact import Compactor
 from src.memory.conversation_io import parse_import, render_markdown, to_export_json
+from src.memory.embedding import build_embedder
 from src.memory.persistent import (
     MemoryManager,
     build_forget_instruction,
@@ -108,7 +109,7 @@ from src.provider.base import (
     CacheConfig,
     ThinkingConfig,
 )
-from src.provider.factory import create_provider
+from src.provider.factory import _resolve_api_key, create_provider
 from src.provider.setup import run_setup_wizard
 from src.team.autonomous import AutonomousAgent
 from src.team.mailbox import Message, MessageBus
@@ -186,9 +187,21 @@ class MemoryConfig:
     dir: str = ""
     # Max lines of MEMORY.md injected into the system prompt at session start.
     max_index_lines: int = 200
-    # Number of lexically-relevant memories recalled and injected each turn
+    # Number of relevant memories recalled and injected each turn
     # (0 = disable recall, keeping only the session-start index injection).
     recall_k: int = 5
+    # Semantic recall (task 06-08): off by default keeps the lexical behavior
+    # byte-identical. When on, recall ranks by embedding cosine similarity and
+    # fails open to lexical when the backend is unavailable. ``embedding_backend``
+    # is ``openai`` (reuses the openai client / a configurable embeddings
+    # endpoint) or ``local`` (fastembed, the ``[embeddings]`` extra). An empty
+    # model resolves to the backend default. The openai base_url / api_key fall
+    # back to the session provider's when left empty. All restart-required.
+    semantic_recall: bool = False
+    embedding_backend: str = "openai"
+    embedding_model: str = ""
+    embedding_base_url: str = ""
+    embedding_api_key: str = ""
 
 
 @dataclass(slots=True)
@@ -981,6 +994,15 @@ def load_config(
             int(memory_raw.get("recall_k", 5)),
             "BAREAGENT_MEMORY_RECALL_K",
         ),
+        semantic_recall=_resolve_bool(
+            bool(memory_raw.get("semantic_recall", False)),
+            "BAREAGENT_MEMORY_SEMANTIC_RECALL",
+        ),
+        embedding_backend=str(memory_raw.get("embedding_backend", "openai")).strip()
+        or "openai",
+        embedding_model=str(memory_raw.get("embedding_model", "")).strip(),
+        embedding_base_url=str(memory_raw.get("embedding_base_url", "")).strip(),
+        embedding_api_key=str(memory_raw.get("embedding_api_key", "")).strip(),
     )
 
     return Config(
@@ -1038,10 +1060,53 @@ def _build_memory_manager(
         return None
     try:
         root = resolve_memory_root(workspace_path, config.memory.dir)
-        return MemoryManager(root, max_index_lines=config.memory.max_index_lines)
+        embedder = _build_memory_embedder(config, ui_console)
+        return MemoryManager(
+            root,
+            max_index_lines=config.memory.max_index_lines,
+            embedder=embedder,
+        )
     except OSError as exc:
         ui_console.print_error(f"Persistent memory disabled (cannot open store): {exc}")
         return None
+
+
+def _build_memory_embedder(config: Config, ui_console: AgentConsole):
+    """Build the semantic-recall embedder, or None (fail-open to lexical recall).
+
+    Off unless ``[memory] semantic_recall`` is set. The openai backend's base_url
+    / api_key fall back to the session provider's when unset; ``build_embedder``
+    returns None on any failure (missing fastembed extra, missing key, unknown
+    backend) so recall silently degrades to lexical.
+    """
+    memory = config.memory
+    if not memory.semantic_recall:
+        return None
+    backend = (memory.embedding_backend or "openai").strip().lower()
+    if backend == "openai":
+        api_key = memory.embedding_api_key
+        if not api_key:
+            # _resolve_api_key raises when the provider config has no key at
+            # all; semantic recall is fail-open, so swallow that and let
+            # build_embedder degrade to None rather than crash boot.
+            try:
+                api_key = _resolve_api_key(config.provider)
+            except ValueError:
+                api_key = ""
+        embedder = build_embedder(
+            "openai",
+            memory.embedding_model,
+            base_url=memory.embedding_base_url or config.provider.base_url or None,
+            api_key=api_key,
+        )
+    else:
+        embedder = build_embedder(backend, memory.embedding_model)
+    if embedder is None:
+        ui_console.print_status(
+            "Semantic recall requested but the embedding backend is unavailable; "
+            "using lexical recall."
+        )
+    return embedder
 
 
 def _memory_context(memory_manager: MemoryManager | None) -> str:

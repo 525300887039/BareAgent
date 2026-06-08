@@ -248,3 +248,137 @@ def test_load_config_parses_recall_k(tmp_path):
     )
     cfg = load_config(config_file)
     assert cfg.memory.recall_k == 3
+
+
+def test_load_config_parses_semantic_recall_fields(tmp_path):
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        '[provider]\nname = "anthropic"\nmodel = "m"\napi_key_env = "K"\n\n'
+        "[memory]\nsemantic_recall = true\nembedding_backend = \"local\"\n"
+        'embedding_model = "BAAI/bge-small-en-v1.5"\n',
+        encoding="utf-8",
+    )
+    cfg = load_config(config_file)
+    assert cfg.memory.semantic_recall is True
+    assert cfg.memory.embedding_backend == "local"
+    assert cfg.memory.embedding_model == "BAAI/bge-small-en-v1.5"
+
+
+def test_memory_config_semantic_recall_defaults_off():
+    cfg = MemoryConfig()
+    assert cfg.semantic_recall is False
+    assert cfg.embedding_backend == "openai"
+
+
+def test_build_memory_embedder_fails_open_when_provider_has_no_api_key(tmp_path):
+    # Regression: _resolve_api_key raises ValueError when the provider config
+    # has neither api_key nor api_key_env. Since it is evaluated as a call
+    # argument before build_embedder's own try/except runs, that ValueError
+    # must not escape and crash boot — semantic recall is fail-open.
+    import dataclasses
+
+    from src.main import _build_memory_embedder
+    from src.ui.console import AgentConsole
+    from tests.conftest import make_test_config
+
+    base = make_test_config(tmp_path)
+    config = dataclasses.replace(
+        base,
+        provider=dataclasses.replace(base.provider, api_key_env="", api_key=""),
+        memory=MemoryConfig(semantic_recall=True, embedding_backend="openai"),
+    )
+    # No raise; the openai client with an empty key cannot embed, so it degrades.
+    embedder = _build_memory_embedder(config, AgentConsole())
+    # Either the build itself returned None, or it produced a client that will
+    # fail at embed-time (recall catches that and falls back). The contract
+    # tested here is only that boot did not crash.
+    assert embedder is None or hasattr(embedder, "embed")
+
+
+# -- semantic recall (src/memory/embedding.py injected backend) ------------
+
+
+class _FakeEmbedder:
+    """Deterministic topic-vector embedder: deploy / editor axes + bias.
+
+    Lets a query share *zero* lexical terms with a memory yet still rank it
+    first by topic — exactly the case lexical recall misses.
+    """
+
+    identity = "fake:v1"
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+        self.raise_on_embed = False
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        if self.raise_on_embed:
+            raise RuntimeError("embedding endpoint down")
+        self.calls.append(list(texts))
+        return [self._vec(t) for t in texts]
+
+    @staticmethod
+    def _vec(text: str) -> list[float]:
+        lowered = text.lower()
+        deploy_terms = ("deploy", "docker", "container", "ship", "release", "部署", "容器")
+        editor_terms = ("editor", "theme", "font", "主题", "字体")
+        deploy = 1.0 if any(term in text or term in lowered for term in deploy_terms) else 0.0
+        editor = 1.0 if any(term in lowered for term in editor_terms) else 0.0
+        return [deploy, editor, 0.1]
+
+
+def test_semantic_recall_matches_paraphrase_lexical_would_miss(tmp_path):
+    mm_lexical = _manager(tmp_path / "lex")
+    _write(mm_lexical, "a.md", "alpha", "部署 docker 容器")
+    _write(mm_lexical, "b.md", "beta", "favorite editor 主题")
+    # A query that shares no lexical terms with the Chinese deploy memory.
+    assert mm_lexical.recall("ship a release to production", k=5) == []
+
+    embedder = _FakeEmbedder()
+    mm = MemoryManager(tmp_path / "sem", embedder=embedder)
+    _write(mm, "a.md", "alpha", "部署 docker 容器")
+    _write(mm, "b.md", "beta", "favorite editor 主题")
+    hits = mm.recall("ship a release to production", k=5)
+    # Pure top-K cosine ranking: the deploy memory the query paraphrases ranks
+    # first (lexical recall returned nothing at all above).
+    assert hits[0].path == "a.md"
+    assert hits[0].score > hits[1].score
+
+
+def test_semantic_recall_falls_back_to_lexical_on_embed_error(tmp_path):
+    embedder = _FakeEmbedder()
+    embedder.raise_on_embed = True
+    mm = MemoryManager(tmp_path / "sem", embedder=embedder)
+    _write(mm, "a.md", "alpha", "docker deploy notes")
+    # Embedder raises -> recall must fall back to lexical, not crash.
+    hits = mm.recall("docker deploy", k=5)
+    assert [h.path for h in hits] == ["a.md"]
+
+
+def test_semantic_recall_caches_doc_embeddings(tmp_path):
+    embedder = _FakeEmbedder()
+    mm = MemoryManager(tmp_path / "sem", embedder=embedder)
+    _write(mm, "a.md", "alpha", "部署 docker 容器")
+    _write(mm, "b.md", "beta", "favorite editor 主题")
+
+    mm.recall("ship release", k=5)
+    after_first = len(embedder.calls)  # one doc batch + one query batch == 2
+    mm.recall("ship release", k=5)
+    # Second call re-embeds only the query (docs served from the on-disk cache).
+    assert after_first == 2
+    assert len(embedder.calls) == 3
+    assert embedder.calls[-1] == ["ship release"]
+
+
+def test_semantic_recall_reembeds_on_content_change(tmp_path):
+    embedder = _FakeEmbedder()
+    mm = MemoryManager(tmp_path / "sem", embedder=embedder)
+    _write(mm, "a.md", "alpha", "部署 docker 容器")
+
+    mm.recall("ship release", k=5)
+    # Change the memory's content -> its hash changes -> it must be re-embedded.
+    _write(mm, "a.md", "alpha", "editor 主题 settings now")
+    embedder.calls.clear()
+    mm.recall("ship release", k=5)
+    embedded = [t for call in embedder.calls for t in call]
+    assert any("editor 主题 settings now" in t for t in embedded)

@@ -17,6 +17,7 @@ read or write outside its memory directory.
 
 from __future__ import annotations
 
+import logging
 import re
 import shutil
 import threading
@@ -26,8 +27,12 @@ from pathlib import Path
 
 from src.core.fileutil import atomic_write_text
 from src.core.sandbox import safe_path
+from src.memory.embedding import Embedder, EmbeddingCache, cosine, text_hash
+
+logger = logging.getLogger(__name__)
 
 _INDEX_FILE = "MEMORY.md"
+_EMBED_CACHE_FILE = ".embedding-cache.json"
 # Prefixes the model may prepend out of habit (the native Anthropic tool uses
 # absolute ``/memories/...`` paths). Strip them so paths resolve cleanly under
 # the memory root via ``safe_path``.
@@ -161,11 +166,15 @@ def _relevance(query: str, text: str) -> int:
 
 @dataclass(frozen=True, slots=True)
 class RecalledMemory:
-    """A memory file selected by lexical relevance to a query."""
+    """A memory file selected by relevance to a query.
+
+    ``score`` is an integer lexical-overlap count on the lexical path and a
+    float cosine similarity on the semantic path; callers only sort on it.
+    """
 
     path: str
     description: str
-    score: int
+    score: float
 
 
 class MemoryManager:
@@ -177,9 +186,17 @@ class MemoryManager:
     ``Error:`` strings for the LLM.
     """
 
-    def __init__(self, root: Path, *, max_index_lines: int = 200) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        max_index_lines: int = 200,
+        embedder: Embedder | None = None,
+    ) -> None:
         self._root = root.expanduser().resolve()
         self._max_index_lines = max_index_lines
+        # Optional semantic-recall backend; None keeps the lexical-only path.
+        self._embedder = embedder
         # A single lock serializes read-modify-write commands (str_replace /
         # insert / rename). The agent's memory working set is tiny, so a
         # per-store lock is simpler than per-file and never a bottleneck.
@@ -325,16 +342,27 @@ class MemoryManager:
     def recall(self, query: str, k: int = 5) -> list[RecalledMemory]:
         """Return up to ``k`` memories most relevant to ``query``.
 
-        MVP retrieval: lexical term overlap (ASCII words + CJK bigrams) between
-        the query and each memory's ``name + description`` frontmatter (falling
-        back to the head of the body when frontmatter is missing). The whole
-        store is rescanned per call — the working set is tiny, so this stays
-        well under a millisecond; a future vector backend would replace this
-        method body without touching the tool surface.
+        When a semantic ``embedder`` is configured, ranks by embedding cosine
+        similarity (so paraphrases match even without shared terms); otherwise,
+        or if embedding fails at call time, falls back to lexical term overlap
+        (ASCII words + CJK bigrams). The whole store is rescanned per call — the
+        working set is tiny. The return shape is identical on both paths.
         """
         if not query.strip():
             return []
-        scored: list[RecalledMemory] = []
+        if self._embedder is not None:
+            try:
+                return self._semantic_recall(query, k)
+            except Exception:
+                logger.warning(
+                    "Semantic recall failed; falling back to lexical recall.",
+                    exc_info=True,
+                )
+        return self._lexical_recall(query, k)
+
+    def _collect_scoring_docs(self) -> list[tuple[str, str, str]]:
+        """Scan the store into ``(relpath, scoring_text, description)`` tuples."""
+        docs: list[tuple[str, str, str]] = []
         for file in self._root.rglob("*.md"):
             if not file.is_file() or file.name == _INDEX_FILE:
                 continue
@@ -349,19 +377,57 @@ class MemoryManager:
                 scoring_text = f"{name} {description}".strip()
             else:
                 scoring_text = content[:200]
+            rel = file.relative_to(self._root).as_posix()
+            docs.append((rel, scoring_text, description or name))
+        return docs
+
+    def _lexical_recall(self, query: str, k: int) -> list[RecalledMemory]:
+        scored: list[RecalledMemory] = []
+        for rel, scoring_text, description in self._collect_scoring_docs():
             score = _relevance(query, scoring_text)
             if score <= 0:
                 continue
-            rel = file.relative_to(self._root).as_posix()
             scored.append(
-                RecalledMemory(
-                    path=rel,
-                    description=description or name,
-                    score=score,
-                )
+                RecalledMemory(path=rel, description=description, score=float(score))
             )
         # Highest score first; stable secondary sort on path keeps output
         # deterministic when scores tie.
+        scored.sort(key=lambda m: (-m.score, m.path))
+        return scored[:k]
+
+    def _semantic_recall(self, query: str, k: int) -> list[RecalledMemory]:
+        """Embedding cosine ranking. Raises on embed failure (caller falls back)."""
+        docs = self._collect_scoring_docs()
+        if not docs:
+            return []
+        cache = EmbeddingCache(self._root / _EMBED_CACHE_FILE, self._embedder.identity)
+        # Embed only cache misses / changed files, in one batch.
+        pending: list[tuple[str, str]] = []  # (relpath, content_hash)
+        pending_texts: list[str] = []
+        for rel, scoring_text, _desc in docs:
+            digest = text_hash(scoring_text)
+            cached = cache.get(rel)
+            if cached is None or cached[0] != digest:
+                pending.append((rel, digest))
+                pending_texts.append(scoring_text)
+        if pending_texts:
+            vectors = self._embedder.embed(pending_texts)
+            for (rel, digest), vector in zip(pending, vectors, strict=True):
+                cache.put(rel, digest, vector)
+            cache.prune({rel for rel, _t, _d in docs})
+            cache.save()
+        query_vector = self._embedder.embed([query])[0]
+        scored: list[RecalledMemory] = []
+        for rel, _scoring_text, description in docs:
+            entry = cache.get(rel)
+            if entry is None:
+                continue
+            score = cosine(query_vector, entry[1])
+            if score <= 0:
+                continue
+            scored.append(
+                RecalledMemory(path=rel, description=description, score=score)
+            )
         scored.sort(key=lambda m: (-m.score, m.path))
         return scored[:k]
 

@@ -124,8 +124,19 @@ enabled = true
 # dir = ""
 # 会话开局注入 system prompt 的 MEMORY.md 索引最大行数。
 # max_index_lines = 200
-# 每轮按用户消息词法相关性召回并注入的记忆条数（0 = 关闭召回，仅保留开局索引注入）。
+# 每轮按用户消息相关性召回并注入的记忆条数（0 = 关闭召回，仅保留开局索引注入）。
 # recall_k = 5
+# 语义/向量召回（task 06-08-semantic-memory-recall）：默认 false = 词法召回（行为不变）。
+# 开启后按 embedding 余弦相似度召回（换了措辞也能命中），embedding 不可用时自动回退词法。
+# 走 env 覆盖 BAREAGENT_MEMORY_SEMANTIC_RECALL，restart-required。
+# semantic_recall = false
+# embedding backend：openai（复用 openai client，可指向独立 embeddings 端点）| local（fastembed，需装 [embeddings] extra）。
+# embedding_backend = "openai"
+# 模型，留空 = backend 默认（openai: text-embedding-3-small；local: BAAI/bge-small-en-v1.5）。
+# embedding_model = ""
+# openai backend 的端点/密钥，留空则复用会话 provider 的 base_url / api_key。
+# embedding_base_url = ""
+# embedding_api_key = ""
 
 # --- Hooks (工具调用前后用户自定义钩子) ----------------------------------
 # 在 [[hooks]] 中声明：在工具调用前后触发自定义 shell 命令。仅在主循环触发，
