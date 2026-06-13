@@ -180,25 +180,30 @@ class OpenAIProvider(BaseLLMProvider):
             if choice.finish_reason:
                 stop_reason = choice.finish_reason
 
-            delta = choice.delta
-            if delta.content:
-                text_parts.append(delta.content)
-                yield StreamEvent(type="text", text=delta.content)
+            # Some OpenAI-compatible relays/proxies (and reasoning models) emit
+            # chunks with a null ``delta`` — e.g. a trailing usage/finish chunk
+            # or a keep-alive. Guard the member accesses so a null delta does not
+            # crash the stream with "'NoneType' object has no attribute 'content'".
+            delta = getattr(choice, "delta", None)
+            if delta is not None:
+                if delta.content:
+                    text_parts.append(delta.content)
+                    yield StreamEvent(type="text", text=delta.content)
 
-            for tool_delta in delta.tool_calls or []:
-                call_state = pending_tool_calls.setdefault(
-                    tool_delta.index,
-                    {"id": "", "name": "", "arguments": ""},
-                )
-                if tool_delta.id:
-                    call_state["id"] = tool_delta.id
-                function = tool_delta.function
-                if function is None:
-                    continue
-                if function.name:
-                    call_state["name"] = function.name
-                if function.arguments:
-                    call_state["arguments"] += function.arguments
+                for tool_delta in delta.tool_calls or []:
+                    call_state = pending_tool_calls.setdefault(
+                        tool_delta.index,
+                        {"id": "", "name": "", "arguments": ""},
+                    )
+                    if tool_delta.id:
+                        call_state["id"] = tool_delta.id
+                    function = tool_delta.function
+                    if function is None:
+                        continue
+                    if function.name:
+                        call_state["name"] = function.name
+                    if function.arguments:
+                        call_state["arguments"] += function.arguments
 
             if choice.finish_reason == "tool_calls":
                 for tool_call in self._iter_new_tool_calls(

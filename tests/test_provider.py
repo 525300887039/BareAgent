@@ -417,6 +417,64 @@ def test_openai_create_stream_emits_tool_calls_even_without_tool_finish_reason(
     assert response.stop_reason == "tool_calls"
 
 
+def test_openai_create_stream_tolerates_null_delta_chunks(monkeypatch) -> None:
+    """OpenAI-compatible relays / reasoning models can emit chunks whose
+    ``choice.delta`` is ``None`` (trailing usage/finish chunk, keep-alive).
+    The stream must not crash with "'NoneType' object has no attribute
+    'content'" — it should skip the null-delta chunk and keep accumulating."""
+    chunks = [
+        SimpleNamespace(
+            choices=[SimpleNamespace(finish_reason=None, delta=None)],
+            usage=None,
+        ),
+        SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    finish_reason=None,
+                    delta=SimpleNamespace(content="Hello", tool_calls=None),
+                )
+            ],
+            usage=None,
+        ),
+        SimpleNamespace(
+            choices=[SimpleNamespace(finish_reason="stop", delta=None)],
+            usage=SimpleNamespace(prompt_tokens=7, completion_tokens=2),
+        ),
+    ]
+
+    class FakeChatCompletions:
+        def create(self, **kwargs):
+            _ = kwargs
+            return iter(chunks)
+
+    class FakeOpenAIClient:
+        def __init__(self, **kwargs) -> None:
+            _ = kwargs
+            self.chat = SimpleNamespace(completions=FakeChatCompletions())
+
+    monkeypatch.setattr("src.provider.openai.openai.OpenAI", FakeOpenAIClient)
+    provider = OpenAIProvider(api_key="test", model="gpt-test")
+
+    stream = provider.create_stream(
+        messages=[{"role": "user", "content": "Hi."}],
+        tools=[],
+    )
+    events: list[StreamEvent] = []
+    while True:
+        try:
+            events.append(next(stream))
+        except StopIteration as stop:
+            response = stop.value
+            break
+
+    assert events == [StreamEvent(type="text", text="Hello")]
+    assert response.text == "Hello"
+    assert response.tool_calls == []
+    assert response.stop_reason == "stop"
+    assert response.input_tokens == 7
+    assert response.output_tokens == 2
+
+
 def test_openai_parse_responses_api_payload_extracts_tool_calls() -> None:
     provider = OpenAIProvider(api_key="test", model="gpt-test", wire_api="responses")
     response = "\n".join(
