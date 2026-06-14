@@ -14,21 +14,21 @@
 
 | 位置 | 作用 |
 |------|------|
-| `src/main.py` | 程序入口、配置加载、REPL、命令处理、运行时装配 |
-| `src/core/context.py` | 组装系统提示 |
-| `src/ui/` | 终端输出、流式打印 |
+| `src/bareagent/main.py` | 程序入口、配置加载、REPL、命令处理、运行时装配 |
+| `src/bareagent/core/context.py` | 组装系统提示 |
+| `src/bareagent/ui/` | 终端输出、流式打印 |
 
-如果你想理解“BareAgent 启动之后先创建了哪些对象、它们怎么串起来”，优先读 `src/main.py`。
+如果你想理解“BareAgent 启动之后先创建了哪些对象、它们怎么串起来”，优先读 `src/bareagent/main.py`。
 
 ### 核心执行层
 
 | 位置 | 作用 |
 |------|------|
-| `src/core/loop.py` | `agent_loop()` 主回路 |
-| `src/core/tools.py` | 工具 schema 注册和 handler 装配 |
-| `src/core/schema.py` | 统一 tool schema 构造 |
-| `src/core/handlers/` | bash、文件、搜索类工具的具体实现 |
-| `src/core/fileutil.py` | 原子写 JSON、随机 id 等公共工具 |
+| `src/bareagent/core/loop.py` | `agent_loop()` 主回路 |
+| `src/bareagent/core/tools.py` | 工具 schema 注册和 handler 装配 |
+| `src/bareagent/core/schema.py` | 统一 tool schema 构造 |
+| `src/bareagent/core/handlers/` | bash、文件、搜索类工具的具体实现 |
+| `src/bareagent/core/fileutil.py` | 原子写 JSON、随机 id 等公共工具 |
 
 这一层决定了“模型怎么调工具、工具怎么运行、结果怎么回到消息历史”。
 
@@ -36,12 +36,12 @@
 
 | 位置 | 作用 |
 |------|------|
-| `src/provider/base.py` | `BaseLLMProvider`、`LLMResponse`、`ThinkingConfig` |
-| `src/provider/anthropic.py` | Anthropic 适配 |
-| `src/provider/openai.py` | OpenAI 适配 |
-| `src/provider/factory.py` | provider 工厂 |
-| `src/permission/guard.py` | 4 种权限模式和确认逻辑 |
-| `src/permission/rules.py` | allow/deny 规则解析 |
+| `src/bareagent/provider/base.py` | `BaseLLMProvider`、`LLMResponse`、`ThinkingConfig` |
+| `src/bareagent/provider/anthropic.py` | Anthropic 适配 |
+| `src/bareagent/provider/openai.py` | OpenAI 适配 |
+| `src/bareagent/provider/factory.py` | provider 工厂 |
+| `src/bareagent/permission/guard.py` | 4 种权限模式和确认逻辑 |
+| `src/bareagent/permission/rules.py` | allow/deny 规则解析 |
 
 如果你想接入新的模型提供商或调整权限策略，这一层是第一入口。
 
@@ -49,11 +49,11 @@
 
 | 位置 | 作用 |
 |------|------|
-| `src/memory/` | 压缩、token 估算、会话转录 |
-| `src/planning/` | 子智能体、任务、TODO、技能 |
-| `src/team/` | 多智能体邮箱、协议、自治 agent |
-| `src/concurrency/` | 后台线程和通知注入 |
-| `src/debug/` | 调试日志引擎、Web Viewer 服务端和前端 |
+| `src/bareagent/memory/` | 压缩、token 估算、会话转录 |
+| `src/bareagent/planning/` | 子智能体、任务、TODO、技能 |
+| `src/bareagent/team/` | 多智能体邮箱、协议、自治 agent |
+| `src/bareagent/concurrency/` | 后台线程和通知注入 |
+| `src/bareagent/debug/` | 调试日志引擎、Web Viewer 服务端和前端 |
 
 这部分决定了 BareAgent 是否能长时间工作、如何拆任务、如何和队友通信。
 
@@ -244,11 +244,11 @@ BareAgent 现在的扩展面不算多，但都比较明确。
 
 至少需要修改这些位置：
 
-- 在 `src/provider/` 下新增 provider 实现
+- 在 `src/bareagent/provider/` 下新增 provider 实现
 - 让它继承 `BaseLLMProvider`
-- 在 `src/provider/factory.py` 的 `create_provider()` 里注册分支
+- 在 `src/bareagent/provider/factory.py` 的 `create_provider()` 里注册分支
 
-如果你希望它像内置 provider 一样有默认 API key 环境变量，还需要同步更新 `src/main.py` 里的：
+如果你希望它像内置 provider 一样有默认 API key 环境变量，还需要同步更新 `src/bareagent/main.py` 里的：
 
 ```python
 DEFAULT_API_KEY_ENV_BY_PROVIDER
@@ -260,21 +260,21 @@ DEFAULT_API_KEY_ENV_BY_PROVIDER
 
 最典型的接入步骤是：
 
-1. 在 `src/core/schema.py` 或相关模块定义 schema
-2. 在 `src/core/tools.py` 把 schema 加进 `TOOL_SCHEMAS`
+1. 在 `src/bareagent/core/schema.py` 或相关模块定义 schema
+2. 在 `src/bareagent/core/tools.py` 把 schema 加进 `TOOL_SCHEMAS`
 3. 实现对应 handler
 4. 在 `get_handlers()` 中把运行时依赖绑定进去
 5. 根据风险级别更新 `PermissionGuard`
 6. 补测试
 
-如果工具属于规划层能力，也可能直接把 schema 和 handler 放在 `src/planning/` 下，再由 `src/core/tools.py` 装配。
+如果工具属于规划层能力，也可能直接把 schema 和 handler 放在 `src/bareagent/planning/` 下，再由 `src/bareagent/core/tools.py` 装配。
 
 ### 新增智能体类型
 
 子智能体类型注册点在：
 
 ```python
-src/planning/agent_types.py
+src/bareagent/planning/agent_types.py
 ```
 
 当前内置类型都集中在 `BUILTIN_AGENT_TYPES`。新增类型时通常需要同时考虑：
@@ -323,11 +323,11 @@ npm run docs:dev
 
 维护 BareAgent 时，最重要的不是记住所有文件，而是知道“哪类改动去找哪层入口”：
 
-1. 启动和装配问题先看 `src/main.py`
-2. 工具和执行回路问题看 `src/core/`
-3. provider 与权限看 `src/provider/` 和 `src/permission/`
-4. 压缩、任务、技能、team、后台分别在 `src/memory/`、`src/planning/`、`src/team/`、`src/concurrency/`
-5. 调试日志在 `src/debug/`，集成点在 `src/core/loop.py` 和 `src/main.py`
+1. 启动和装配问题先看 `src/bareagent/main.py`
+2. 工具和执行回路问题看 `src/bareagent/core/`
+3. provider 与权限看 `src/bareagent/provider/` 和 `src/bareagent/permission/`
+4. 压缩、任务、技能、team、后台分别在 `src/bareagent/memory/`、`src/bareagent/planning/`、`src/bareagent/team/`、`src/bareagent/concurrency/`
+5. 调试日志在 `src/bareagent/debug/`，集成点在 `src/bareagent/core/loop.py` 和 `src/bareagent/main.py`
 6. 测试、技能和文档都直接随仓库维护，不是外置资源
 
 至此，BareAgent 从概览、配置、REPL、工具、权限、provider、执行回路、子智能体、多智能体，到压缩、任务、技能、后台和开发方式的整套结构就基本串起来了。

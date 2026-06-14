@@ -10,17 +10,17 @@ BareAgent 内置了一套完整的调试日志系统，能够记录每一轮 LLM
 
 | 组件 | 位置 | 职责 |
 |------|------|------|
-| `DebugConfig` | `src/main.py` | 配置数据类，承载 `enabled`、`log_dir`、`viewer_port`、`pretty` |
-| `InteractionLogger` | `src/debug/interaction_log.py` | 核心日志引擎，负责写入 JSON 文件和推送事件 |
-| `DebugViewerServer` | `src/debug/web_viewer.py` | HTTP 服务端，提供 REST API 和 SSE 实时推送 |
-| `viewer.html` | `src/debug/viewer.html` | 单页前端应用，Catppuccin Mocha 主题 |
+| `DebugConfig` | `src/bareagent/main.py` | 配置数据类，承载 `enabled`、`log_dir`、`viewer_port`、`pretty` |
+| `InteractionLogger` | `src/bareagent/debug/interaction_log.py` | 核心日志引擎，负责写入 JSON 文件和推送事件 |
+| `DebugViewerServer` | `src/bareagent/debug/web_viewer.py` | HTTP 服务端，提供 REST API 和 SSE 实时推送 |
+| `viewer.html` | `src/bareagent/debug/viewer.html` | 单页前端应用，Catppuccin Mocha 主题 |
 
 ### 两个集成点
 
 | 集成点 | 位置 | 作用 |
 |--------|------|------|
-| `agent_loop()` 安全包装 | `src/core/loop.py` | 每轮迭代自动记录请求和响应 |
-| REPL `/log` 命令 | `src/main.py` | 用户查看日志状态、启动 Viewer、查询交互详情 |
+| `agent_loop()` 安全包装 | `src/bareagent/core/loop.py` | 每轮迭代自动记录请求和响应 |
+| REPL `/log` 命令 | `src/bareagent/main.py` | 用户查看日志状态、启动 Viewer、查询交互详情 |
 
 ![调试系统架构总览](images/ch16-debug-architecture.png)
 
@@ -208,7 +208,7 @@ logger.unsubscribe_events(event_queue)
 
 ## 16.4 与 agent_loop() 的集成
 
-调试日志通过两个安全包装函数接入 `agent_loop()` 的主循环，位于 `src/core/loop.py`。
+调试日志通过两个安全包装函数接入 `agent_loop()` 的主循环，位于 `src/bareagent/core/loop.py`。
 
 ### `_safe_log_request()`
 

@@ -3,6 +3,7 @@
 > 纯 Python 终端代码智能体 — 可插拔 LLM、细粒度权限、多智能体协调、可扩展技能系统
 
 <!-- badges placeholder -->
+![PyPI](https://img.shields.io/pypi/v/bareagent-cli)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -202,7 +203,7 @@ bareagent --config ~/my_config.toml
 </p>
 
 ```
-src/
+src/bareagent/
 ├── main.py                # 入口与 REPL 循环
 ├── core/                  # 智能体循环、工具注册、Schema、沙箱
 │   ├── loop.py            #   核心 agent_loop()

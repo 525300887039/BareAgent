@@ -1,6 +1,6 @@
 # 权限模型
 
-BareAgent 的权限系统由 `src/permission/guard.py` 中的 `PermissionGuard` 负责。它不直接决定“工具能不能存在”，而是决定“当模型发起某个工具调用时，是否需要人工确认，以及在无法确认时是否直接拒绝”。
+BareAgent 的权限系统由 `src/bareagent/permission/guard.py` 中的 `PermissionGuard` 负责。它不直接决定“工具能不能存在”，而是决定“当模型发起某个工具调用时，是否需要人工确认，以及在无法确认时是否直接拒绝”。
 
 从 `agent_loop()` 的视角看，权限检查发生在“模型已经决定要调用某个工具”之后、真正执行 handler 之前：
 

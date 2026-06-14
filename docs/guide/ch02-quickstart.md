@@ -23,7 +23,19 @@ BareAgent 当前在代码中内置支持以下提供商：
 
 ## 2.2 安装
 
-在仓库根目录执行：
+BareAgent 已发布到 PyPI，分发名为 `bareagent-cli`，安装后命令行入口为 `bareagent`。
+
+### 从 PyPI 安装（推荐）
+
+作为命令行工具使用时，推荐用 `uv tool`（隔离安装，安装后全局可用 `bareagent`）：
+
+```bash
+uv tool install bareagent-cli      # 或: pipx install bareagent-cli / pip install bareagent-cli
+```
+
+### 从源码开发
+
+如果你要参与开发或修改源码，在仓库根目录执行可编辑安装：
 
 ```bash
 uv pip install -e ".[dev]"

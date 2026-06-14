@@ -5,13 +5,13 @@ BareAgent 当前有两套名字相近、但职责完全不同的任务机制：
 - `TaskManager`：工作区级、持久化、可带依赖关系
 - `TodoManager`：会话级、纯内存、用于跟踪当前对话中的短期待办
 
-它们都位于 `src/planning/`，也都向模型暴露了工具，但心智模型不能混在一起。
+它们都位于 `src/bareagent/planning/`，也都向模型暴露了工具，但心智模型不能混在一起。
 
 ![TaskManager 与 TodoManager 对比](images/ch12-task-vs-todo.png)
 
 ## 12.1 `TaskManager`
 
-`TaskManager` 实现位于 `src/planning/tasks.py`。它管理的是一个工作区共享的任务图，而不是某一次对话里的临时清单。
+`TaskManager` 实现位于 `src/bareagent/planning/tasks.py`。它管理的是一个工作区共享的任务图，而不是某一次对话里的临时清单。
 
 ### 持久化文件
 
@@ -161,7 +161,7 @@ task_manager.update(task.id, status="in_progress", expected_status="pending")
 
 ## 12.2 `TodoManager`
 
-`TodoManager` 实现位于 `src/planning/todo.py`。它处理的是“这次会话里我接下来要做什么”，而不是长期持久化任务。
+`TodoManager` 实现位于 `src/bareagent/planning/todo.py`。它处理的是“这次会话里我接下来要做什么”，而不是长期持久化任务。
 
 ### 存储模型
 

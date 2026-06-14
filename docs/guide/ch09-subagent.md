@@ -1,6 +1,6 @@
 # 子智能体系统
 
-BareAgent 的 `subagent` 工具允许主智能体把一个相对自包含的任务委派给子智能体执行。实现入口位于 `src/planning/subagent.py`，而子智能体的行为轮廓由 `src/planning/agent_types.py` 里的 `AgentType` 定义。
+BareAgent 的 `subagent` 工具允许主智能体把一个相对自包含的任务委派给子智能体执行。实现入口位于 `src/bareagent/planning/subagent.py`，而子智能体的行为轮廓由 `src/bareagent/planning/agent_types.py` 里的 `AgentType` 定义。
 
 这一层的设计重点不是“复制一个完整主 REPL”，而是：
 

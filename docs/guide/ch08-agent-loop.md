@@ -1,6 +1,6 @@
 # 核心智能体循环
 
-`src/core/loop.py` 中的 `agent_loop()` 是 BareAgent 的执行核心。它把 provider、工具 schema、运行时 handler、权限守卫、压缩器和后台通知串成一条完整闭环。
+`src/bareagent/core/loop.py` 中的 `agent_loop()` 是 BareAgent 的执行核心。它把 provider、工具 schema、运行时 handler、权限守卫、压缩器和后台通知串成一条完整闭环。
 
 如果把前几章连起来看，可以把它理解为：
 

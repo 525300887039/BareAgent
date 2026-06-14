@@ -1,6 +1,6 @@
 # 消息压缩
 
-BareAgent 的上下文压缩由 `src/memory/compact.py` 和 `src/memory/token_counter.py` 共同完成。它的目标不是做长期知识库，而是让 `agent_loop()` 在对话越来越长、工具结果越来越多时，仍能把上下文控制在一个可继续工作的范围内。
+BareAgent 的上下文压缩由 `src/bareagent/memory/compact.py` 和 `src/bareagent/memory/token_counter.py` 共同完成。它的目标不是做长期知识库，而是让 `agent_loop()` 在对话越来越长、工具结果越来越多时，仍能把上下文控制在一个可继续工作的范围内。
 
 当前实现有两层：
 
@@ -273,7 +273,7 @@ compact_fn=lambda _messages: None
 
 ## 11.5 Token 估算
 
-完整压缩是否触发，依赖 `src/memory/token_counter.py` 中的 `estimate_tokens(messages)`。这不是某家 provider 的精确 tokenizer，而是一个快速启发式估算器。
+完整压缩是否触发，依赖 `src/bareagent/memory/token_counter.py` 中的 `estimate_tokens(messages)`。这不是某家 provider 的精确 tokenizer，而是一个快速启发式估算器。
 
 ### 估算权重
 

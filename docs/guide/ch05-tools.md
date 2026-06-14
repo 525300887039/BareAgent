@@ -16,7 +16,7 @@ BareAgent 的工具系统分成两层：
 
 ## 5.1 基础工具
 
-基础工具由 `src/core/tools.py` 中的 `BASE_TOOLS` 定义，当前共有 6 个：
+基础工具由 `src/bareagent/core/tools.py` 中的 `BASE_TOOLS` 定义，当前共有 6 个：
 
 - `bash`
 - `read_file`
@@ -25,7 +25,7 @@ BareAgent 的工具系统分成两层：
 - `glob`
 - `grep`
 
-这些工具的实现位于 `src/core/handlers/`。
+这些工具的实现位于 `src/bareagent/core/handlers/`。
 
 ### 5.1.1 `bash`
 
@@ -110,7 +110,7 @@ BareAgent 的工具系统分成两层：
 |----|------|
 | 作用 | 用正则表达式搜索文件内容 |
 | 参数 | `pattern`、`path="."`、`include=""` |
-| 返回 | `list[str]`，元素形如 `src/main.py:12:matched line` |
+| 返回 | `list[str]`，元素形如 `src/bareagent/main.py:12:matched line` |
 
 实现细节：
 
@@ -333,7 +333,7 @@ BareAgent 向 LLM 暴露的工具描述统一遵循以下结构：
 | `description` | 人类可读的用途描述 |
 | `parameters` | JSON Schema object |
 
-基础工具和多数延迟加载工具都通过 `src/core/schema.py` 中的 `tool_schema()` 生成：
+基础工具和多数延迟加载工具都通过 `src/bareagent/core/schema.py` 中的 `tool_schema()` 生成：
 
 ```python
 {
@@ -357,17 +357,17 @@ BareAgent 向 LLM 暴露的工具描述统一遵循以下结构：
 
 | 来源模块 | 负责的工具 |
 |----------|------------|
-| `src/core/handlers/bash.py` | `bash` |
-| `src/core/handlers/file_read.py` | `read_file` |
-| `src/core/handlers/file_write.py` | `write_file` |
-| `src/core/handlers/file_edit.py` | `edit_file` |
-| `src/core/handlers/glob_search.py` | `glob` |
-| `src/core/handlers/grep_search.py` | `grep` |
-| `src/planning/todo.py` | `todo_write`、`todo_read` |
-| `src/planning/tasks.py` | `task_*` |
-| `src/planning/skills.py` | `load_skill` |
-| `src/planning/subagent.py` | `subagent` |
-| `src/core/tools.py` | `background_run`、`team_*` 的运行时绑定 |
+| `src/bareagent/core/handlers/bash.py` | `bash` |
+| `src/bareagent/core/handlers/file_read.py` | `read_file` |
+| `src/bareagent/core/handlers/file_write.py` | `write_file` |
+| `src/bareagent/core/handlers/file_edit.py` | `edit_file` |
+| `src/bareagent/core/handlers/glob_search.py` | `glob` |
+| `src/bareagent/core/handlers/grep_search.py` | `grep` |
+| `src/bareagent/planning/todo.py` | `todo_write`、`todo_read` |
+| `src/bareagent/planning/tasks.py` | `task_*` |
+| `src/bareagent/planning/skills.py` | `load_skill` |
+| `src/bareagent/planning/subagent.py` | `subagent` |
+| `src/bareagent/core/tools.py` | `background_run`、`team_*` 的运行时绑定 |
 
 ### `get_handlers()` 的作用
 
@@ -391,7 +391,7 @@ BareAgent 向 LLM 暴露的工具描述统一遵循以下结构：
 
 ### `TOOL_HANDLERS` 与默认 stub
 
-`src/core/tools.py` 里还定义了一个模块级 `TOOL_HANDLERS`。它的作用更接近“占位注册表”：
+`src/bareagent/core/tools.py` 里还定义了一个模块级 `TOOL_HANDLERS`。它的作用更接近“占位注册表”：
 
 - 文件与 shell 工具在这里默认是未绑定 stub
 - 直接调用这些 stub 会提示“请用 `get_handlers()` 绑定 workspace”

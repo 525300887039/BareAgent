@@ -10,16 +10,16 @@ tracing 系统由抽象层、代理层和后端层三层构成。
 
 | 层级 | 位置 | 职责 |
 |------|------|------|
-| 抽象层 | `src/tracing/_api.py` | 定义 `Span` 和 `Tracer` 抽象基类，以及零开销的 `NullSpan` / `NullTracer` |
-| 代理层 | `src/tracing/_proxy.py` | 全局单例 `ProxyTracer`，支持运行时热替换内部 tracer |
-| 后端层 | `src/tracing/langfuse.py` / `otel.py` / `json_file.py` | 具体后端实现，按需激活 |
+| 抽象层 | `src/bareagent/tracing/_api.py` | 定义 `Span` 和 `Tracer` 抽象基类，以及零开销的 `NullSpan` / `NullTracer` |
+| 代理层 | `src/bareagent/tracing/_proxy.py` | 全局单例 `ProxyTracer`，支持运行时热替换内部 tracer |
+| 后端层 | `src/bareagent/tracing/langfuse.py` / `otel.py` / `json_file.py` | 具体后端实现，按需激活 |
 
 ### 组合与扇出
 
 | 组件 | 位置 | 职责 |
 |------|------|------|
-| `CompositeTracer` | `src/tracing/composite.py` | 多后端扇出，异常隔离，单个后端故障不影响其他 |
-| `configure_tracing()` | `src/tracing/setup.py` | 根据配置和环境变量自动发现并组装后端 |
+| `CompositeTracer` | `src/bareagent/tracing/composite.py` | 多后端扇出，异常隔离，单个后端故障不影响其他 |
+| `configure_tracing()` | `src/bareagent/tracing/setup.py` | 根据配置和环境变量自动发现并组装后端 |
 
 ![Tracing 系统架构总览](images/ch17-tracing-architecture.png)
 

@@ -1,6 +1,6 @@
 # 后台执行
 
-BareAgent 的后台执行能力实现于 `src/concurrency/background.py` 和 `src/concurrency/notification.py`。它的定位不是完整任务调度系统，而是一个很轻量的“守护线程 + 通知注入”机制。
+BareAgent 的后台执行能力实现于 `src/bareagent/concurrency/background.py` 和 `src/bareagent/concurrency/notification.py`。它的定位不是完整任务调度系统，而是一个很轻量的“守护线程 + 通知注入”机制。
 
 最适合的心智模型是：
 
@@ -95,7 +95,7 @@ ValueError("Background task already running: job-1")
 
 ### `background_run`
 
-`background_run` 的 runtime handler 由 `src/core/tools.py` 动态构造。它实际做的事情是：
+`background_run` 的 runtime handler 由 `src/bareagent/core/tools.py` 动态构造。它实际做的事情是：
 
 1. 把同步 `bash` handler 包装成 `bash_runner`
 2. 要求它在失败时抛异常，而不是返回错误字符串
@@ -151,7 +151,7 @@ Background manager unavailable.
 
 大纲里把这一节叫作 `NotificationManager`，但当前仓库的真实实现并没有一个同名类。
 
-现在负责“把后台结果送回消息历史”的，其实是 `src/concurrency/notification.py` 里的：
+现在负责“把后台结果送回消息历史”的，其实是 `src/bareagent/concurrency/notification.py` 里的：
 
 ```python
 inject_notifications(messages, bg_manager)
