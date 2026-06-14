@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from rich.theme import Theme
 
-from src.ui import theme as theme_module
-from src.ui.theme import DEFAULT_THEME_NAME, PALETTES, ThemeManager
+from bareagent.ui import theme as theme_module
+from bareagent.ui.theme import DEFAULT_THEME_NAME, PALETTES, ThemeManager
 
 
 @pytest.fixture(autouse=True)

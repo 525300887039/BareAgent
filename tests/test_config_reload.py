@@ -14,16 +14,16 @@ from typing import cast
 
 import pytest
 
-from src.main import (
+from bareagent.main import (
     PermissionConfig,
     UIConfig,
     _config_mtimes,
     _diff_config_for_reload,
     _dispatch_reload_command,
 )
-from src.permission.guard import PermissionGuard, PermissionMode
-from src.ui.console import AgentConsole
-from src.ui.theme import init_theme
+from bareagent.permission.guard import PermissionGuard, PermissionMode
+from bareagent.ui.console import AgentConsole
+from bareagent.ui.theme import init_theme
 from tests.conftest import make_test_config
 
 
@@ -176,7 +176,7 @@ def test_reload_failure_keeps_current_config(
     def _boom(_path):  # noqa: ANN001, ANN202 - test double
         raise ValueError("bad TOML at line 3")
 
-    monkeypatch.setattr("src.main.load_config", _boom)
+    monkeypatch.setattr("bareagent.main.load_config", _boom)
 
     _dispatch_reload_command(
         config=config,
@@ -215,7 +215,7 @@ def test_reload_applies_theme_and_permission(
     new_config.permission.allow = ["bash(prefix:ls*)"]
     new_config.permission.deny = ["bash(prefix:rm*)"]
 
-    monkeypatch.setattr("src.main.load_config", lambda _path: new_config)
+    monkeypatch.setattr("bareagent.main.load_config", lambda _path: new_config)
 
     _dispatch_reload_command(
         config=config,
@@ -247,7 +247,7 @@ def test_reload_reports_restart_required_without_mutating_runtime(
     new_config = make_test_config(tmp_path)
     new_config.provider = replace(new_config.provider, model="gpt-4o")
 
-    monkeypatch.setattr("src.main.load_config", lambda _path: new_config)
+    monkeypatch.setattr("bareagent.main.load_config", lambda _path: new_config)
 
     _dispatch_reload_command(
         config=config,
@@ -267,7 +267,7 @@ def test_reload_no_change_reports_unchanged(
     permission = PermissionGuard(PermissionMode.DEFAULT)
     console = _FakeConsole()
 
-    monkeypatch.setattr("src.main.load_config", lambda _path: make_test_config(tmp_path))
+    monkeypatch.setattr("bareagent.main.load_config", lambda _path: make_test_config(tmp_path))
 
     _dispatch_reload_command(
         config=config,
@@ -292,7 +292,7 @@ def test_reload_invalid_theme_skips_without_crashing(
     new_config.ui.theme = "no-such-theme"
     new_config.permission.mode = "auto"
 
-    monkeypatch.setattr("src.main.load_config", lambda _path: new_config)
+    monkeypatch.setattr("bareagent.main.load_config", lambda _path: new_config)
 
     _dispatch_reload_command(
         config=config,

@@ -4,7 +4,7 @@
       list() 返回 list[Task]，get_ready_tasks() 返回 list[Task]。
 """
 
-from src.planning.tasks import TaskManager
+from bareagent.planning.tasks import TaskManager
 
 
 def test_task_persistence(tmp_path):

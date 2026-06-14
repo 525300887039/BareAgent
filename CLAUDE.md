@@ -17,7 +17,7 @@ uv pip install -e ".[otel]"            # OpenTelemetry
 uv pip install -e ".[all-tracing]"     # 全部
 
 # 运行
-bareagent                          # 或: python -m src.main
+bareagent                          # 或: python -m bareagent.main
 bareagent --provider anthropic --model claude-sonnet-4-20250514
 bareagent --config ~/my_config.toml
 
@@ -31,6 +31,16 @@ ruff check src tests               # 检查
 ruff check --fix src tests          # 自动修复
 ruff format src tests               # 格式化
 ```
+
+## 打包与发布 (task 06-14-pypi-tag-ci)
+
+**src-layout**：源码在 `src/bareagent/`，**导入包名 `bareagent`**（历史上是裸 `src`，已整体迁移；下文「架构」小节里的 `src/xxx` 路径现实际为 `src/bareagent/xxx`）。**PyPI 分发名是 `bareagent-cli`**（裸 `bareagent` 被 PyPI 防仿冒判定拦截——已存在 `bare-agent`/`bare_agent`），但**命令名仍是 `bareagent`**（`[project.scripts] bareagent = "bareagent.main:main"`）。三者独立：`pip install bareagent-cli` → `import bareagent` → 敲 `bareagent`。`__init__.py` 用 `importlib.metadata.version("bareagent-cli")`（**按分发名**）取 `__version__`，失败回退 `0.0.0+unknown`。
+
+**包内数据 + 资源定位**：`config.toml` 与 `skills/` 移入 `src/bareagent/` 包内（hatchling 对包内非 `.py` 文件自动打包，已删除旧 `force-include`）。运行时定位集中在 `src/bareagent/core/config_paths.py`（无 `main` 依赖，避免循环导入）走 `importlib.resources`：`bundled_config_path()`→`DEFAULT_CONFIG_PATH`、`local_config_path(config_path)`——**bundled 默认配置（只读、在包内）时本地覆盖 `config.local.toml` 落在「当前工作目录」(CWD)**，显式 `--config`/`BAREAGENT_CONFIG` 时仍用 `.local` 兄弟文件；`main.py` 的 `_read_config_file`/`_config_mtimes` + `provider/setup.py` 的 `init` 三处共用此函数（保证 init 写入与 load 读取同一位置）。`skills.py:resolve_skills_dir` 同理定位包内 `skills/`（env `BAREAGENT_SKILLS_DIR` 优先）。`config.local.toml` 不入包（gitignore + 在包外），无密钥泄露。
+
+**版本 = hatch-vcs 从 git tag 派生**：`[build-system]` 加 `hatch-vcs`，`[project] dynamic=["version"]`，`[tool.hatch.version] source="vcs"` + `fallback-version="0.0.0"`（无 git/tag 时不崩）+ `tag-pattern`（只认 `v*`，规避杂牌 tag `backup-before-email-rewrite`）+ `raw-options.local_scheme="no-local-version"`（让未打 tag 的 dev 构建产出无 `+local` 段、可上传 TestPyPI 的版本如 `0.1.1.devN`）。打 `vX.Y.Z` tag = 定版本，**不手改 pyproject**；dirty/无 tag 工作树会得到 dev 版本（正常）。
+
+**CI 自动发布**：`.github/workflows/release.yml` —— 推 `v*` tag → 正式 **PyPI**；手动 `workflow_dispatch` → **TestPyPI** 演练。PyPI **Trusted Publishing (OIDC) 无 token**：`id-token: write` 仅加在 publish job，checkout 必须 `fetch-depth: 0`（否则 hatch-vcs 看不到 tag），build job 内置 `twine check`，环境 `pypi`/`testpypi`（建议给 `pypi` 加 required reviewer）。**首发前需用户手动**在 pypi.org + test.pypi.org 各登记一次 pending publisher（owner=`525300887039` / repo=`BareAgent` / workflow=`release.yml`）+ 建 GitHub Environments——完整步骤与排错见 `docs/releasing.md`。
 
 ## 架构
 

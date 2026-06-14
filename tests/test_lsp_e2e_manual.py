@@ -26,9 +26,9 @@ from pathlib import Path
 
 import pytest
 
-from src.lsp.config import LSPConfig, LSPServerConfig
-from src.lsp.manager import LanguageServerManager, ServerStatus
-from src.lsp.tools import build_lsp_tools
+from bareagent.lsp.config import LSPConfig, LSPServerConfig
+from bareagent.lsp.manager import LanguageServerManager, ServerStatus
+from bareagent.lsp.tools import build_lsp_tools
 
 # Generous timeout — language server cold-starts + walks the project
 # tree on first analysis.
@@ -98,7 +98,7 @@ def manager(lsp_workspace: Path):
 
 
 def test_pyright_handshake(manager: LanguageServerManager) -> None:
-    from src.lsp import MULTILSPY_AVAILABLE
+    from bareagent.lsp import MULTILSPY_AVAILABLE
 
     assert MULTILSPY_AVAILABLE is True
     assert manager.get_status("python") == ServerStatus.RUNNING

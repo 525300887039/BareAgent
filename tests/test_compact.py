@@ -4,10 +4,10 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
-from src.memory.compact import Compactor, _micro_compact
-from src.memory.token_counter import estimate_tokens
-from src.memory.transcript import TranscriptManager
-from src.provider.base import BaseLLMProvider, LLMResponse
+from bareagent.memory.compact import Compactor, _micro_compact
+from bareagent.memory.token_counter import estimate_tokens
+from bareagent.memory.transcript import TranscriptManager
+from bareagent.provider.base import BaseLLMProvider, LLMResponse
 
 
 class StubProvider(BaseLLMProvider):

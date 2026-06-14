@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from src.provider import factory
-from src.provider.anthropic import AnthropicProvider
-from src.provider.base import LLMResponse, StreamEvent, ThinkingConfig, ToolCall
-from src.provider.openai import OpenAIProvider
-from src.provider.presets import resolve_preset
+from bareagent.provider import factory
+from bareagent.provider.anthropic import AnthropicProvider
+from bareagent.provider.base import LLMResponse, StreamEvent, ThinkingConfig, ToolCall
+from bareagent.provider.openai import OpenAIProvider
+from bareagent.provider.presets import resolve_preset
 
 
 def test_llm_response_has_tool_calls_and_to_message() -> None:
@@ -68,7 +68,7 @@ def test_anthropic_parse_response_extracts_thinking_and_tool_calls(monkeypatch) 
             self.messages = SimpleNamespace()
 
     monkeypatch.setattr(
-        "src.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
+        "bareagent.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
     )
     provider = AnthropicProvider(api_key="test", model="claude-test")
 
@@ -168,7 +168,7 @@ def test_anthropic_create_stream_yields_text_and_tool_events(monkeypatch) -> Non
             self.messages = SimpleNamespace(stream=lambda **kwargs: FakeStream())
 
     monkeypatch.setattr(
-        "src.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
+        "bareagent.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
     )
     provider = AnthropicProvider(api_key="test", model="claude-test")
 
@@ -205,7 +205,7 @@ def test_openai_parse_response_extracts_tool_calls(monkeypatch) -> None:
             _ = kwargs
             self.chat = SimpleNamespace(completions=SimpleNamespace())
 
-    monkeypatch.setattr("src.provider.openai.openai.OpenAI", FakeOpenAIClient)
+    monkeypatch.setattr("bareagent.provider.openai.openai.OpenAI", FakeOpenAIClient)
     provider = OpenAIProvider(api_key="test", model="gpt-test")
 
     response = SimpleNamespace(
@@ -300,7 +300,7 @@ def test_openai_create_stream_accumulates_text_and_tool_calls(monkeypatch) -> No
             _ = kwargs
             self.chat = SimpleNamespace(completions=FakeChatCompletions())
 
-    monkeypatch.setattr("src.provider.openai.openai.OpenAI", FakeOpenAIClient)
+    monkeypatch.setattr("bareagent.provider.openai.openai.OpenAI", FakeOpenAIClient)
     provider = OpenAIProvider(api_key="test", model="gpt-test")
 
     stream = provider.create_stream(
@@ -388,7 +388,7 @@ def test_openai_create_stream_emits_tool_calls_even_without_tool_finish_reason(
             _ = kwargs
             self.chat = SimpleNamespace(completions=FakeChatCompletions())
 
-    monkeypatch.setattr("src.provider.openai.openai.OpenAI", FakeOpenAIClient)
+    monkeypatch.setattr("bareagent.provider.openai.openai.OpenAI", FakeOpenAIClient)
     provider = OpenAIProvider(api_key="test", model="gpt-test")
 
     stream = provider.create_stream(
@@ -452,7 +452,7 @@ def test_openai_create_stream_tolerates_null_delta_chunks(monkeypatch) -> None:
             _ = kwargs
             self.chat = SimpleNamespace(completions=FakeChatCompletions())
 
-    monkeypatch.setattr("src.provider.openai.openai.OpenAI", FakeOpenAIClient)
+    monkeypatch.setattr("bareagent.provider.openai.openai.OpenAI", FakeOpenAIClient)
     provider = OpenAIProvider(api_key="test", model="gpt-test")
 
     stream = provider.create_stream(
@@ -556,7 +556,7 @@ def test_openai_create_stream_via_responses_accumulates_text_and_tool_calls(
             self.responses = FakeResponsesAPI()
             self.chat = SimpleNamespace(completions=SimpleNamespace())
 
-    monkeypatch.setattr("src.provider.openai.openai.OpenAI", FakeOpenAIClient)
+    monkeypatch.setattr("bareagent.provider.openai.openai.OpenAI", FakeOpenAIClient)
     provider = OpenAIProvider(api_key="test", model="gpt-test", wire_api="responses")
 
     stream = provider.create_stream(
@@ -630,7 +630,7 @@ def test_openai_create_stream_via_responses_preserves_streamed_tool_calls_when_c
             self.responses = FakeResponsesAPI()
             self.chat = SimpleNamespace(completions=SimpleNamespace())
 
-    monkeypatch.setattr("src.provider.openai.openai.OpenAI", FakeOpenAIClient)
+    monkeypatch.setattr("bareagent.provider.openai.openai.OpenAI", FakeOpenAIClient)
     provider = OpenAIProvider(api_key="test", model="gpt-test", wire_api="responses")
 
     stream = provider.create_stream(
@@ -712,7 +712,7 @@ def test_openai_convert_assistant_message_missing_id_and_name(monkeypatch) -> No
             _ = kwargs
             self.chat = SimpleNamespace(completions=SimpleNamespace())
 
-    monkeypatch.setattr("src.provider.openai.openai.OpenAI", FakeOpenAIClient)
+    monkeypatch.setattr("bareagent.provider.openai.openai.OpenAI", FakeOpenAIClient)
     provider = OpenAIProvider(api_key="x", model="gpt-4")
     content = [{"type": "tool_use", "input": {}}]
     result = provider._convert_assistant_message(content)
@@ -729,7 +729,7 @@ def test_anthropic_convert_message_content_missing_id_and_name(monkeypatch) -> N
             self.messages = SimpleNamespace()
 
     monkeypatch.setattr(
-        "src.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
+        "bareagent.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
     )
     provider = AnthropicProvider(api_key="x", model="claude-3-5-sonnet-20241022")
     content = [{"type": "tool_use", "input": {}}]

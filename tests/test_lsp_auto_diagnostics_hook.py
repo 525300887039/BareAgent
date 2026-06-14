@@ -7,10 +7,10 @@ from typing import Any
 
 import pytest
 
-from src.core.handlers.file_edit import run_edit
-from src.core.handlers.file_write import run_write
-from src.core.tools import _build_diagnostics_hook
-from src.lsp.config import LSPConfig
+from bareagent.core.handlers.file_edit import run_edit
+from bareagent.core.handlers.file_write import run_write
+from bareagent.core.tools import _build_diagnostics_hook
+from bareagent.lsp.config import LSPConfig
 
 # ---------------------------------------------------------------------------
 # Hook factory: config gate + happy path

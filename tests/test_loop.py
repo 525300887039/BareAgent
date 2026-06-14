@@ -7,9 +7,9 @@ from typing import Any
 
 import pytest
 
-from src.core.loop import LLMCallError, agent_loop
-from src.permission.guard import PermissionGuard, PermissionMode
-from src.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
+from bareagent.core.loop import LLMCallError, agent_loop
+from bareagent.permission.guard import PermissionGuard, PermissionMode
+from bareagent.provider.base import BaseLLMProvider, LLMResponse, StreamEvent, ToolCall
 
 
 class MockProvider(BaseLLMProvider):
@@ -249,7 +249,7 @@ def test_agent_loop_executes_tool_calls_then_returns_text() -> None:
 
 def test_agent_loop_streams_and_formats_tool_activity(monkeypatch) -> None:
     FakeStreamPrinter.instances.clear()
-    monkeypatch.setattr("src.core.loop.StreamPrinter", FakeStreamPrinter)
+    monkeypatch.setattr("bareagent.core.loop.StreamPrinter", FakeStreamPrinter)
 
     provider = MockProvider(
         [],
@@ -371,7 +371,7 @@ def test_agent_loop_treats_pre_tool_stream_text_as_streamed_output() -> None:
 
 def test_agent_loop_falls_back_to_non_stream_mode(monkeypatch) -> None:
     FakeStreamPrinter.instances.clear()
-    monkeypatch.setattr("src.core.loop.StreamPrinter", FakeStreamPrinter)
+    monkeypatch.setattr("bareagent.core.loop.StreamPrinter", FakeStreamPrinter)
 
     provider = MockProvider(
         [
@@ -410,7 +410,7 @@ def test_agent_loop_falls_back_to_non_stream_mode(monkeypatch) -> None:
 
 def test_agent_loop_streams_with_legacy_console_shape(monkeypatch) -> None:
     FakeStreamPrinter.instances.clear()
-    monkeypatch.setattr("src.core.loop.StreamPrinter", FakeStreamPrinter)
+    monkeypatch.setattr("bareagent.core.loop.StreamPrinter", FakeStreamPrinter)
 
     provider = MockProvider(
         [],
@@ -452,7 +452,7 @@ def test_agent_loop_streams_with_legacy_console_shape(monkeypatch) -> None:
 
 def test_agent_loop_does_not_fall_back_for_stream_runtime_error(monkeypatch) -> None:
     FakeStreamPrinter.instances.clear()
-    monkeypatch.setattr("src.core.loop.StreamPrinter", FakeStreamPrinter)
+    monkeypatch.setattr("bareagent.core.loop.StreamPrinter", FakeStreamPrinter)
 
     provider = MockProvider(
         [
@@ -488,7 +488,7 @@ def test_agent_loop_does_not_fall_back_for_stream_runtime_error(monkeypatch) -> 
 
 def test_agent_loop_does_not_retry_after_partial_stream_failure(monkeypatch) -> None:
     FakeStreamPrinter.instances.clear()
-    monkeypatch.setattr("src.core.loop.StreamPrinter", FakeStreamPrinter)
+    monkeypatch.setattr("bareagent.core.loop.StreamPrinter", FakeStreamPrinter)
 
     def _broken_stream():
         yield StreamEvent(type="text", text="Partial reply")
@@ -570,7 +570,7 @@ def test_agent_loop_records_token_usage_non_stream() -> None:
 
 def test_agent_loop_records_token_usage_stream(monkeypatch) -> None:
     FakeStreamPrinter.instances.clear()
-    monkeypatch.setattr("src.core.loop.StreamPrinter", FakeStreamPrinter)
+    monkeypatch.setattr("bareagent.core.loop.StreamPrinter", FakeStreamPrinter)
 
     provider = MockProvider(
         [],
@@ -833,7 +833,7 @@ def test_agent_loop_warns_on_empty_response(caplog) -> None:
         {"role": "user", "content": "hi"},
     ]
 
-    with caplog.at_level(logging.WARNING, logger="src.core.loop"):
+    with caplog.at_level(logging.WARNING, logger="bareagent.core.loop"):
         result = agent_loop(
             provider=provider, messages=messages, tools=[], handlers={}, console=console
         )
@@ -856,7 +856,7 @@ def test_agent_loop_no_warning_on_normal_text(caplog) -> None:
                      input_tokens=5, output_tokens=2)]
     )
     console = FakeConsole()
-    with caplog.at_level(logging.WARNING, logger="src.core.loop"):
+    with caplog.at_level(logging.WARNING, logger="bareagent.core.loop"):
         result = agent_loop(
             provider=provider,
             messages=[{"role": "user", "content": "hi"}],
@@ -873,7 +873,7 @@ def test_agent_loop_no_warning_on_normal_text(caplog) -> None:
 def test_agent_loop_empty_response_without_console_still_logs(caplog) -> None:
     """Console-less paths (sub-agents/teammates) still leave a logged trace."""
     provider = MockProvider([_empty_response()])
-    with caplog.at_level(logging.WARNING, logger="src.core.loop"):
+    with caplog.at_level(logging.WARNING, logger="bareagent.core.loop"):
         result = agent_loop(
             provider=provider,
             messages=[{"role": "user", "content": "hi"}],
@@ -901,7 +901,7 @@ def test_agent_loop_no_warning_on_tool_only_turn(caplog) -> None:
         ]
     )
     console = FakeConsole()
-    with caplog.at_level(logging.WARNING, logger="src.core.loop"):
+    with caplog.at_level(logging.WARNING, logger="bareagent.core.loop"):
         result = agent_loop(
             provider=provider,
             messages=[{"role": "user", "content": "go"}],

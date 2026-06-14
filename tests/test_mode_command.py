@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.main import _MODE_CYCLE, _PERMISSION_SLASH
-from src.permission.guard import PermissionMode
+from bareagent.main import _MODE_CYCLE, _PERMISSION_SLASH
+from bareagent.permission.guard import PermissionMode
 
 
 def test_permission_slash_maps_all_modes() -> None:

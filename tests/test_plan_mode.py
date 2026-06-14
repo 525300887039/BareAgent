@@ -7,20 +7,20 @@ Covers three layers:
 Plus the isolation guarantees (sub-agents never see the tool; PLAN allows it).
 """
 
-import src.main as main_module
-from src.core.handlers.plan import (
+import bareagent.main as main_module
+from bareagent.core.handlers.plan import (
     EXIT_PLAN_MODE_TOOL_SCHEMA,
     PlanDecision,
     run_exit_plan_mode,
 )
-from src.main import (
+from bareagent.main import (
     _build_loop_compact,
     _install_plan_handler,
     _make_plan_approval,
     _refresh_plan_directive,
 )
-from src.permission.guard import PermissionGuard, PermissionMode
-from src.planning.agent_types import BUILTIN_AGENT_TYPES, filter_tools
+from bareagent.permission.guard import PermissionGuard, PermissionMode
+from bareagent.planning.agent_types import BUILTIN_AGENT_TYPES, filter_tools
 
 
 class _FakeConsole:

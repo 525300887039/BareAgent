@@ -11,9 +11,9 @@ from typing import Any
 
 import pytest
 
-from src.lsp.coord import path_to_document_uri
-from src.lsp.manager import ServerStatus
-from src.lsp.tools import (
+from bareagent.lsp.coord import path_to_document_uri
+from bareagent.lsp.manager import ServerStatus
+from bareagent.lsp.tools import (
     LSP_TOOL_NAMES,
     LSP_TOOL_SCHEMAS,
     SEMANTIC_RENAME_TOOL_NAME,

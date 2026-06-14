@@ -40,7 +40,7 @@ BareAgent 最初使用自建的 `InteractionLogger`（`src/debug/interaction_log
 │                      应用层                                  │
 │  agent_loop  /  subagent  /  autonomous_agent               │
 │                                                             │
-│  from src.tracing import tracer                             │
+│  from bareagent.tracing import tracer                             │
 │  with tracer.trace("llm_call", tags={...}) as span:         │
 │      response = provider.create(...)                        │
 │      span.set_tag("input_tokens", response.input_tokens)    │
@@ -99,7 +99,7 @@ export LANGFUSE_PUBLIC_KEY=pk-lf-xxx
 export LANGFUSE_SECRET_KEY=sk-lf-xxx
 export LANGFUSE_HOST=https://cloud.langfuse.com   # 可选，默认 cloud
 
-pip install bareagent[langfuse]
+pip install bareagent-cli[langfuse]
 bareagent
 ```
 
@@ -115,7 +115,7 @@ langfuse = true
 # 方式一：环境变量（自动检测）
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 
-pip install bareagent[otel]
+pip install bareagent-cli[otel]
 bareagent
 ```
 
@@ -145,11 +145,11 @@ langfuse = true  # 同时发到 Langfuse
 [tracing]
 # langfuse = false
 #   启用 Langfuse 后端。也可通过设置 LANGFUSE_PUBLIC_KEY 环境变量自动启用。
-#   需要安装: pip install bareagent[langfuse]
+#   需要安装: pip install bareagent-cli[langfuse]
 
 # opentelemetry = false
 #   启用 OpenTelemetry 后端。也可通过设置 OTEL_EXPORTER_OTLP_ENDPOINT 自动启用。
-#   需要安装: pip install bareagent[otel]
+#   需要安装: pip install bareagent-cli[otel]
 
 # content_enabled = true
 #   是否在 traces 中包含消息内容（PII 敏感场景可设为 false）。
@@ -184,7 +184,7 @@ langfuse = true  # 同时发到 Langfuse
 只需实现两个 ABC：
 
 ```python
-from src.tracing._api import Span, Tracer
+from bareagent.tracing._api import Span, Tracer
 
 class MySpan(Span):
     def set_tag(self, key, value):
@@ -221,7 +221,7 @@ class MyTracer(Tracer):
 注册到全局：
 
 ```python
-from src.tracing import enable_tracing
+from bareagent.tracing import enable_tracing
 enable_tracing(MyTracer())
 ```
 

@@ -95,7 +95,7 @@ uv pip install -e ".[dev]"
 `pyproject.toml` 已注册控制台脚本：
 
 ```text
-bareagent = "src.main:main"
+bareagent = "bareagent.main:main"
 ```
 
 因此常见启动方式有两种：
@@ -107,7 +107,7 @@ bareagent
 或：
 
 ```bash
-python -m src.main
+python -m bareagent.main
 ```
 
 ### 技能与配置会随分发一起打包

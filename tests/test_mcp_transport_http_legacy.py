@@ -9,8 +9,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from src.mcp.protocol import Request
-from src.mcp.transport import HttpLegacyTransport, Transport
+from bareagent.mcp.protocol import Request
+from bareagent.mcp.transport import HttpLegacyTransport, Transport
 
 
 class _LegacyServer:

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from src.core.context import assemble_system_prompt
-from src.core.fileutil import atomic_write_text
-from src.core.handlers.memory import run_memory
-from src.core.tools import MEMORY_TOOL_SCHEMAS, get_handlers, get_tools
-from src.main import MemoryConfig, load_config
-from src.memory.persistent import MemoryManager
-from src.planning.agent_types import resolve_agent_type
-from src.planning.subagent import _make_readonly_memory_handler
+from bareagent.core.context import assemble_system_prompt
+from bareagent.core.fileutil import atomic_write_text
+from bareagent.core.handlers.memory import run_memory
+from bareagent.core.tools import MEMORY_TOOL_SCHEMAS, get_handlers, get_tools
+from bareagent.main import MemoryConfig, load_config
+from bareagent.memory.persistent import MemoryManager
+from bareagent.planning.agent_types import resolve_agent_type
+from bareagent.planning.subagent import _make_readonly_memory_handler
 from tests.conftest import make_test_config
 
 # -- handler dispatch -----------------------------------------------------

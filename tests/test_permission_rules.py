@@ -4,8 +4,8 @@
 AUTO 模式下 bash 命令默认放行（除非匹配 deny 或 dangerous）。
 """
 
-import src.main as main_module
-from src.permission.guard import PermissionGuard, PermissionMode
+import bareagent.main as main_module
+from bareagent.permission.guard import PermissionGuard, PermissionMode
 
 
 def test_allow_rule_prefix():

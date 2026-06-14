@@ -8,8 +8,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from src.mcp.protocol import Request
-from src.mcp.transport import HttpStreamableTransport, Transport
+from bareagent.mcp.protocol import Request
+from bareagent.mcp.transport import HttpStreamableTransport, Transport
 
 
 class _StreamableServer:

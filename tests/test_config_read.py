@@ -2,9 +2,11 @@
 
 from pathlib import Path
 
-from src.main import _read_config_file
+from bareagent.core.config_paths import DEFAULT_CONFIG_PATH
+from bareagent.main import _read_config_file
 
-CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.toml"
+# config.toml ships inside the package (src/bareagent/config.toml).
+CONFIG_PATH = DEFAULT_CONFIG_PATH
 
 
 def test_read_config_file_basic():

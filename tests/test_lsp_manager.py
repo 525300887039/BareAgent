@@ -14,9 +14,9 @@ from typing import Any
 
 import pytest
 
-from src.lsp import manager as manager_module
-from src.lsp.config import LSPConfig, LSPServerConfig
-from src.lsp.manager import LanguageServerManager, ServerStatus
+from bareagent.lsp import manager as manager_module
+from bareagent.lsp.config import LSPConfig, LSPServerConfig
+from bareagent.lsp.manager import LanguageServerManager, ServerStatus
 
 # ---------------------------------------------------------------------------
 # Fake multilspy.SyncLanguageServer

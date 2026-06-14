@@ -7,17 +7,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.core.handlers.bash import run_bash
-from src.core.handlers.file_edit import run_edit
-from src.core.handlers.file_read import run_read
-from src.core.handlers.file_write import run_write
-from src.core.handlers.glob_search import run_glob
-from src.core.handlers.grep_search import run_grep
-from src.core.sandbox import safe_path
-from src.core.tools import get_handlers, get_tools, tool_search
-from src.permission.guard import PermissionGuard, PermissionMode
-from src.permission.rules import parse_permission_rules
-from src.provider.base import ToolCall
+from bareagent.core.handlers.bash import run_bash
+from bareagent.core.handlers.file_edit import run_edit
+from bareagent.core.handlers.file_read import run_read
+from bareagent.core.handlers.file_write import run_write
+from bareagent.core.handlers.glob_search import run_glob
+from bareagent.core.handlers.grep_search import run_grep
+from bareagent.core.sandbox import safe_path
+from bareagent.core.tools import get_handlers, get_tools, tool_search
+from bareagent.permission.guard import PermissionGuard, PermissionMode
+from bareagent.permission.rules import parse_permission_rules
+from bareagent.provider.base import ToolCall
 
 
 def test_safe_path_blocks_workspace_escape(tmp_path: Path) -> None:
@@ -210,7 +210,7 @@ def test_get_handlers_subagent_forwards_extended_arguments(
         captured.update(kwargs)
         return "delegated"
 
-    monkeypatch.setattr("src.core.tools.run_subagent", _fake_run_subagent)
+    monkeypatch.setattr("bareagent.core.tools.run_subagent", _fake_run_subagent)
     permission = PermissionGuard(PermissionMode.DEFAULT)
     bg_manager = object()
     tools = [{"name": "subagent", "parameters": {"type": "object", "properties": {}}}]
@@ -268,7 +268,7 @@ def test_bash_handler_decodes_binary_output_without_crashing(
         _ = args, kwargs
         return SimpleNamespace(stdout="ok\ufffd", stderr="", returncode=0)
 
-    monkeypatch.setattr("src.core.handlers.bash.subprocess.run", fake_run)
+    monkeypatch.setattr("bareagent.core.handlers.bash.subprocess.run", fake_run)
 
     assert run_bash("echo ok") == "ok\ufffd"
 
@@ -281,9 +281,9 @@ def test_bash_handler_argv_per_platform(monkeypatch: pytest.MonkeyPatch) -> None
         captured["args"] = args
         return SimpleNamespace(stdout="", stderr="", returncode=0)
 
-    monkeypatch.setattr("src.core.handlers.bash.subprocess.run", fake_run)
+    monkeypatch.setattr("bareagent.core.handlers.bash.subprocess.run", fake_run)
 
-    monkeypatch.setattr("src.core.handlers.bash.os.name", "nt")
+    monkeypatch.setattr("bareagent.core.handlers.bash.os.name", "nt")
     run_bash("Write-Output hi")
     win_args = captured["args"]
     assert win_args[:3] == ["powershell", "-NoProfile", "-Command"]
@@ -291,7 +291,7 @@ def test_bash_handler_argv_per_platform(monkeypatch: pytest.MonkeyPatch) -> None
     assert "[System.Text.Encoding]::UTF8" in win_args[3]
     assert win_args[3].endswith("Write-Output hi")
 
-    monkeypatch.setattr("src.core.handlers.bash.os.name", "posix")
+    monkeypatch.setattr("bareagent.core.handlers.bash.os.name", "posix")
     run_bash("echo hi")
     posix_args = captured["args"]
     assert posix_args == ["bash", "-lc", "echo hi"]
@@ -345,7 +345,7 @@ def test_importing_tools_does_not_parse_tasks_file_on_module_import(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import src.core.tools as tools_module
+    import bareagent.core.tools as tools_module
 
     (tmp_path / ".tasks.json").write_text("{not-valid-json", encoding="utf-8")
     monkeypatch.chdir(tmp_path)

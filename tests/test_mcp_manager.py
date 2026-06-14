@@ -5,11 +5,11 @@ from __future__ import annotations
 import threading
 import time
 
-from src.mcp.config import MCPConfig, MCPServerConfig
-from src.mcp.errors import MCPHandshakeError
-from src.mcp.manager import MCPManager, ServerStatus
-from src.mcp.protocol import Response, decode_message
-from src.mcp.transport.base import Transport
+from bareagent.mcp.config import MCPConfig, MCPServerConfig
+from bareagent.mcp.errors import MCPHandshakeError
+from bareagent.mcp.manager import MCPManager, ServerStatus
+from bareagent.mcp.protocol import Response, decode_message
+from bareagent.mcp.transport.base import Transport
 
 
 class _ControllableTransport(Transport):
@@ -32,7 +32,7 @@ class _ControllableTransport(Transport):
 
     def send(self, message: str) -> None:
         msg = decode_message(message)
-        from src.mcp.protocol import Request
+        from bareagent.mcp.protocol import Request
 
         if not isinstance(msg, Request):
             return
@@ -58,7 +58,7 @@ class _ControllableTransport(Transport):
                     id=msg.id,
                     result=None,
                     error=__import__(
-                        "src.mcp.protocol", fromlist=["ErrorObject"]
+                        "bareagent.mcp.protocol", fromlist=["ErrorObject"]
                     ).ErrorObject(code=-32603, message="nope"),
                 )
             )
@@ -237,7 +237,7 @@ def test_reload_unknown_server_raises_mcp_error() -> None:
     _patch_construct_transport(manager, {"known": _ControllableTransport()})
     manager.start_all()
 
-    from src.mcp.errors import MCPError
+    from bareagent.mcp.errors import MCPError
 
     raised = False
     try:

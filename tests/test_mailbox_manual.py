@@ -3,7 +3,7 @@
 适配：bus.send(Message(...))，bus.receive() 返回 list[Message]。
 """
 
-from src.team.mailbox import Message, MessageBus
+from bareagent.team.mailbox import Message, MessageBus
 
 
 def test_mailbox_send_receive(tmp_path):

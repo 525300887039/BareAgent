@@ -8,22 +8,22 @@ from typing import Any
 
 import pytest
 
-from src.core.handlers.bash import run_bash
-from src.core.handlers.file_edit import run_edit
-from src.core.handlers.file_read import run_read
-from src.core.handlers.file_write import run_write
-from src.core.handlers.glob_search import run_glob
-from src.core.handlers.grep_search import run_grep
-from src.core.tools import rebind_workspace_handlers
-from src.planning import worktree
-from src.planning.subagent import run_subagent
-from src.planning.worktree import (
+from bareagent.core.handlers.bash import run_bash
+from bareagent.core.handlers.file_edit import run_edit
+from bareagent.core.handlers.file_read import run_read
+from bareagent.core.handlers.file_write import run_write
+from bareagent.core.handlers.glob_search import run_glob
+from bareagent.core.handlers.grep_search import run_grep
+from bareagent.core.tools import rebind_workspace_handlers
+from bareagent.planning import worktree
+from bareagent.planning.subagent import run_subagent
+from bareagent.planning.worktree import (
     create_worktree,
     is_git_repo,
     remove_worktree,
     worktree_status,
 )
-from src.provider.base import BaseLLMProvider, LLMResponse
+from bareagent.provider.base import BaseLLMProvider, LLMResponse
 
 _GIT = shutil.which("git")
 requires_git = pytest.mark.skipif(_GIT is None, reason="git CLI not available")
@@ -191,7 +191,7 @@ def test_subagent_worktree_writes_land_in_worktree(tmp_path, monkeypatch) -> Non
         handlers["write_file"](file_path="child.txt", content="from child\n")
         return "child result"
 
-    monkeypatch.setattr("src.planning.subagent.agent_loop", _fake_agent_loop)
+    monkeypatch.setattr("bareagent.planning.subagent.agent_loop", _fake_agent_loop)
 
     result = run_subagent(
         provider=_RecordingProvider(),
@@ -237,7 +237,7 @@ def test_subagent_worktree_clean_is_removed(tmp_path, monkeypatch) -> None:
         captured["handlers"] = handlers
         return "no writes"
 
-    monkeypatch.setattr("src.planning.subagent.agent_loop", _fake_agent_loop)
+    monkeypatch.setattr("bareagent.planning.subagent.agent_loop", _fake_agent_loop)
 
     result = run_subagent(
         provider=_RecordingProvider(),
@@ -263,10 +263,10 @@ def test_subagent_worktree_fail_open_for_non_repo(tmp_path, monkeypatch) -> None
         _ = kwargs
         return "ran anyway"
 
-    monkeypatch.setattr("src.planning.subagent.agent_loop", _fake_agent_loop)
+    monkeypatch.setattr("bareagent.planning.subagent.agent_loop", _fake_agent_loop)
     # Force is_git_repo False regardless of any ambient parent repo.
     monkeypatch.setattr(worktree, "is_git_repo", lambda _base: False)
-    monkeypatch.setattr("src.planning.subagent.is_git_repo", lambda _base: False)
+    monkeypatch.setattr("bareagent.planning.subagent.is_git_repo", lambda _base: False)
 
     result = run_subagent(
         provider=_RecordingProvider(),
@@ -291,9 +291,9 @@ def test_subagent_worktree_fail_open_on_create_failure(tmp_path, monkeypatch) ->
     def _boom(_base):
         raise worktree.WorktreeError("boom")
 
-    monkeypatch.setattr("src.planning.subagent.agent_loop", _fake_agent_loop)
-    monkeypatch.setattr("src.planning.subagent.is_git_repo", lambda _base: True)
-    monkeypatch.setattr("src.planning.subagent.create_worktree", _boom)
+    monkeypatch.setattr("bareagent.planning.subagent.agent_loop", _fake_agent_loop)
+    monkeypatch.setattr("bareagent.planning.subagent.is_git_repo", lambda _base: True)
+    monkeypatch.setattr("bareagent.planning.subagent.create_worktree", _boom)
 
     result = run_subagent(
         provider=_RecordingProvider(),

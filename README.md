@@ -11,7 +11,7 @@
 ## ✨ 核心特性
 
 <p align="center">
-  <img src="docs/public/readme-features-overview.png" alt="BareAgent 核心特性概览" width="720" />
+  <img src="https://raw.githubusercontent.com/525300887039/BareAgent/main/docs/public/readme-features-overview.png" alt="BareAgent 核心特性概览" width="720" />
 </p>
 
 | 特性 | 说明 |
@@ -32,7 +32,7 @@
 ## 🏗️ 架构概览
 
 <p align="center">
-  <img src="docs/guide/images/ch01-architecture.png" alt="BareAgent 架构图" width="720" />
+  <img src="https://raw.githubusercontent.com/525300887039/BareAgent/main/docs/guide/images/ch01-architecture.png" alt="BareAgent 架构图" width="720" />
 </p>
 
 核心循环 `agent_loop()` 是中央调度器：**调用 LLM → 解析工具调用 → 权限检查 → 执行处理器 → 收集结果**，最多迭代 200 次。支持流式输出和长对话消息自动压缩。
@@ -48,9 +48,19 @@
 
 ### 安装
 
+**作为命令行工具使用**（推荐，隔离安装，安装后全局可用 `bareagent`）：
+
+```bash
+uv tool install bareagent-cli      # 或: pipx install bareagent-cli
+```
+
+**从源码开发**（可编辑安装）：
+
 ```bash
 uv pip install -e ".[dev]"
 ```
+
+> 发布到 PyPI / 自动发布流程见 [`docs/releasing.md`](docs/releasing.md)。
 
 ### 配置
 
@@ -71,7 +81,8 @@ $env:OPENAI_API_KEY="your-key-here"
 
 #### 配置文件
 
-默认配置在 `config.toml`，本地覆盖写入 `config.local.toml`（已 git-ignore）：
+默认配置随包内置（只读），本地覆盖写入**当前工作目录**的 `config.local.toml`（已 git-ignore；
+`bareagent init` 会帮你生成）。也可用 `--config <path>` / `BAREAGENT_CONFIG` 指定其他配置文件：
 
 ```toml
 [provider]
@@ -98,7 +109,7 @@ default_type = "general-purpose"
 #### 环境变量
 
 <p align="center">
-  <img src="docs/public/readme-config-flow.png" alt="配置流程图" width="640" />
+  <img src="https://raw.githubusercontent.com/525300887039/BareAgent/main/docs/public/readme-config-flow.png" alt="配置流程图" width="640" />
 </p>
 
 配置优先级：`config.toml` → `config.local.toml` → 环境变量 / CLI 参数（优先级递增）。
@@ -124,7 +135,7 @@ default_type = "general-purpose"
 ```bash
 bareagent
 # 或
-python -m src.main
+python -m bareagent.main
 ```
 
 #### CLI 参数
@@ -187,7 +198,7 @@ bareagent --config ~/my_config.toml
 ## 📁 项目结构
 
 <p align="center">
-  <img src="docs/public/readme-project-layers.png" alt="项目分层架构图" width="640" />
+  <img src="https://raw.githubusercontent.com/525300887039/BareAgent/main/docs/public/readme-project-layers.png" alt="项目分层架构图" width="640" />
 </p>
 
 ```

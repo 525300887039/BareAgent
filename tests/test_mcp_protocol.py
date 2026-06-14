@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from src.mcp.errors import MCPProtocolError
-from src.mcp.protocol import (
+from bareagent.mcp.errors import MCPProtocolError
+from bareagent.mcp.protocol import (
     ErrorObject,
     Notification,
     Request,

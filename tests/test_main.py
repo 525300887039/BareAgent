@@ -7,11 +7,11 @@ from types import ModuleType, SimpleNamespace
 
 from rich.console import Console
 
-import src.main as main_module
-from src.core.fileutil import is_tool_result_message
-from src.debug.interaction_log import InteractionLogger
-from src.lsp import LSPConfig
-from src.main import (
+import bareagent.main as main_module
+from bareagent.core.fileutil import is_tool_result_message
+from bareagent.debug.interaction_log import InteractionLogger
+from bareagent.lsp import LSPConfig
+from bareagent.main import (
     DEFAULT_CONFIG_PATH,
     Config,
     DebugConfig,
@@ -24,11 +24,11 @@ from src.main import (
     load_config,
     resolve_config_path,
 )
-from src.mcp import MCPConfig
-from src.memory.transcript import TranscriptManager
-from src.permission.guard import PermissionGuard, PermissionMode
-from src.provider.base import ThinkingConfig
-from src.ui.console import AgentConsole
+from bareagent.mcp import MCPConfig
+from bareagent.memory.transcript import TranscriptManager
+from bareagent.permission.guard import PermissionGuard, PermissionMode
+from bareagent.provider.base import ThinkingConfig
+from bareagent.ui.console import AgentConsole
 from tests.conftest import make_test_config
 
 
@@ -360,7 +360,7 @@ def test_make_teammate_provider_factory_inherits_custom_api_key_env(
         captured["config"] = config
         return "provider"
 
-    monkeypatch.setattr("src.main.create_provider", _fake_create_provider)
+    monkeypatch.setattr("bareagent.main.create_provider", _fake_create_provider)
     config = Config(
         provider=ProviderConfig(
             name="openai",
@@ -671,10 +671,10 @@ def test_build_stdio_read_fn_uses_agent_prompt_when_available(
             get_mode_label = captured["get_mode_label"]
             return f"[{get_mode_label()}] bareagent> "  # type: ignore[operator]
 
-    fake_module = ModuleType("src.ui.prompt")
+    fake_module = ModuleType("bareagent.ui.prompt")
     fake_module.AgentPrompt = _FakeAgentPrompt  # type: ignore[attr-defined]
 
-    monkeypatch.setitem(main_module.sys.modules, "src.ui.prompt", fake_module)
+    monkeypatch.setitem(main_module.sys.modules, "bareagent.ui.prompt", fake_module)
     monkeypatch.setattr(main_module.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(main_module.sys.stdout, "isatty", lambda: True)
 
@@ -699,11 +699,11 @@ def test_build_stdio_read_fn_falls_back_to_input_on_import_error(
     real_import = builtins.__import__
 
     def _fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "src.ui.prompt":
+        if name == "bareagent.ui.prompt":
             raise ImportError("prompt_toolkit unavailable")
         return real_import(name, globals, locals, fromlist, level)
 
-    monkeypatch.delitem(main_module.sys.modules, "src.ui.prompt", raising=False)
+    monkeypatch.delitem(main_module.sys.modules, "bareagent.ui.prompt", raising=False)
     monkeypatch.setattr(main_module.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(main_module.sys.stdout, "isatty", lambda: True)
     monkeypatch.setattr(builtins, "__import__", _fake_import)

@@ -8,9 +8,9 @@ import time
 
 import pytest
 
-from src.mcp.errors import MCPTransportError
-from src.mcp.protocol import Notification, Request
-from src.mcp.transport import StdioTransport, Transport
+from bareagent.mcp.errors import MCPTransportError
+from bareagent.mcp.protocol import Notification, Request
+from bareagent.mcp.transport import StdioTransport, Transport
 
 # Minimal "MCP echo server": reads NDJSON requests on stdin, echoes them back
 # wrapped as {"jsonrpc":"2.0","id":<same>,"result":{"echo":<params>}}. A line

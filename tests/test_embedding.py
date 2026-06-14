@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.memory.embedding import (
+from bareagent.memory.embedding import (
     EmbeddingCache,
     build_embedder,
     cosine,

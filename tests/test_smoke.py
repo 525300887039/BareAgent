@@ -11,11 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from src.core.loop import agent_loop
-from src.core.tools import get_handlers, get_tools
-from src.main import load_config, resolve_config_path
-from src.permission.guard import PermissionGuard, PermissionMode
-from src.provider.factory import create_provider
+from bareagent.core.loop import agent_loop
+from bareagent.core.tools import get_handlers, get_tools
+from bareagent.main import load_config, resolve_config_path
+from bareagent.permission.guard import PermissionGuard, PermissionMode
+from bareagent.provider.factory import create_provider
 
 SKIP = pytest.mark.skipif(
     not os.getenv("OPENAI_API_KEY"),

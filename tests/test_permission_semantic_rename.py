@@ -7,7 +7,7 @@ pass through BYPASS. It is deliberately NOT in ``SAFE_TOOLS``.
 
 from __future__ import annotations
 
-from src.permission.guard import PermissionGuard, PermissionMode
+from bareagent.permission.guard import PermissionGuard, PermissionMode
 
 _INPUT = {"file": "mod.py", "line": 1, "col": 1, "new_name": "bar"}
 

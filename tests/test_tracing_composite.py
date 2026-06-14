@@ -7,10 +7,10 @@ from typing import Any
 
 import pytest
 
-from src.debug.interaction_log import InteractionLogger
-from src.tracing._api import Span, Tracer
-from src.tracing.composite import CompositeTracer
-from src.tracing.json_file import JsonFileTracer
+from bareagent.debug.interaction_log import InteractionLogger
+from bareagent.tracing._api import Span, Tracer
+from bareagent.tracing.composite import CompositeTracer
+from bareagent.tracing.json_file import JsonFileTracer
 
 
 class _RecordingSpan(Span):
@@ -163,7 +163,7 @@ def test_composite_forwards_logger_methods(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: 1.0)
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: 1.0)
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
     jft = JsonFileTracer(logger)
     other = _RecordingTracer()

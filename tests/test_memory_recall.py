@@ -5,12 +5,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.main import (
+from bareagent.main import (
     MemoryConfig,
     _refresh_memory_recall,
     load_config,
 )
-from src.memory.persistent import (
+from bareagent.memory.persistent import (
     MemoryManager,
     parse_frontmatter,
 )
@@ -277,8 +277,8 @@ def test_build_memory_embedder_fails_open_when_provider_has_no_api_key(tmp_path)
     # must not escape and crash boot — semantic recall is fail-open.
     import dataclasses
 
-    from src.main import _build_memory_embedder
-    from src.ui.console import AgentConsole
+    from bareagent.main import _build_memory_embedder
+    from bareagent.ui.console import AgentConsole
     from tests.conftest import make_test_config
 
     base = make_test_config(tmp_path)

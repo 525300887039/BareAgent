@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.core.handlers.workflow import WORKFLOW_TOOL_SCHEMA, run_workflow_tool
-from src.core.workflow import (
+from bareagent.core.handlers.workflow import WORKFLOW_TOOL_SCHEMA, run_workflow_tool
+from bareagent.core.workflow import (
     DEFAULT_MAX_CONCURRENCY,
     DEFAULT_MAX_NODES,
     NodeResult,
@@ -391,14 +391,14 @@ def test_workflow_tool_schema_shape():
 
 
 def test_workflow_not_in_global_tool_set():
-    from src.core.tools import get_tools
+    from bareagent.core.tools import get_tools
 
     names = {tool["name"] for tool in get_tools()}
     assert "workflow" not in names  # main-loop-only; never offered globally
 
 
 def test_workflow_stripped_for_every_subagent_type():
-    from src.planning.agent_types import BUILTIN_AGENT_TYPES, filter_tools
+    from bareagent.planning.agent_types import BUILTIN_AGENT_TYPES, filter_tools
 
     fake_loop_tools = [WORKFLOW_TOOL_SCHEMA, {"name": "read_file"}]
     for agent_type in BUILTIN_AGENT_TYPES.values():
@@ -410,7 +410,7 @@ def test_workflow_stripped_for_every_subagent_type():
 
 
 def test_parse_workflow_config_defaults():
-    from src.main import WorkflowConfig, _parse_workflow_config
+    from bareagent.main import WorkflowConfig, _parse_workflow_config
 
     cfg = _parse_workflow_config({})
     assert cfg == WorkflowConfig()
@@ -420,7 +420,7 @@ def test_parse_workflow_config_defaults():
 
 
 def test_parse_workflow_config_values():
-    from src.main import _parse_workflow_config
+    from bareagent.main import _parse_workflow_config
 
     cfg = _parse_workflow_config({"enabled": False, "max_concurrency": 3, "max_nodes": 50})
     assert cfg.enabled is False
@@ -429,7 +429,7 @@ def test_parse_workflow_config_values():
 
 
 def test_parse_workflow_config_bad_values_fall_back():
-    from src.main import _parse_workflow_config
+    from bareagent.main import _parse_workflow_config
 
     assert _parse_workflow_config({"max_concurrency": "nope"}).max_concurrency == (
         DEFAULT_MAX_CONCURRENCY
@@ -439,14 +439,14 @@ def test_parse_workflow_config_bad_values_fall_back():
 
 
 def test_parse_workflow_config_env_override(monkeypatch):
-    from src.main import _parse_workflow_config
+    from bareagent.main import _parse_workflow_config
 
     monkeypatch.setenv("BAREAGENT_WORKFLOW_ENABLED", "false")
     assert _parse_workflow_config({"enabled": True}).enabled is False
 
 
 def test_run_node_batch_preserves_order():
-    from src.main import _run_node_batch
+    from bareagent.main import _run_node_batch
 
     def make(value: int):
         return lambda: NodeResult(id=str(value), status=NodeStatus.DONE, output=str(value))
@@ -457,7 +457,7 @@ def test_run_node_batch_preserves_order():
 
 
 def test_run_node_batch_empty_and_single():
-    from src.main import _run_node_batch
+    from bareagent.main import _run_node_batch
 
     assert _run_node_batch([], max_concurrency=4) == []
     single = _run_node_batch(
@@ -467,8 +467,8 @@ def test_run_node_batch_empty_and_single():
 
 
 def test_install_workflow_handler_respects_enabled_flag():
-    from src.core.workflow_registry import WorkflowRegistry
-    from src.main import _install_workflow_handler
+    from bareagent.core.workflow_registry import WorkflowRegistry
+    from bareagent.main import _install_workflow_handler
 
     # None deps are safe: they are only dereferenced when a node actually runs,
     # which this install-time test never triggers.
@@ -693,8 +693,8 @@ class _SyncBgManager:
 
 def _install_handler(registry, *, default_token_budget=0):
     """Install a workflow handler whose nodes are faked (no real subagent)."""
-    from src.core.workflow_registry import WorkflowRegistry
-    from src.main import _install_workflow_handler
+    from bareagent.core.workflow_registry import WorkflowRegistry
+    from bareagent.main import _install_workflow_handler
 
     registry = registry or WorkflowRegistry()
     console = _FakeConsole()
@@ -726,11 +726,11 @@ def _patch_run_subagent(monkeypatch, calls, *, tokens_per_node=0):
             tracker.total_output += tokens_per_node
         return "out-" + kwargs.get("task", "")[:6]
 
-    monkeypatch.setattr("src.main.run_subagent", fake)
+    monkeypatch.setattr("bareagent.main.run_subagent", fake)
 
 
 def test_handler_sync_returns_summary_and_registers_run(monkeypatch):
-    from src.core.workflow_registry import RunStatus, WorkflowRegistry
+    from bareagent.core.workflow_registry import RunStatus, WorkflowRegistry
 
     calls: list[str] = []
     _patch_run_subagent(monkeypatch, calls)
@@ -746,7 +746,7 @@ def test_handler_sync_returns_summary_and_registers_run(monkeypatch):
 
 
 def test_handler_invalid_dag_returns_error_and_registers_nothing(monkeypatch):
-    from src.core.workflow_registry import WorkflowRegistry
+    from bareagent.core.workflow_registry import WorkflowRegistry
 
     _patch_run_subagent(monkeypatch, [])
     handler, registry, _ = _install_handler(WorkflowRegistry())
@@ -756,7 +756,7 @@ def test_handler_invalid_dag_returns_error_and_registers_nothing(monkeypatch):
 
 
 def test_handler_background_returns_run_id_and_delivers_via_registry(monkeypatch):
-    from src.core.workflow_registry import RunStatus, WorkflowRegistry
+    from bareagent.core.workflow_registry import RunStatus, WorkflowRegistry
 
     calls: list[str] = []
     _patch_run_subagent(monkeypatch, calls)
@@ -775,7 +775,7 @@ def test_handler_background_returns_run_id_and_delivers_via_registry(monkeypatch
 
 
 def test_handler_resume_reuses_unchanged_nodes(monkeypatch):
-    from src.core.workflow_registry import WorkflowRegistry
+    from bareagent.core.workflow_registry import WorkflowRegistry
 
     calls: list[str] = []
     _patch_run_subagent(monkeypatch, calls)
@@ -798,7 +798,7 @@ def test_handler_resume_reuses_unchanged_nodes(monkeypatch):
 
 
 def test_handler_resume_unknown_id_runs_fresh(monkeypatch):
-    from src.core.workflow_registry import WorkflowRegistry
+    from bareagent.core.workflow_registry import WorkflowRegistry
 
     calls: list[str] = []
     _patch_run_subagent(monkeypatch, calls)
@@ -810,7 +810,7 @@ def test_handler_resume_unknown_id_runs_fresh(monkeypatch):
 
 
 def test_handler_token_budget_skips_remaining(monkeypatch):
-    from src.core.workflow_registry import WorkflowRegistry
+    from bareagent.core.workflow_registry import WorkflowRegistry
 
     calls: list[str] = []
     _patch_run_subagent(monkeypatch, calls, tokens_per_node=100)
@@ -827,7 +827,7 @@ def test_handler_token_budget_skips_remaining(monkeypatch):
 
 
 def test_humanize_age_formats():
-    from src.main import _humanize_age
+    from bareagent.main import _humanize_age
 
     assert _humanize_age(5) == "5s"
     assert _humanize_age(90) == "1m30s"
@@ -836,8 +836,8 @@ def test_humanize_age_formats():
 
 
 def test_format_workflow_run_line_and_detail():
-    from src.core.workflow_registry import WorkflowRegistry
-    from src.main import _format_workflow_run_detail, _format_workflow_run_line
+    from bareagent.core.workflow_registry import WorkflowRegistry
+    from bareagent.main import _format_workflow_run_detail, _format_workflow_run_line
 
     reg = WorkflowRegistry()
     spec = WorkflowSpec(nodes=[WorkflowNode(id="a", prompt="pa", phase="build")])
@@ -852,8 +852,8 @@ def test_format_workflow_run_line_and_detail():
 
 
 def test_dispatch_workflows_command_list_detail_clear():
-    from src.core.workflow_registry import WorkflowRegistry
-    from src.main import _dispatch_workflows_command
+    from bareagent.core.workflow_registry import WorkflowRegistry
+    from bareagent.main import _dispatch_workflows_command
 
     reg = WorkflowRegistry()
     spec = WorkflowSpec(nodes=[WorkflowNode(id="a", prompt="pa")])
@@ -880,8 +880,8 @@ def test_dispatch_workflows_command_list_detail_clear():
 
 
 def test_drain_workflow_results_injects_once():
-    from src.core.workflow_registry import WorkflowRegistry
-    from src.main import _drain_workflow_results
+    from bareagent.core.workflow_registry import WorkflowRegistry
+    from bareagent.main import _drain_workflow_results
 
     reg = WorkflowRegistry()
     spec = WorkflowSpec(nodes=[WorkflowNode(id="a", prompt="p")])
@@ -901,8 +901,8 @@ def test_drain_workflow_results_injects_once():
 
 
 def test_drain_skips_sync_runs():
-    from src.core.workflow_registry import WorkflowRegistry
-    from src.main import _drain_workflow_results
+    from bareagent.core.workflow_registry import WorkflowRegistry
+    from bareagent.main import _drain_workflow_results
 
     reg = WorkflowRegistry()
     spec = WorkflowSpec(nodes=[WorkflowNode(id="a", prompt="p")])
@@ -917,7 +917,7 @@ def test_drain_skips_sync_runs():
 
 
 def test_parse_workflow_config_new_fields():
-    from src.main import _parse_workflow_config
+    from bareagent.main import _parse_workflow_config
 
     cfg = _parse_workflow_config({"default_token_budget": 5000, "max_runs": 10})
     assert cfg.default_token_budget == 5000
@@ -925,8 +925,8 @@ def test_parse_workflow_config_new_fields():
 
 
 def test_parse_workflow_config_new_fields_defaults_and_bad_values():
-    from src.core.workflow_registry import DEFAULT_MAX_RUNS
-    from src.main import WorkflowConfig, _parse_workflow_config
+    from bareagent.core.workflow_registry import DEFAULT_MAX_RUNS
+    from bareagent.main import WorkflowConfig, _parse_workflow_config
 
     defaults = WorkflowConfig()
     assert _parse_workflow_config({}).default_token_budget == defaults.default_token_budget
@@ -937,7 +937,7 @@ def test_parse_workflow_config_new_fields_defaults_and_bad_values():
 
 
 def test_parse_workflow_config_env_overrides(monkeypatch):
-    from src.main import _parse_workflow_config
+    from bareagent.main import _parse_workflow_config
 
     monkeypatch.setenv("BAREAGENT_WORKFLOW_DEFAULT_TOKEN_BUDGET", "12345")
     monkeypatch.setenv("BAREAGENT_WORKFLOW_MAX_RUNS", "7")

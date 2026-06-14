@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from src.lsp.config import LSPConfig
-from src.lsp.diagnostics import (
+from bareagent.lsp.config import LSPConfig
+from bareagent.lsp.diagnostics import (
     Diagnostic,
     DiagnosticKey,
     diff_diagnostics,

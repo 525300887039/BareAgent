@@ -1,0 +1,169 @@
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from typing import Any
+
+from bareagent.permission.guard import PermissionMode
+
+_log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class AgentType:
+    """Definition for a built-in child-agent profile."""
+
+    name: str
+    description: str
+    system_prompt: str = ""
+    tools: list[str] | None = None
+    disallowed_tools: list[str] | None = None
+    max_turns: int = 200
+    allow_nesting: bool = True
+    permission_mode: PermissionMode | None = None
+    # When False, ``filter_tools`` strips every ``mcp__*`` tool. Used by
+    # read-only agent types (explore / plan / code-review) to keep MCP side
+    # effects out of subagent contexts. Defaults to True for backwards
+    # compatibility with custom user-defined agent types.
+    mcp_tools_enabled: bool = True
+    # When False, ``filter_tools`` strips every ``lsp_*`` tool. The four
+    # Tier-1 LSP tools are read-only (outline / definition / references /
+    # diagnostics), so read-only agent types keep them enabled by default —
+    # this flag exists for tighter sandboxes that want a strict allow-list.
+    lsp_tools_enabled: bool = True
+    # The ``memory`` tool is a single tool with a ``command`` enum, so it
+    # cannot be downgraded to read-only by name-filtering like mcp/lsp. When
+    # False, the subagent layer wraps the handler to reject the write commands
+    # (create/str_replace/insert/delete/rename) while still allowing ``view``.
+    # Read-only agent types default to False so they can recall but not mutate
+    # shared memory.
+    memory_writable: bool = True
+
+
+# Tools that only make sense in the main REPL loop and must never reach a
+# sub-agent, regardless of agent type. ``exit_plan_mode`` flips the *parent's*
+# permission mode through an interactive approval prompt -- a sub-agent has no
+# human to ask and no business mutating the parent's mode. ``workflow`` fans out
+# its own subagents; letting a sub-agent call it would allow unbounded nesting
+# (out of scope for the MVP). ``subagent_send`` resumes a foreground subagent
+# from the REPL-scoped registry; only the main loop spawns resumable contexts,
+# so a sub-agent has nothing to continue. ``skill_create`` stays out of
+# sub-agents by never joining the global tool set; ``exit_plan_mode`` /
+# ``workflow`` / ``subagent_send`` do live in the main loop's set, so they are
+# stripped here as a centralized, agent-type-independent guarantee
+# (filter_handlers then drops the orphaned handler).
+MAIN_LOOP_ONLY_TOOLS = frozenset({"exit_plan_mode", "workflow", "subagent_send"})
+
+
+_READ_ONLY_DEFAULTS: dict[str, Any] = {
+    # ``semantic_rename`` is a write tool that does not carry the ``lsp_`` name
+    # prefix (so ``lsp_tools_enabled=True`` does not filter it). It must be
+    # denied explicitly here, otherwise read-only agents would keep a tool that
+    # mutates files across the workspace.
+    "disallowed_tools": [
+        "write_file",
+        "edit_file",
+        "bash",
+        "subagent",
+        "semantic_rename",
+    ],
+    "max_turns": 50,
+    "allow_nesting": False,
+    "permission_mode": PermissionMode.PLAN,
+    "mcp_tools_enabled": False,
+    "lsp_tools_enabled": True,
+    "memory_writable": False,
+}
+
+BUILTIN_AGENT_TYPES: dict[str, AgentType] = {
+    "general-purpose": AgentType(
+        name="general-purpose",
+        description="General child agent with the full inherited toolset.",
+    ),
+    "explore": AgentType(
+        name="explore",
+        description="Read-only agent for code search and repository understanding.",
+        system_prompt=(
+            "You are a read-only exploration agent. Search and inspect the repository, "
+            "but do not modify files or perform side effects."
+        ),
+        **_READ_ONLY_DEFAULTS,
+    ),
+    "plan": AgentType(
+        name="plan",
+        description="Planning agent for implementation design without repository mutation.",
+        system_prompt=(
+            "You are a planning agent. Analyze the codebase and produce an implementation "
+            "plan, but do not modify files or perform side effects."
+        ),
+        **_READ_ONLY_DEFAULTS,
+    ),
+    "code-review": AgentType(
+        name="code-review",
+        description="Read-only review agent for bugs, regressions, and code quality issues.",
+        system_prompt=(
+            "You are a code review agent. Inspect code for defects, regressions, security "
+            "issues, and maintainability risks. Do not modify files."
+        ),
+        **_READ_ONLY_DEFAULTS,
+    ),
+}
+
+DEFAULT_AGENT_TYPE = "general-purpose"
+
+
+def resolve_agent_type(
+    name: str | None,
+    *,
+    default_name: str = DEFAULT_AGENT_TYPE,
+) -> AgentType:
+    """Resolve a child-agent type, falling back to the configured default."""
+
+    resolved_default = BUILTIN_AGENT_TYPES.get(
+        default_name, BUILTIN_AGENT_TYPES[DEFAULT_AGENT_TYPE]
+    )
+    if name is None:
+        return resolved_default
+    if name not in BUILTIN_AGENT_TYPES:
+        _log.warning("Unknown agent type %r, falling back to %r", name, resolved_default.name)
+        return resolved_default
+    return BUILTIN_AGENT_TYPES[name]
+
+
+def filter_tools(
+    all_tools: list[dict[str, Any]],
+    agent_type: AgentType,
+) -> list[dict[str, Any]]:
+    """Apply whitelist, blacklist, and nesting controls to a tool schema list."""
+
+    allowed = set(agent_type.tools) if agent_type.tools is not None else None
+    denied = set(agent_type.disallowed_tools) if agent_type.disallowed_tools is not None else None
+    strip_nesting = not agent_type.allow_nesting
+
+    def _keep(tool: dict[str, Any]) -> bool:
+        name = str(tool.get("name"))
+        if name in MAIN_LOOP_ONLY_TOOLS:
+            return False
+        if allowed is not None and name not in allowed:
+            return False
+        if denied is not None and name in denied:
+            return False
+        if strip_nesting and name == "subagent":
+            return False
+        if not agent_type.mcp_tools_enabled and name.startswith("mcp__"):
+            return False
+        if not agent_type.lsp_tools_enabled and name.startswith("lsp_"):
+            return False
+        return True
+
+    return [tool for tool in all_tools if _keep(tool)]
+
+
+def filter_handlers(
+    all_handlers: dict[str, Any],
+    filtered_tools: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Keep only handlers that still have a matching tool schema."""
+
+    allowed_names = {str(tool.get("name")) for tool in filtered_tools}
+    return {name: handler for name, handler in all_handlers.items() if name in allowed_names}

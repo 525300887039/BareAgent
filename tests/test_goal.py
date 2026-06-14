@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.core.goal import (
+from bareagent.core.goal import (
     DEFAULT_MAX_TURNS,
     GoalOutcome,
     GoalState,
@@ -14,7 +14,7 @@ from src.core.goal import (
     parse_verdict,
     run_goal_loop,
 )
-from src.core.handlers.goal import GOAL_VERDICT_TOOL_SCHEMA, run_goal_verdict
+from bareagent.core.handlers.goal import GOAL_VERDICT_TOOL_SCHEMA, run_goal_verdict
 
 # --- parse_verdict --------------------------------------------------------
 
@@ -269,7 +269,7 @@ def test_goal_verdict_schema_shape():
 
 
 def test_parse_goal_config_defaults():
-    from src.main import GoalConfig, _parse_goal_config
+    from bareagent.main import GoalConfig, _parse_goal_config
 
     cfg = _parse_goal_config({})
     assert cfg == GoalConfig()
@@ -278,7 +278,7 @@ def test_parse_goal_config_defaults():
 
 
 def test_parse_goal_config_values_and_strip():
-    from src.main import _parse_goal_config
+    from bareagent.main import _parse_goal_config
 
     cfg = _parse_goal_config({"max_turns": 8, "evaluator_model": "  claude-haiku-4-5 "})
     assert cfg.max_turns == 8
@@ -286,7 +286,7 @@ def test_parse_goal_config_values_and_strip():
 
 
 def test_parse_goal_config_bad_max_turns_falls_back():
-    from src.main import _parse_goal_config
+    from bareagent.main import _parse_goal_config
 
     assert _parse_goal_config({"max_turns": "nope"}).max_turns == DEFAULT_MAX_TURNS
     assert _parse_goal_config({"max_turns": 0}).max_turns == DEFAULT_MAX_TURNS
@@ -294,7 +294,7 @@ def test_parse_goal_config_bad_max_turns_falls_back():
 
 
 def test_parse_goal_config_env_override(monkeypatch):
-    from src.main import _parse_goal_config
+    from bareagent.main import _parse_goal_config
 
     monkeypatch.setenv("BAREAGENT_GOAL_MAX_TURNS", "12")
     assert _parse_goal_config({"max_turns": 25}).max_turns == 12
@@ -304,15 +304,14 @@ def test_parse_goal_config_env_override(monkeypatch):
 
 
 def _load_config():
-    from pathlib import Path
+    from bareagent.core.config_paths import DEFAULT_CONFIG_PATH
+    from bareagent.main import load_config
 
-    from src.main import load_config
-
-    return load_config(Path("config.toml"))
+    return load_config(DEFAULT_CONFIG_PATH)
 
 
 def test_build_goal_provider_empty_reuses_session():
-    from src.main import _build_goal_provider
+    from bareagent.main import _build_goal_provider
 
     config = _load_config()
     config.goal.evaluator_model = ""
@@ -321,7 +320,7 @@ def test_build_goal_provider_empty_reuses_session():
 
 
 def test_build_goal_provider_failure_falls_back(monkeypatch):
-    import src.main as main_mod
+    import bareagent.main as main_mod
 
     config = _load_config()
     config.goal.evaluator_model = "some-model"
@@ -335,7 +334,7 @@ def test_build_goal_provider_failure_falls_back(monkeypatch):
 
 
 def test_build_goal_provider_builds_sibling_with_override_model(monkeypatch):
-    import src.main as main_mod
+    import bareagent.main as main_mod
 
     config = _load_config()
     config.goal.evaluator_model = "cheap-model"

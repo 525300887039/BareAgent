@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.main import _dispatch_mcp_command
-from src.mcp.errors import MCPError
+from bareagent.main import _dispatch_mcp_command
+from bareagent.mcp.errors import MCPError
 
 
 class _FakeUI:

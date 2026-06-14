@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from src.tracing._api import NullSpan, NullTracer, Span, Tracer
-from src.tracing._proxy import ProxyTracer, enable_tracing, tracer
+from bareagent.tracing._api import NullSpan, NullTracer, Span, Tracer
+from bareagent.tracing._proxy import ProxyTracer, enable_tracing, tracer
 
 
 def test_null_span_methods_are_silent() -> None:

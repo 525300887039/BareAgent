@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.core.handlers.web_fetch import _truncate, html_to_text, run_web_fetch
+from bareagent.core.handlers.web_fetch import _truncate, html_to_text, run_web_fetch
 
 
 class TestHtmlToText:

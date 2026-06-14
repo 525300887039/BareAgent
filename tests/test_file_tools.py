@@ -4,9 +4,9 @@
       run_edit(file_path, old_text, new_text, workspace=...)
 """
 
-from src.core.handlers.file_edit import run_edit
-from src.core.handlers.file_read import run_read
-from src.core.handlers.file_write import run_write
+from bareagent.core.handlers.file_edit import run_edit
+from bareagent.core.handlers.file_read import run_read
+from bareagent.core.handlers.file_write import run_write
 
 
 def test_write_then_read(tmp_path):

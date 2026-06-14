@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from src.permission.guard import PermissionGuard, PermissionMode
+from bareagent.permission.guard import PermissionGuard, PermissionMode
 
 
 def test_default_mode_mcp_tool_requires_confirm() -> None:

@@ -6,8 +6,8 @@
 
 from pathlib import Path
 
-from src.core.handlers.glob_search import run_glob
-from src.core.handlers.grep_search import run_grep
+from bareagent.core.handlers.glob_search import run_glob
+from bareagent.core.handlers.grep_search import run_grep
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 
@@ -27,7 +27,7 @@ def test_glob_no_match():
 
 def test_grep_find_function():
     """grep 应找到函数定义"""
-    result = run_grep("def agent_loop", path="src/core/loop.py", workspace=WORKSPACE)
+    result = run_grep("def agent_loop", path="src/bareagent/core/loop.py", workspace=WORKSPACE)
     assert isinstance(result, list)
     assert any("agent_loop" in line for line in result)
 

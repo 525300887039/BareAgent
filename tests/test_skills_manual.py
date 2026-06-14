@@ -5,7 +5,7 @@
 
 from pathlib import Path
 
-from src.planning.skills import SkillLoader
+from bareagent.planning.skills import SkillLoader
 
 SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
 

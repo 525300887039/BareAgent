@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 from unittest.mock import patch
 
-from src.core.handlers.web_search import (
+from bareagent.core.handlers.web_search import (
     _decode_bing_url,
     _format_results,
     _parse_bing_html,
@@ -103,7 +103,7 @@ class TestRunWebSearch:
         result = run_web_search("   ")
         assert "Error" in result
 
-    @patch("src.core.handlers.web_search._search_bing_html")
+    @patch("bareagent.core.handlers.web_search._search_bing_html")
     def test_bing_used_when_no_brave_key(self, mock_bing):
         mock_bing.return_value = [
             {"title": "Test", "url": "https://test.com", "snippet": "test snippet"}
@@ -116,7 +116,7 @@ class TestRunWebSearch:
         assert "Test" in result
         mock_bing.assert_called_once()
 
-    @patch("src.core.handlers.web_search._search_brave")
+    @patch("bareagent.core.handlers.web_search._search_brave")
     def test_brave_used_when_key_present(self, mock_brave):
         mock_brave.return_value = [
             {
@@ -130,7 +130,7 @@ class TestRunWebSearch:
         assert "Brave Result" in result
         mock_brave.assert_called_once()
 
-    @patch("src.core.handlers.web_search._search_bing_html")
+    @patch("bareagent.core.handlers.web_search._search_bing_html")
     def test_network_error_returns_message(self, mock_bing):
         from urllib.error import URLError
 
@@ -142,7 +142,7 @@ class TestRunWebSearch:
             result = run_web_search("test")
         assert "Error" in result
 
-    @patch("src.core.handlers.web_search._search_bing_html")
+    @patch("bareagent.core.handlers.web_search._search_bing_html")
     def test_anti_bot_page_surfaces_explicit_error(self, mock_bing):
         # An anti-bot / unsupported-browser page must not be reported as "No results".
         mock_bing.side_effect = RuntimeError(

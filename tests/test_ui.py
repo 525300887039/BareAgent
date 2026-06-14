@@ -9,8 +9,8 @@ from types import ModuleType, SimpleNamespace
 import pytest
 from rich.console import Console
 
-from src.ui.console import AgentConsole
-from src.ui.stream import StreamPrinter
+from bareagent.ui.console import AgentConsole
+from bareagent.ui.stream import StreamPrinter
 
 
 def test_agent_console_truncates_long_tool_output() -> None:
@@ -203,7 +203,7 @@ def _load_prompt_module(monkeypatch: pytest.MonkeyPatch):
     fake_key_binding.KeyBindings = _FakeKeyBindings
 
     for name in (
-        "src.ui.prompt",
+        "bareagent.ui.prompt",
         "prompt_toolkit",
         "prompt_toolkit.completion",
         "prompt_toolkit.history",
@@ -216,7 +216,7 @@ def _load_prompt_module(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setitem(sys.modules, "prompt_toolkit.history", fake_history)
     monkeypatch.setitem(sys.modules, "prompt_toolkit.key_binding", fake_key_binding)
 
-    prompt_module = importlib.import_module("src.ui.prompt")
+    prompt_module = importlib.import_module("bareagent.ui.prompt")
     prompt_module = importlib.reload(prompt_module)
     return prompt_module, _FakeInMemoryHistory
 

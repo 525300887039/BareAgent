@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from src.planning.skills import SkillLoader, resolve_skills_dir
-from src.planning.subagent import run_subagent
-from src.planning.todo import TodoManager
-from src.provider.base import BaseLLMProvider, LLMResponse
+from bareagent.planning.skills import SkillLoader, resolve_skills_dir
+from bareagent.planning.subagent import run_subagent
+from bareagent.planning.todo import TodoManager
+from bareagent.provider.base import BaseLLMProvider, LLMResponse
 
 
 class RecordingProvider(BaseLLMProvider):
@@ -166,10 +166,12 @@ def test_pyproject_packages_skills_for_distributions() -> None:
     pyproject = Path("pyproject.toml")
     config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
 
-    wheel_force_include = config["tool"]["hatch"]["build"]["targets"]["wheel"][
-        "force-include"
-    ]
+    wheel_packages = config["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"]
     sdist_include = config["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
 
-    assert wheel_force_include["skills"] == "skills"
-    assert "skills" in sdist_include
+    # skills/ + config.toml now live inside the package (src/bareagent/), so they
+    # ship automatically with the wheel package; no force-include needed.
+    assert "src/bareagent" in wheel_packages
+    assert Path("src/bareagent/skills/git/SKILL.md").exists()
+    assert Path("src/bareagent/config.toml").exists()
+    assert "src" in sdist_include

@@ -13,8 +13,8 @@ import json
 
 import pytest
 
-from src.core.handlers import file_read
-from src.core.handlers.file_read import _parse_page_range, run_read
+from bareagent.core.handlers import file_read
+from bareagent.core.handlers.file_read import _parse_page_range, run_read
 
 # 1x1 transparent PNG. Decoding this inline avoids checking a binary fixture in.
 _PNG_1X1_B64 = (

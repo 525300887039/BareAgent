@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from src.memory.persistent import (
+from bareagent.memory.persistent import (
     MEMORY_PROTOCOL,
     MemoryManager,
     MemoryType,

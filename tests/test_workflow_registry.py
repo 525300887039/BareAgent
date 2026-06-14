@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from src.core.workflow import NodeResult, NodeStatus, WorkflowNode, WorkflowSpec
-from src.core.workflow_registry import (
+from bareagent.core.workflow import NodeResult, NodeStatus, WorkflowNode, WorkflowSpec
+from bareagent.core.workflow_registry import (
     DEFAULT_MAX_RUNS,
     RunStatus,
     WorkflowRegistry,

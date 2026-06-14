@@ -8,21 +8,21 @@ from pathlib import Path
 
 import pytest
 
-from src.concurrency.background import BackgroundManager
-from src.main import (
+from bareagent.concurrency.background import BackgroundManager
+from bareagent.main import (
     MAIN_AGENT_NAME,
     TeamConfig,
     _drain_team_mailbox,
     _make_team_handlers,
     _parse_team_config,
 )
-from src.permission.guard import PermissionGuard, PermissionMode
-from src.planning.tasks import TaskManager
-from src.provider.base import BaseLLMProvider, LLMResponse, ToolCall
-from src.team.autonomous import AutonomousAgent
-from src.team.mailbox import Message, MessageBus
-from src.team.manager import TeammateManager
-from src.team.protocols import Protocol, ProtocolFSM, decode_protocol_content
+from bareagent.permission.guard import PermissionGuard, PermissionMode
+from bareagent.planning.tasks import TaskManager
+from bareagent.provider.base import BaseLLMProvider, LLMResponse, ToolCall
+from bareagent.team.autonomous import AutonomousAgent
+from bareagent.team.mailbox import Message, MessageBus
+from bareagent.team.manager import TeammateManager
+from bareagent.team.protocols import Protocol, ProtocolFSM, decode_protocol_content
 
 
 class ReplayProvider(BaseLLMProvider):
@@ -798,7 +798,7 @@ def test_memory_request_injects_compact_fn(tmp_path: Path, monkeypatch) -> None:
         compact_fn(messages)
         return "ok"
 
-    monkeypatch.setattr("src.team.autonomous.agent_loop", _fake_loop)
+    monkeypatch.setattr("bareagent.team.autonomous.agent_loop", _fake_loop)
     agent = _memory_agent(
         tmp_path, memory_enabled=True, provider=object(), compact_fn=_fake_compact
     )
@@ -814,7 +814,7 @@ def test_memory_request_rolls_back_on_failure(tmp_path: Path, monkeypatch) -> No
     def _boom(**_kw) -> str:
         raise RuntimeError("loop blew up")
 
-    monkeypatch.setattr("src.team.autonomous.agent_loop", _boom)
+    monkeypatch.setattr("bareagent.team.autonomous.agent_loop", _boom)
     agent = _memory_agent(tmp_path, memory_enabled=True, provider=object())
     before = list(agent._messages)
 

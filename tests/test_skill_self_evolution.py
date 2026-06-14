@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.core.handlers.skill import run_skill_create
-from src.main import _print_skill_list
-from src.planning.skill_gen import DRAFT_INSTRUCTION, render_reflection_prompt
-from src.planning.skill_store import SkillStore
-from src.planning.skills import SkillLoader
+from bareagent.core.handlers.skill import run_skill_create
+from bareagent.main import _print_skill_list
+from bareagent.planning.skill_gen import DRAFT_INSTRUCTION, render_reflection_prompt
+from bareagent.planning.skill_store import SkillStore
+from bareagent.planning.skills import SkillLoader
 
 # --------------------------------------------------------------------------- #
 # render_reflection_prompt

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.main import CostConfig, _parse_cost_config, load_config
+from bareagent.main import CostConfig, _parse_cost_config, load_config
 
 
 def test_config_has_cost_default(tmp_path):

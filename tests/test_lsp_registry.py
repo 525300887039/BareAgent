@@ -7,10 +7,10 @@ without a live manager so the LLM always sees a stable surface) and that
 
 from __future__ import annotations
 
-from src.core.tools import LSP_TOOL_SCHEMAS, get_handlers, get_tools
-from src.lsp.config import LSPConfig, LSPServerConfig
-from src.lsp.manager import LanguageServerManager
-from src.lsp.tools import LSP_TOOL_NAMES
+from bareagent.core.tools import LSP_TOOL_SCHEMAS, get_handlers, get_tools
+from bareagent.lsp.config import LSPConfig, LSPServerConfig
+from bareagent.lsp.manager import LanguageServerManager
+from bareagent.lsp.tools import LSP_TOOL_NAMES
 
 
 def test_lsp_schemas_present_in_deferred_tools() -> None:

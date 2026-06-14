@@ -11,8 +11,8 @@ import shutil
 
 import pytest
 
-from src.mcp import MCPConfig, MCPManager, MCPServerConfig
-from src.mcp.registry import build_mcp_handlers
+from bareagent.mcp import MCPConfig, MCPManager, MCPServerConfig
+from bareagent.mcp.registry import build_mcp_handlers
 
 
 def _require_uvx() -> None:

@@ -11,22 +11,22 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
-from src.core.handlers.skill import SKILL_CREATE_TOOL_SCHEMA, run_skill_create
-from src.core.loop import agent_loop
-from src.permission.guard import PermissionGuard
-from src.planning.skill_gen import (
+from bareagent.core.handlers.skill import SKILL_CREATE_TOOL_SCHEMA, run_skill_create
+from bareagent.core.loop import agent_loop
+from bareagent.permission.guard import PermissionGuard
+from bareagent.planning.skill_gen import (
     SkillGenConfig,
     SkillGenerator,
     should_draft_skill,
 )
-from src.planning.skill_store import (
+from bareagent.planning.skill_store import (
     SkillStore,
     SkillStoreError,
     derive_skill_slug,
     resolve_generated_skills_root,
 )
-from src.planning.skills import SkillLoader
-from src.provider.base import BaseLLMProvider, LLMResponse, ToolCall
+from bareagent.planning.skills import SkillLoader
+from bareagent.provider.base import BaseLLMProvider, LLMResponse, ToolCall
 
 # --------------------------------------------------------------------------- #
 # Pure trigger logic
@@ -338,7 +338,7 @@ def test_agent_loop_without_skill_gen_is_noop():
 
 
 def test_parse_skills_config_defaults():
-    from src.main import SkillsConfig, _parse_skills_config
+    from bareagent.main import SkillsConfig, _parse_skills_config
 
     cfg = _parse_skills_config({})
     assert cfg == SkillsConfig()
@@ -349,7 +349,7 @@ def test_parse_skills_config_defaults():
 
 
 def test_parse_skills_config_env_override(monkeypatch):
-    from src.main import _parse_skills_config
+    from bareagent.main import _parse_skills_config
 
     monkeypatch.setenv("BAREAGENT_SKILLS_AUTO_GENERATE", "false")
     cfg = _parse_skills_config({"auto_generate": True})
@@ -357,7 +357,7 @@ def test_parse_skills_config_env_override(monkeypatch):
 
 
 def test_parse_skills_config_bad_field_falls_back():
-    from src.main import _parse_skills_config
+    from bareagent.main import _parse_skills_config
 
     cfg = _parse_skills_config({"min_tool_calls": "not-an-int", "max_pending": None})
     assert cfg.min_tool_calls == 5
@@ -365,7 +365,7 @@ def test_parse_skills_config_bad_field_falls_back():
 
 
 def test_build_skillgen_config_maps_fields():
-    from src.main import SkillsConfig, _build_skillgen_config
+    from bareagent.main import SkillsConfig, _build_skillgen_config
 
     skills = SkillsConfig(auto_generate=False, min_tool_calls=7, min_user_replies=2, max_pending=3)
     gen_cfg = _build_skillgen_config(skills)

@@ -5,10 +5,16 @@ from __future__ import annotations
 import dataclasses
 from pathlib import Path
 
-import src.main as main_module
-import src.provider.setup as wizard_module
-from src.main import ProviderConfig, _has_usable_key, load_config, parse_args, resolve_config_path
-from src.provider.setup import _local_config_path, run_setup_wizard
+import bareagent.main as main_module
+import bareagent.provider.setup as wizard_module
+from bareagent.main import (
+    ProviderConfig,
+    _has_usable_key,
+    load_config,
+    parse_args,
+    resolve_config_path,
+)
+from bareagent.provider.setup import _local_config_path, run_setup_wizard
 
 
 def _scripted_input(answers: list[str]):

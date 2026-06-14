@@ -3,7 +3,7 @@
 适配：_micro_compact(msgs, keep_recent=3) 就地修改，带下划线前缀。
 """
 
-from src.memory.compact import _micro_compact
+from bareagent.memory.compact import _micro_compact
 
 
 def _make_messages(n):

@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from src.memory.conversation_io import (
+from bareagent.memory.conversation_io import (
     EXPORT_VERSION,
     parse_import,
     render_markdown,

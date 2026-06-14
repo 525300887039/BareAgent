@@ -4,14 +4,14 @@ from copy import deepcopy
 
 import pytest
 
-from src.core.loop import LLMCallError, agent_loop
-from src.core.retry import (
+from bareagent.core.loop import LLMCallError, agent_loop
+from bareagent.core.retry import (
     RetryPolicy,
     compute_delay,
     is_retryable,
     run_with_retry,
 )
-from src.provider.base import BaseLLMProvider, LLMResponse
+from bareagent.provider.base import BaseLLMProvider, LLMResponse
 
 # --- Fake exceptions ------------------------------------------------------
 

@@ -6,10 +6,10 @@ from typing import Any
 
 import pytest
 
-from src.core.loop import LLMCallError, agent_loop
-from src.debug.interaction_log import InteractionLogger
-from src.permission.guard import PermissionGuard, PermissionMode
-from src.provider.base import BaseLLMProvider, LLMResponse, ToolCall
+from bareagent.core.loop import LLMCallError, agent_loop
+from bareagent.debug.interaction_log import InteractionLogger
+from bareagent.permission.guard import PermissionGuard, PermissionMode
+from bareagent.provider.base import BaseLLMProvider, LLMResponse, ToolCall
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -20,7 +20,7 @@ def test_log_request_writes_expected_file_and_content(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: 100.5)
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: 100.5)
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
     messages = [{"role": "user", "content": "hello"}]
     tools = [{"name": "echo", "parameters": {"type": "object"}}]
@@ -46,7 +46,7 @@ def test_log_response_writes_expected_file_and_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([10.0, 11.0])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
 
     seq = logger.log_request([], [])
@@ -79,7 +79,7 @@ def test_sequence_auto_increments_after_each_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([1.0, 2.0, 3.0, 4.0])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
 
     first_seq = logger.log_request([], [])
@@ -98,7 +98,7 @@ def test_response_write_failure_still_advances_sequence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([1.0, 2.0, 3.0])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
     original_write = logger._write
 
@@ -130,7 +130,7 @@ def test_list_sessions_returns_sorted_session_directories(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([1.0, 2.0])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
 
     logger_a = InteractionLogger(log_dir=tmp_path / ".logs", session_id="beta")
     logger_b = InteractionLogger(log_dir=tmp_path / ".logs", session_id="alpha")
@@ -145,7 +145,7 @@ def test_list_interactions_returns_expected_summary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([100.0, 101.0])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
 
     seq = logger.log_request(
@@ -180,7 +180,7 @@ def test_get_interaction_returns_full_request_and_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([20.0, 21.0])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
 
     seq = logger.log_request([{"role": "user", "content": "hi"}], [])
@@ -200,7 +200,7 @@ def test_session_id_setter_resets_sequence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([1.0, 2.0, 3.0])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="first")
 
     seq = logger.log_request([], [])
@@ -218,7 +218,7 @@ def test_existing_session_reuses_next_available_sequence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([1.0, 2.0, 3.0])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
     session_dir = tmp_path / ".logs" / "sess-1"
     session_dir.mkdir(parents=True)
     (session_dir / "000_request.json").write_text("{}", encoding="utf-8")
@@ -237,7 +237,7 @@ def test_event_queue_receives_request_and_response_events(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([1.5, 2.5])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
     event_queue = logger.event_queue
 
@@ -263,7 +263,7 @@ def test_subscribe_events_uses_bounded_queue_and_drops_oldest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([1.0, 2.0, 3.0])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
     event_queue = logger.subscribe_events(maxsize=2)
 
@@ -290,7 +290,7 @@ def test_error_response_includes_error_field(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([10.0, 11.0])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
 
     seq = logger.log_request([], [])
@@ -439,8 +439,8 @@ def test_agent_loop_logs_request_and_response(
 ) -> None:
     timestamps = iter([1.0, 2.0, 3.0, 4.0])
     monotonic_values = iter([10.0, 10.125, 20.0, 20.05])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
-    monkeypatch.setattr("src.core.loop.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.core.loop.time.monotonic", lambda: next(monotonic_values))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="loop")
 
     result = agent_loop(
@@ -483,8 +483,8 @@ def test_agent_loop_logs_error_response_when_provider_fails(
 ) -> None:
     timestamps = iter([1.0, 2.0])
     monotonic_values = iter([20.0, 20.05])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
-    monkeypatch.setattr("src.core.loop.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.core.loop.time.monotonic", lambda: next(monotonic_values))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="loop")
 
     with pytest.raises(LLMCallError, match="RuntimeError: provider exploded"):
@@ -507,8 +507,8 @@ def test_agent_loop_logs_keyboard_interrupt_and_advances_sequence(
 ) -> None:
     timestamps = iter([1.0, 2.0, 3.0])
     monotonic_values = iter([20.0, 20.05])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
-    monkeypatch.setattr("src.core.loop.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.core.loop.time.monotonic", lambda: next(monotonic_values))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="loop")
 
     with pytest.raises(KeyboardInterrupt, match="stopped"):

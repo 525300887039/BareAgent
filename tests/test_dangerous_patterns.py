@@ -6,7 +6,7 @@ DEFAULT 模式下 bash 命令：危险命令 → requires_confirm=True，
 改用 AUTO 模式：安全命令自动放行（False），危险命令仍需确认（True）。
 """
 
-from src.permission.guard import PermissionGuard, PermissionMode
+from bareagent.permission.guard import PermissionGuard, PermissionMode
 
 DANGEROUS_COMMANDS = [
     "rm -rf /",

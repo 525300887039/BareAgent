@@ -4,7 +4,7 @@
 改用 mgr.tasks 字典直接验证。
 """
 
-from src.planning.todo import TodoManager
+from bareagent.planning.todo import TodoManager
 
 
 def test_todo_lifecycle():

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.hooks.config import HookEntry, HooksConfig, parse_hooks_config
-from src.hooks.errors import HookConfigError
+from bareagent.hooks.config import HookEntry, HooksConfig, parse_hooks_config
+from bareagent.hooks.errors import HookConfigError
 
 
 def _wrap(entries: list[dict[str, object]]) -> dict[str, object]:

@@ -1,1 +1,0 @@
-"""BareAgent package."""

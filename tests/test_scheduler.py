@@ -4,13 +4,13 @@ from typing import Any, cast
 
 import pytest
 
-from src.concurrency.scheduler import (
+from bareagent.concurrency.scheduler import (
     MIN_INTERVAL_SEC,
     ScheduledJob,
     Scheduler,
     SchedulerError,
 )
-from src.ui.console import AgentConsole
+from bareagent.ui.console import AgentConsole
 
 
 class _FakeNotifier:
@@ -226,7 +226,7 @@ class _FakeScheduler:
 
 
 def _dispatch(text: str, scheduler: Any) -> _FakeConsole:
-    from src.main import _dispatch_loop_command
+    from bareagent.main import _dispatch_loop_command
 
     console = _FakeConsole()
     _dispatch_loop_command(

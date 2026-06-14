@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import re
 
-from src.core.handlers.subagent_send import (
+from bareagent.core.handlers.subagent_send import (
     SUBAGENT_SEND_TOOL_SCHEMA,
     run_subagent_send,
 )
-from src.permission.guard import PermissionGuard, PermissionMode
-from src.planning.agent_types import MAIN_LOOP_ONLY_TOOLS, filter_tools, resolve_agent_type
-from src.planning.subagent import run_subagent
-from src.planning.subagent_registry import (
+from bareagent.permission.guard import PermissionGuard, PermissionMode
+from bareagent.planning.agent_types import MAIN_LOOP_ONLY_TOOLS, filter_tools, resolve_agent_type
+from bareagent.planning.subagent import run_subagent
+from bareagent.planning.subagent_registry import (
     DEFAULT_MAX_RESUMABLE,
     ResumableContext,
     SubagentRegistry,
@@ -156,7 +156,7 @@ def test_send_multi_turn_same_id_stays_resumable() -> None:
 # run_subagent registration                                                   #
 # --------------------------------------------------------------------------- #
 def test_foreground_none_isolation_registers_context(monkeypatch) -> None:
-    monkeypatch.setattr("src.planning.subagent.agent_loop", lambda **_kw: "done")
+    monkeypatch.setattr("bareagent.planning.subagent.agent_loop", lambda **_kw: "done")
     reg = SubagentRegistry()
 
     result = run_subagent(
@@ -181,7 +181,7 @@ def test_foreground_none_isolation_registers_context(monkeypatch) -> None:
 
 
 def test_no_registry_does_not_register_and_has_no_footnote(monkeypatch) -> None:
-    monkeypatch.setattr("src.planning.subagent.agent_loop", lambda **_kw: "done")
+    monkeypatch.setattr("bareagent.planning.subagent.agent_loop", lambda **_kw: "done")
     # registry omitted (default None) mirrors the nested-subagent path.
     result = run_subagent(
         provider=object(),
@@ -195,9 +195,9 @@ def test_no_registry_does_not_register_and_has_no_footnote(monkeypatch) -> None:
 
 
 def test_worktree_isolation_does_not_register(monkeypatch) -> None:
-    monkeypatch.setattr("src.planning.subagent.agent_loop", lambda **_kw: "done")
+    monkeypatch.setattr("bareagent.planning.subagent.agent_loop", lambda **_kw: "done")
     # Force the fail-open "not a git repo" path so no real worktree is created.
-    monkeypatch.setattr("src.planning.subagent.is_git_repo", lambda _base: False)
+    monkeypatch.setattr("bareagent.planning.subagent.is_git_repo", lambda _base: False)
     reg = SubagentRegistry()
 
     result = run_subagent(

@@ -20,11 +20,11 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
-from src.core.loop import _tool_result
-from src.mcp.manager import ServerStatus
-from src.mcp.registry import _to_content_blocks, build_mcp_handlers
-from src.provider.anthropic import AnthropicProvider
-from src.provider.openai import OpenAIProvider
+from bareagent.core.loop import _tool_result
+from bareagent.mcp.manager import ServerStatus
+from bareagent.mcp.registry import _to_content_blocks, build_mcp_handlers
+from bareagent.provider.anthropic import AnthropicProvider
+from bareagent.provider.openai import OpenAIProvider
 
 # --- _to_content_blocks: unit coverage of every MCP content kind ------------
 
@@ -234,7 +234,7 @@ def _make_anthropic(monkeypatch) -> AnthropicProvider:
             self.messages = SimpleNamespace()
 
     monkeypatch.setattr(
-        "src.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
+        "bareagent.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
     )
     return AnthropicProvider(api_key="test", model="claude-test")
 
@@ -319,7 +319,7 @@ def test_anthropic_full_message_pipeline_with_image() -> None:
     provider = AnthropicProvider.__new__(AnthropicProvider)
     provider.client = FakeAnthropicClient()
     provider.model = "claude-test"
-    from src.provider.base import ThinkingConfig
+    from bareagent.provider.base import ThinkingConfig
 
     provider.thinking_config = ThinkingConfig()
 
@@ -373,7 +373,7 @@ def _make_openai(monkeypatch) -> OpenAIProvider:
         def __init__(self, **kwargs: Any) -> None:
             _ = kwargs
 
-    monkeypatch.setattr("src.provider.openai.openai.OpenAI", FakeOpenAIClient)
+    monkeypatch.setattr("bareagent.provider.openai.openai.OpenAI", FakeOpenAIClient)
     return OpenAIProvider(api_key="test", model="gpt-test")
 
 

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.lsp.errors import LSPError
-from src.main import _dispatch_lsp_command, _install_lsp_cleanup
+from bareagent.lsp.errors import LSPError
+from bareagent.main import _dispatch_lsp_command, _install_lsp_cleanup
 
 
 class _StubConsole:
@@ -196,7 +196,7 @@ def test_install_lsp_cleanup_registers_atexit(monkeypatch) -> None:
         registered.append(fn)
         return fn
 
-    monkeypatch.setattr("src.main.atexit.register", _fake_register)
+    monkeypatch.setattr("bareagent.main.atexit.register", _fake_register)
 
     mgr = _StubManager()
     _install_lsp_cleanup(mgr)  # type: ignore[arg-type]

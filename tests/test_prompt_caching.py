@@ -6,12 +6,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.main import _parse_cache_config, load_config
-from src.memory.token_tracker import TokenTracker, resolve_cache_multipliers
-from src.provider import factory
-from src.provider.anthropic import AnthropicProvider
-from src.provider.base import CacheConfig, ThinkingConfig
-from src.provider.openai import OpenAIProvider
+from bareagent.main import _parse_cache_config, load_config
+from bareagent.memory.token_tracker import TokenTracker, resolve_cache_multipliers
+from bareagent.provider import factory
+from bareagent.provider.anthropic import AnthropicProvider
+from bareagent.provider.base import CacheConfig, ThinkingConfig
+from bareagent.provider.openai import OpenAIProvider
 
 
 # --------------------------------------------------------------------------- #
@@ -23,7 +23,7 @@ def _make_anthropic(monkeypatch, cache_config: CacheConfig | None) -> AnthropicP
             _ = kwargs
             self.messages = SimpleNamespace()
 
-    monkeypatch.setattr("src.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient)
+    monkeypatch.setattr("bareagent.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient)
     return AnthropicProvider(api_key="test", model="claude-opus-4-8", cache_config=cache_config)
 
 
@@ -33,7 +33,7 @@ def _make_openai(monkeypatch, **kwargs) -> OpenAIProvider:
             _ = client_kwargs
             self.chat = SimpleNamespace(completions=SimpleNamespace())
 
-    monkeypatch.setattr("src.provider.openai.openai.OpenAI", FakeOpenAIClient)
+    monkeypatch.setattr("bareagent.provider.openai.openai.OpenAI", FakeOpenAIClient)
     return OpenAIProvider(api_key="test", model=kwargs.pop("model", "gpt-4o"), **kwargs)
 
 

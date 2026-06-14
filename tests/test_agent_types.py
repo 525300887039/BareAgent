@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from src.permission.guard import PermissionGuard, PermissionMode
-from src.planning.agent_types import (
+from bareagent.permission.guard import PermissionGuard, PermissionMode
+from bareagent.planning.agent_types import (
     BUILTIN_AGENT_TYPES,
     DEFAULT_AGENT_TYPE,
     AgentType,

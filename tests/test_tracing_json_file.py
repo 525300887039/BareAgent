@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from src.debug.interaction_log import InteractionLogger
-from src.tracing.json_file import JsonFileSpan, JsonFileTracer
+from bareagent.debug.interaction_log import InteractionLogger
+from bareagent.tracing.json_file import JsonFileSpan, JsonFileTracer
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -18,7 +18,7 @@ def test_json_file_tracer_delegates_log_request(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: 100.0)
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: 100.0)
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
     tracer = JsonFileTracer(logger)
 
@@ -38,7 +38,7 @@ def test_json_file_tracer_delegates_log_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([10.0, 11.0])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
     tracer = JsonFileTracer(logger)
 
@@ -102,7 +102,7 @@ def test_json_file_tracer_list_and_get_methods(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([1.0, 2.0])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
     tracer = JsonFileTracer(logger)
 
@@ -122,7 +122,7 @@ def test_json_file_tracer_subscribe_events(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     timestamps = iter([1.0, 2.0])
-    monkeypatch.setattr("src.debug.interaction_log.time.time", lambda: next(timestamps))
+    monkeypatch.setattr("bareagent.debug.interaction_log.time.time", lambda: next(timestamps))
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
     tracer = JsonFileTracer(logger)
 

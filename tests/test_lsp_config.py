@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.lsp.config import LSPConfig, parse_lsp_config
-from src.lsp.errors import LSPError
+from bareagent.lsp.config import LSPConfig, parse_lsp_config
+from bareagent.lsp.errors import LSPError
 
 
 def _wrap(servers: list[dict[str, object]], **kwargs: object) -> dict[str, object]:

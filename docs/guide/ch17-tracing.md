@@ -65,7 +65,7 @@ class Tracer(abc.ABC):
 `ProxyTracer` 是整个 tracing 系统的入口点，作为全局单例暴露：
 
 ```python
-from src.tracing import tracer
+from bareagent.tracing import tracer
 
 with tracer.trace("llm_call", {"model": "claude-sonnet-4-20250514"}) as span:
     span.set_content_tag("input", messages)
@@ -74,15 +74,15 @@ with tracer.trace("llm_call", {"model": "claude-sonnet-4-20250514"}) as span:
     span.set_tag("input_tokens", response.input_tokens)
 ```
 
-任何模块只需 `from src.tracing import tracer` 即可使用，无需关心底层后端是什么。
+任何模块只需 `from bareagent.tracing import tracer` 即可使用，无需关心底层后端是什么。
 
 ### 热替换机制
 
 `ProxyTracer` 内部持有一个 `_inner` tracer，通过 `enable_tracing()` 在运行时替换：
 
 ```python
-from src.tracing import enable_tracing
-from src.tracing.langfuse import LangfuseTracer
+from bareagent.tracing import enable_tracing
+from bareagent.tracing.langfuse import LangfuseTracer
 
 enable_tracing(LangfuseTracer(session_id="my-session"))
 ```
@@ -156,7 +156,7 @@ content_enabled = true
 ```bash
 pip install langfuse
 # 或
-pip install bareagent[langfuse]
+pip install bareagent-cli[langfuse]
 ```
 
 ### 快速开始
@@ -208,7 +208,7 @@ OpenTelemetry (OTel) 是 CNCF 的可观测性标准。通过 `OpenTelemetryTrace
 ```bash
 pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
 # 或
-pip install bareagent[otel]
+pip install bareagent-cli[otel]
 ```
 
 ### 快速开始
@@ -246,7 +246,7 @@ OTel 后端将 BareAgent 的标签映射为 span attributes：
 如果需要使用非 OTLP 的 exporter，可以在代码中手动配置：
 
 ```python
-from src.tracing.otel import OpenTelemetryTracer
+from bareagent.tracing.otel import OpenTelemetryTracer
 from opentelemetry.sdk.trace.export import ConsoleSpanExporter
 
 otel = OpenTelemetryTracer(service_name="my-agent")

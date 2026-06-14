@@ -18,9 +18,9 @@ from typing import cast
 
 import pytest
 
-from src.hooks.config import HookEntry, HooksConfig
-from src.hooks.engine import HookEngine
-from src.ui.protocol import UIProtocol
+from bareagent.hooks.config import HookEntry, HooksConfig
+from bareagent.hooks.engine import HookEngine
+from bareagent.ui.protocol import UIProtocol
 
 
 class FakeConsole:

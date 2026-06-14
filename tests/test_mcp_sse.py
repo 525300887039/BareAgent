@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.mcp._sse import parse_sse_stream
+from bareagent.mcp._sse import parse_sse_stream
 
 
 def _events(lines: list[str]) -> list[dict[str, object]]:

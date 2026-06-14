@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from src.concurrency.background import BackgroundManager
-from src.concurrency.notification import inject_notifications
-from src.core.tools import get_handlers
-from src.planning.tasks import TaskManager
+from bareagent.concurrency.background import BackgroundManager
+from bareagent.concurrency.notification import inject_notifications
+from bareagent.core.tools import get_handlers
+from bareagent.planning.tasks import TaskManager
 
 
 def test_task_manager_persists_created_tasks(tmp_path: Path) -> None:

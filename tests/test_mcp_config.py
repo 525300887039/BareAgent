@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.mcp.config import MCPConfig, parse_mcp_config
-from src.mcp.errors import MCPError
+from bareagent.mcp.config import MCPConfig, parse_mcp_config
+from bareagent.mcp.errors import MCPError
 
 
 def _wrap(servers: list[dict[str, object]], **kwargs: object) -> dict[str, object]:

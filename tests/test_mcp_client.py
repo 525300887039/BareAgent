@@ -7,17 +7,17 @@ from typing import Any
 
 import pytest
 
-from src.mcp.client import MCPClient
-from src.mcp.config import MCPServerConfig
-from src.mcp.errors import MCPCallError, MCPHandshakeError
-from src.mcp.protocol import (
+from bareagent.mcp.client import MCPClient
+from bareagent.mcp.config import MCPServerConfig
+from bareagent.mcp.errors import MCPCallError, MCPHandshakeError
+from bareagent.mcp.protocol import (
     ErrorObject,
     Notification,
     Request,
     Response,
     decode_message,
 )
-from src.mcp.transport.base import Transport
+from bareagent.mcp.transport.base import Transport
 
 
 class FakeTransport(Transport):
@@ -338,7 +338,7 @@ def test_start_filters_prompts_with_illegal_names(
 
     import logging as _logging
 
-    with caplog.at_level(_logging.WARNING, logger="src.mcp.client"):
+    with caplog.at_level(_logging.WARNING, logger="bareagent.mcp.client"):
         client.start(timeout=1.0)
 
     names = {p["name"] for p in client.list_prompts()}

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import time
 
-from src.concurrency.background import BackgroundManager
-from src.permission.guard import PermissionGuard, PermissionMode
-from src.planning.subagent import run_subagent
-from src.provider.base import BaseLLMProvider, LLMResponse
+from bareagent.concurrency.background import BackgroundManager
+from bareagent.permission.guard import PermissionGuard, PermissionMode
+from bareagent.planning.subagent import run_subagent
+from bareagent.provider.base import BaseLLMProvider, LLMResponse
 
 
 class RecordingProvider(BaseLLMProvider):
@@ -67,7 +67,7 @@ def test_run_subagent_applies_agent_type_filters_and_max_turns(monkeypatch) -> N
         captured["max_iterations"] = max_iterations
         return "planned"
 
-    monkeypatch.setattr("src.planning.subagent.agent_loop", _fake_agent_loop)
+    monkeypatch.setattr("bareagent.planning.subagent.agent_loop", _fake_agent_loop)
 
     result = run_subagent(
         provider=RecordingProvider(),
@@ -108,7 +108,7 @@ def test_run_subagent_unknown_type_falls_back_to_configured_default(
         captured["max_iterations"] = max_iterations
         return "planned"
 
-    monkeypatch.setattr("src.planning.subagent.agent_loop", _fake_agent_loop)
+    monkeypatch.setattr("bareagent.planning.subagent.agent_loop", _fake_agent_loop)
 
     result = run_subagent(
         provider=RecordingProvider(),
@@ -179,7 +179,7 @@ def test_run_subagent_background_worker_does_not_drain_shared_notifications(
         captured["bg_manager"] = bg_manager
         return "subagent done"
 
-    monkeypatch.setattr("src.planning.subagent.agent_loop", _fake_agent_loop)
+    monkeypatch.setattr("bareagent.planning.subagent.agent_loop", _fake_agent_loop)
     manager = BackgroundManager()
 
     submission = run_subagent(

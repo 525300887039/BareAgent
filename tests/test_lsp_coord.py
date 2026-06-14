@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-from src.lsp.coord import (
+from bareagent.lsp.coord import (
     document_uri_to_path,
     line_col_0_to_1,
     line_col_1_to_0,

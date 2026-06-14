@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.main import _dispatch_mcp_prompt, _parse_mcp_prompt_command
-from src.mcp.errors import MCPCallError
+from bareagent.main import _dispatch_mcp_prompt, _parse_mcp_prompt_command
+from bareagent.mcp.errors import MCPCallError
 
 
 def _make_console() -> MagicMock:
@@ -74,7 +74,7 @@ def test_parser_returns_none_for_non_mcp_prefix() -> None:
 def test_parser_skips_non_kv_tokens_with_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    with caplog.at_level(logging.WARNING, logger="src.main"):
+    with caplog.at_level(logging.WARNING, logger="bareagent.main"):
         parsed = _parse_mcp_prompt_command(
             "/mcp:fetch:summarize url=https://x.com loose depth=3"
         )
@@ -85,7 +85,7 @@ def test_parser_skips_non_kv_tokens_with_warning(
 def test_parser_skips_empty_key_token_with_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    with caplog.at_level(logging.WARNING, logger="src.main"):
+    with caplog.at_level(logging.WARNING, logger="bareagent.main"):
         parsed = _parse_mcp_prompt_command("/mcp:fetch:summarize =bad ok=yes")
     assert parsed == ("fetch", "summarize", {"ok": "yes"})
     assert any("empty key" in rec.getMessage() for rec in caplog.records)

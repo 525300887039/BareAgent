@@ -4,7 +4,7 @@ integration with ``lsp_manager``.
 
 from __future__ import annotations
 
-from src.planning.agent_types import (
+from bareagent.planning.agent_types import (
     BUILTIN_AGENT_TYPES,
     AgentType,
     filter_handlers,

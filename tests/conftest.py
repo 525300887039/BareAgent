@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from src.lsp import LSPConfig
-from src.main import (
+from bareagent.lsp import LSPConfig
+from bareagent.main import (
     Config,
     DebugConfig,
     PermissionConfig,
@@ -16,8 +16,8 @@ from src.main import (
     TracingConfig,
     UIConfig,
 )
-from src.mcp import MCPConfig
-from src.provider.base import ThinkingConfig
+from bareagent.mcp import MCPConfig
+from bareagent.provider.base import ThinkingConfig
 
 
 def make_test_config(tmp_path: Path) -> Config:

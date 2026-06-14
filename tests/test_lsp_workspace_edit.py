@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.lsp.coord import path_to_document_uri
-from src.lsp.workspace_edit import apply_text_edits, apply_workspace_edit
+from bareagent.lsp.coord import path_to_document_uri
+from bareagent.lsp.workspace_edit import apply_text_edits, apply_workspace_edit
 
 # ---------------------------------------------------------------------------
 # apply_text_edits — in-memory splicing

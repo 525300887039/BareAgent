@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from src.core import context
+from bareagent.core import context
 
 
 def test_get_system_context_uses_requested_workspace(

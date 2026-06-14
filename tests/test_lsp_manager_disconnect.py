@@ -18,10 +18,10 @@ from typing import Any
 
 import pytest
 
-from src.concurrency.background import BackgroundManager
-from src.lsp import manager as manager_module
-from src.lsp.config import LSPConfig, LSPServerConfig
-from src.lsp.manager import LanguageServerManager, ServerStatus
+from bareagent.concurrency.background import BackgroundManager
+from bareagent.lsp import manager as manager_module
+from bareagent.lsp.config import LSPConfig, LSPServerConfig
+from bareagent.lsp.manager import LanguageServerManager, ServerStatus
 
 
 class _FakeProcess:

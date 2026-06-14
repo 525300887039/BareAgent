@@ -6,8 +6,8 @@ import dataclasses
 
 import pytest
 
-from src.provider import factory
-from src.provider.presets import resolve_preset
+from bareagent.provider import factory
+from bareagent.provider.presets import resolve_preset
 from tests.conftest import make_test_config
 
 

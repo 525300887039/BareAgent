@@ -9,8 +9,8 @@ from urllib.request import urlopen
 
 import pytest
 
-from src.debug.interaction_log import InteractionLogger
-from src.debug.web_viewer import start_viewer
+from bareagent.debug.interaction_log import InteractionLogger
+from bareagent.debug.web_viewer import start_viewer
 
 
 def _read_response(url: str):

@@ -40,7 +40,7 @@ bareagent --help
 如果当前环境没有把脚本目录加入 `PATH`，也可以直接使用模块入口：
 
 ```bash
-python -m src.main --help
+python -m bareagent.main --help
 ```
 
 当前 CLI 支持的基础参数如下：
@@ -145,7 +145,7 @@ bareagent
 或：
 
 ```bash
-python -m src.main
+python -m bareagent.main
 ```
 
 启动成功后，你会看到类似输出：
