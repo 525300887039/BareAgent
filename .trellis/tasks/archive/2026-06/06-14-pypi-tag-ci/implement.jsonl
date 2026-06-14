@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "src-layout 重构要把 src/* 移成 src/bareagent/*,必须遵循仓库目录结构约定"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "改名/新增文件需遵守代码风格(含源码禁用 emoji 等)"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "importlib.resources 资源定位与 config 加载需符合错误处理/fail-open 约定"}
+{"file": ".trellis/tasks/06-14-pypi-tag-ci/research/hatch-packaging.md", "reason": "hatch-vcs + src-layout + importlib.resources 的可粘贴实现配方"}
+{"file": ".trellis/tasks/06-14-pypi-tag-ci/research/trusted-publishing-ci.md", "reason": "release.yml 的 Trusted Publishing workflow 与绑定步骤实现配方"}

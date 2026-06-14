@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "验收代码风格合规(源码禁 emoji、命名、导入整洁)"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "核对 src-layout 后目录结构符合约定、无残留 import src"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核对资源定位/config 加载的 fail-open 与错误处理"}
+{"file": ".trellis/tasks/06-14-pypi-tag-ci/research/hatch-packaging.md", "reason": "对照配方验收 pyproject/hatch-vcs/importlib.resources 实现正确"}
+{"file": ".trellis/tasks/06-14-pypi-tag-ci/research/trusted-publishing-ci.md", "reason": "对照配方验收 release.yml workflow 与权限/触发正确"}
