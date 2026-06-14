@@ -76,8 +76,7 @@ wheels = [
 ]
 
 [[package]]
-name = "bareagent"
-version = "0.1.0"
+name = "bareagent-cli"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
@@ -119,14 +118,17 @@ pdf = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.52" },
-    { name = "bareagent", extras = ["langfuse", "otel"], marker = "extra == 'all-tracing'" },
     { name = "fastembed", marker = "extra == 'embeddings'", specifier = ">=0.8" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "langfuse", marker = "extra == 'all-tracing'", specifier = ">=2.0" },
     { name = "langfuse", marker = "extra == 'langfuse'", specifier = ">=2.0" },
     { name = "multilspy", marker = "extra == 'lsp'", specifier = ">=0.0.15" },
     { name = "openai", specifier = ">=1.70" },
+    { name = "opentelemetry-api", marker = "extra == 'all-tracing'", specifier = ">=1.20" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.20" },
+    { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'all-tracing'", specifier = ">=1.20" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.20" },
+    { name = "opentelemetry-sdk", marker = "extra == 'all-tracing'", specifier = ">=1.20" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.20" },
     { name = "prompt-toolkit", specifier = ">=3.0" },
     { name = "pypdf", marker = "extra == 'pdf'", specifier = ">=4.0" },
@@ -134,7 +136,7 @@ requires-dist = [
     { name = "rich", specifier = ">=14.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.11" },
 ]
-provides-extras = ["dev", "langfuse", "otel", "all-tracing", "lsp", "pdf", "embeddings"]
+provides-extras = ["all-tracing", "dev", "embeddings", "langfuse", "lsp", "otel", "pdf"]
 
 [[package]]
 name = "cattrs"
