@@ -1238,3 +1238,37 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 ### Next Steps
 
 - None - task complete
+
+
+## Session 38: PyPI 打包 bareagent-cli + tag 触发 Trusted Publishing 自动发布
+
+**Date**: 2026-06-14
+**Task**: PyPI 打包 bareagent-cli + tag 触发 Trusted Publishing 自动发布
+**Branch**: `feat/pypi-tag-ci`
+
+### Summary
+
+把 BareAgent 改造为可正式发布的 PyPI 包并接通自动发布:src-layout(src/*→src/bareagent/,导入名 bareagent / 分发名 bareagent-cli / 命令名 bareagent);config.toml+skills 移入包内走 importlib.resources(core/config_paths.py),config.local.toml 覆盖落 CWD;新增 LICENSE(MIT)+ pyproject 全元数据;hatch-vcs 从 git tag 派生版本(tag-pattern 限 v*、no-local-version);.github/workflows/release.yml(tag→PyPI / dispatch→TestPyPI,OIDC 无 token,fetch-depth:0);docs/releasing.md + README + CLAUDE.md。ruff 通过、pytest 1112 passed、uv build+twine PASSED、wheel 无密钥泄露。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `113bc16` | (see git log) |
+| `c2b7de3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
