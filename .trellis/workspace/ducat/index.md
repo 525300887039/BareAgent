@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 38
+- **Total Sessions**: 39
 - **Last Active**: 2026-06-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1274 | Active |
+| `journal-1.md` | ~1307 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 39 | 2026-06-14 | 文档同步 src-layout 路径 + 补 PyPI 安装方式 | `2a93ece` | `main` |
 | 38 | 2026-06-14 | PyPI 打包 bareagent-cli + tag 触发 Trusted Publishing 自动发布 | `113bc16`, `c2b7de3` | `feat/pypi-tag-ci` |
 | 37 | 2026-06-08 | Workflow 后台执行 + /workflows 面板 + resume + token budget | `f5aba62` | `main` |
 | 36 | 2026-06-08 | 语义/向量记忆召回（可插拔 embedding backend + 词法回退） | `7799a0d` | `main` |

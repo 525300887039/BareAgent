@@ -1272,3 +1272,36 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 ### Next Steps
 
 - None - task complete
+
+
+## Session 39: 文档同步 src-layout 路径 + 补 PyPI 安装方式
+
+**Date**: 2026-06-14
+**Task**: 文档同步 src-layout 路径 + 补 PyPI 安装方式
+**Branch**: `main`
+
+### Summary
+
+把项目文档同步到打包/发布后的现状:README 项目结构树根 + 15 个 docs/guide 章节里的 src/<pkg> 源码路径统一改为 src/bareagent/<pkg>(机械 sed,92 处,防双重前缀);ch02 快速开始新增'从 PyPI 安装(bareagent-cli)'段并保留源码可编辑安装;README 加 PyPI 版本徽章。命令名/导入名仍为 bareagent,仅改源码路径与分发名。trellis-implement 执行 + 主循环独立复核 6 项 AC 全过,未越界改动 .py/.toml/spec/tests/node_modules。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2a93ece` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
