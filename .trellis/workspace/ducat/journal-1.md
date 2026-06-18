@@ -1340,3 +1340,37 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 ### Next Steps
 
 - None - task complete
+
+
+## Session 41: 多 provider 缓存统一抽象层: CacheEconomics + cache_mode + Gemini preset
+
+**Date**: 2026-06-19
+**Task**: 多 provider 缓存统一抽象层: CacheEconomics + cache_mode + Gemini preset
+**Branch**: `feat/cache-abstraction-layer`
+
+### Summary
+
+把缓存抽象从 Anthropic 专用收敛为诚实区分显式/自动两范式的统一层: (1) CacheEconomics 描述符(read/write mult + min_cacheable_tokens + controllable_ttl)取代 2-tuple 倍率表, resolve_cache_multipliers 留薄 wrapper 保旧测试; (2) cache_mode ClassVar(explicit/auto/none)装到 provider, /cost 据此标注; (3) Gemini 作为 OpenAI 兼容 preset 接入, 缓存读走现有 cached_tokens 路径无投机分支。cache_key 透传与 Gemini 实测验证按 ROI/无 key 排除。trellis-implement 实现 + trellis-check 验收 0 问题, 全量 1129 测试通过, ruff 干净。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4590e7c` | (see git log) |
+| `97c02f6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
