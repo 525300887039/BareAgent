@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "质量验收基线——lint/typecheck/pytest 全绿、Conventional Commits、无过度设计、源码无 emoji"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核对件3 grep handler 错误/边界处理仍符合结构化 tool error 契约，未破坏 never-raise"}

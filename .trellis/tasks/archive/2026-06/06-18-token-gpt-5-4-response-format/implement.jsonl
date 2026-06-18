@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Python 3.12+ / ruff / pytest 规范、Conventional Commits、反过度设计——三件都需新增单测且要保持极简实现；含源码禁 emoji 约束"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "结构化 tool error 契约——件3 改 grep handler 的返回/非法 output_mode 处理需遵循 never-raise 与错误返回风格"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "src/bareagent 布局与 tests/ 放置约定——三件分别改 provider/、memory/、core/handlers/ 并各自补 tests/"}
