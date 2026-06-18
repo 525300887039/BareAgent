@@ -7,10 +7,14 @@ from types import SimpleNamespace
 import pytest
 
 from bareagent.main import _parse_cache_config, load_config
-from bareagent.memory.token_tracker import TokenTracker, resolve_cache_multipliers
+from bareagent.memory.token_tracker import (
+    TokenTracker,
+    resolve_cache_economics,
+    resolve_cache_multipliers,
+)
 from bareagent.provider import factory
 from bareagent.provider.anthropic import AnthropicProvider
-from bareagent.provider.base import CacheConfig, ThinkingConfig
+from bareagent.provider.base import BaseLLMProvider, CacheConfig, ThinkingConfig
 from bareagent.provider.openai import OpenAIProvider
 
 
@@ -425,6 +429,90 @@ def test_resolve_cache_multipliers_gpt5_reads_at_tenth() -> None:
     assert resolve_cache_multipliers("gpt-5.1") == (0.1, 0.0)
     # GPT-4o stays at the 0.5x tier — the fix must not regress it.
     assert resolve_cache_multipliers("gpt-4o-mini") == (0.5, 0.0)
+
+
+# --------------------------------------------------------------------------- #
+# CacheEconomics descriptor resolution
+# --------------------------------------------------------------------------- #
+def test_resolve_cache_economics_by_family() -> None:
+    claude = resolve_cache_economics("claude-opus-4-8")
+    assert (claude.read_mult, claude.write_mult) == (0.1, 1.25)
+    assert claude.controllable_ttl is True
+
+    gpt5 = resolve_cache_economics("gpt-5-mini")
+    assert (gpt5.read_mult, gpt5.write_mult) == (0.1, 0.0)
+    assert gpt5.controllable_ttl is False
+
+    gpt4o = resolve_cache_economics("gpt-4o")
+    assert (gpt4o.read_mult, gpt4o.write_mult) == (0.5, 0.0)
+
+    deepseek = resolve_cache_economics("deepseek-chat")
+    assert (deepseek.read_mult, deepseek.write_mult) == (0.1, 0.0)
+
+    gemini = resolve_cache_economics("gemini-2.5-pro")
+    assert (gemini.read_mult, gemini.write_mult) == (0.1, 0.0)
+    assert gemini.controllable_ttl is False
+
+
+def test_resolve_cache_economics_unknown_falls_back_conservatively() -> None:
+    eco = resolve_cache_economics("mystery-model")
+    assert (eco.read_mult, eco.write_mult) == (0.1, 1.25)
+    assert eco.controllable_ttl is False
+
+
+def test_resolve_cache_multipliers_is_thin_wrapper_over_economics() -> None:
+    for model in ("claude-opus-4-8", "gpt-5", "gpt-4o", "deepseek-chat", "gemini-2.5-pro"):
+        eco = resolve_cache_economics(model)
+        assert resolve_cache_multipliers(model) == (eco.read_mult, eco.write_mult)
+
+
+# --------------------------------------------------------------------------- #
+# Provider cache_mode capability
+# --------------------------------------------------------------------------- #
+def test_base_provider_cache_mode_defaults_to_none() -> None:
+    assert BaseLLMProvider.cache_mode == "none"
+
+
+def test_anthropic_provider_cache_mode_is_explicit(monkeypatch) -> None:
+    provider = _make_anthropic(monkeypatch, cache_config=None)
+    assert provider.cache_mode == "explicit"
+    assert AnthropicProvider.cache_mode == "explicit"
+
+
+def test_openai_provider_cache_mode_is_auto(monkeypatch) -> None:
+    provider = _make_openai(monkeypatch)
+    assert provider.cache_mode == "auto"
+    assert OpenAIProvider.cache_mode == "auto"
+
+
+# --------------------------------------------------------------------------- #
+# Gemini usage normalization (OpenAI-compat, standard cached_tokens path)
+# --------------------------------------------------------------------------- #
+def test_gemini_parse_response_normalizes_cached_tokens(monkeypatch) -> None:
+    # Gemini's OpenAI-compat endpoint is expected to report cache hits via the
+    # standard prompt_tokens_details.cached_tokens path, so the existing
+    # _extract_cached_tokens normalization should catch it with no Gemini-
+    # specific branch.
+    provider = _make_openai(monkeypatch, model="gemini-2.5-pro")
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                finish_reason="stop",
+                message=SimpleNamespace(content="hi", tool_calls=None),
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=20,
+            completion_tokens=7,
+            prompt_tokens_details=SimpleNamespace(cached_tokens=12),
+        ),
+    )
+
+    parsed = provider._parse_response(response)
+
+    assert parsed.input_tokens == 8
+    assert parsed.cache_read_input_tokens == 12
+    assert parsed.cache_creation_input_tokens == 0
 
 
 def test_record_accumulates_cache_tokens() -> None:

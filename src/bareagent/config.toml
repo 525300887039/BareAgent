@@ -9,6 +9,11 @@
 name = "openai"
 model = "gpt-4.1"
 api_key_env = "OPENAI_API_KEY"
+# Gemini 走 OpenAI 兼容端点（preset 已内置 base_url，无需手填）：
+#   name = "gemini"
+#   model = "gemini-2.5-pro"   # 或 gemini-2.5-flash
+#   api_key_env = "GEMINI_API_KEY"
+# 自动前缀缓存，命中走标准 cached_tokens 用量；缓存模式见 /cost 的 "Cache mode" 行。
 
 [permission]
 mode = "default"

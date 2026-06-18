@@ -83,6 +83,10 @@ def _lift_image_blocks(
 
 
 class OpenAIProvider(BaseLLMProvider):
+    # OpenAI / DeepSeek / Gemini-compat cache prefixes automatically; there is no
+    # request-side knob, only read-only cache-hit usage to normalize.
+    cache_mode = "auto"
+
     def __init__(
         self,
         api_key: str,
@@ -667,6 +671,9 @@ class OpenAIProvider(BaseLLMProvider):
         ``prompt_tokens - cached``):
           - OpenAI:   ``usage.prompt_tokens_details.cached_tokens``
           - DeepSeek: ``usage.prompt_cache_hit_tokens``
+        Gemini's OpenAI-compat endpoint is expected to reuse the standard
+        ``cached_tokens`` path (unverified — no test key), so no Gemini-specific
+        branch is added speculatively.
         Defensive against missing fields / dict-vs-attr shapes — absent fields
         degrade to 0 (no behavior change from the pre-caching baseline).
         """

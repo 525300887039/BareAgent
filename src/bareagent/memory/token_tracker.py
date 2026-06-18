@@ -17,45 +17,85 @@ DEFAULT_PRICES: dict[str, tuple[float, float]] = {
     "claude-haiku-4": (1.0, 5.0),
 }
 
-# Prompt-cache price multipliers relative to a model's base *input* price,
-# keyed by model-family prefix (longest-prefix matched like DEFAULT_PRICES):
-# ``(read_multiplier, write_multiplier)``.
-#   - Anthropic: read 0.1x, write 1.25x (5m TTL; 1h's 2x is approximated as
-#     1.25x — see PRD Out of Scope, estimate-only).
+# Per-model cache *economics* descriptor — a richer view of how a model family
+# bills prompt caching, keyed by model-family prefix (longest-prefix matched like
+# DEFAULT_PRICES). Replaces the older 2-tuple ``DEFAULT_CACHE_MULTIPLIERS``:
+#   - ``read_mult`` / ``write_mult``: cache read / write price relative to the
+#     model's base *input* price (only these two feed the /cost estimate today).
+#   - ``min_cacheable_tokens``: the shortest prefix a provider will actually
+#     cache (descriptive metadata — not yet enforced anywhere).
+#   - ``controllable_ttl``: whether the caller can pick the cache TTL (Anthropic's
+#     explicit 5m/1h knob) vs auto-caching providers with no TTL control.
+# Coverage:
+#   - Anthropic (claude): read 0.1x, write 1.25x (5m TTL; 1h's 2x is approximated
+#     as 1.25x — see PRD Out of Scope, estimate-only), TTL controllable.
 #   - OpenAI GPT-4o / o1 / o3 / o4: cached input billed ~0.5x, no write premium.
 #   - OpenAI GPT-5 family: cached input billed ~0.1x (90% off) — the longer
 #     ``gpt-5`` prefix wins over ``gpt`` via longest-prefix match.
 #   - DeepSeek: cache hits ~0.1x, no separate write premium.
+#   - Gemini (OpenAI-compat): cache reads ~0.1x, no write premium.
 # Discounts drift with provider versions; the authoritative source is the
 # normalized usage fields on each response — these multipliers only feed the
 # /cost estimate. Unknown models fall back to the Anthropic-like default
-# (0.1, 1.25); cache tokens are only ever populated for providers covered here,
-# so the fallback is a conservative estimate, never load-bearing.
-DEFAULT_CACHE_MULTIPLIERS: dict[str, tuple[float, float]] = {
-    "claude": (0.1, 1.25),
-    "gpt": (0.5, 0.0),
-    "gpt-5": (0.1, 0.0),
-    "o1": (0.5, 0.0),
-    "o3": (0.5, 0.0),
-    "o4": (0.5, 0.0),
-    "deepseek": (0.1, 0.0),
+# (read 0.1, write 1.25); cache tokens are only ever populated for providers
+# covered here, so the fallback is a conservative estimate, never load-bearing.
+
+
+@dataclass(frozen=True, slots=True)
+class CacheEconomics:
+    """How a model family bills prompt caching.
+
+    ``read_mult`` / ``write_mult`` are relative to the model's base *input*
+    price and are the only fields the /cost estimate consumes today.
+    ``min_cacheable_tokens`` and ``controllable_ttl`` are descriptive metadata
+    (smallest cacheable prefix; whether the caller controls the TTL).
+    """
+
+    read_mult: float
+    write_mult: float
+    min_cacheable_tokens: int = 0
+    controllable_ttl: bool = False
+
+
+DEFAULT_CACHE_ECONOMICS: dict[str, CacheEconomics] = {
+    "claude": CacheEconomics(0.1, 1.25, min_cacheable_tokens=1024, controllable_ttl=True),
+    "gpt": CacheEconomics(0.5, 0.0, min_cacheable_tokens=1024),
+    "gpt-5": CacheEconomics(0.1, 0.0, min_cacheable_tokens=1024),
+    "o1": CacheEconomics(0.5, 0.0, min_cacheable_tokens=1024),
+    "o3": CacheEconomics(0.5, 0.0, min_cacheable_tokens=1024),
+    "o4": CacheEconomics(0.5, 0.0, min_cacheable_tokens=1024),
+    "deepseek": CacheEconomics(0.1, 0.0),
+    "gemini": CacheEconomics(0.1, 0.0, min_cacheable_tokens=2048),
 }
-_FALLBACK_CACHE_MULTIPLIERS: tuple[float, float] = (0.1, 1.25)
+# Conservative Anthropic-like fallback (write premium retained so an unknown
+# family is never under-billed for cache writes).
+_FALLBACK_CACHE_ECONOMICS: CacheEconomics = CacheEconomics(0.1, 1.25)
 
 # Built-in prices are expressed per *million* tokens; convert to per-token.
 _PER_MILLION = 1_000_000
 
 
+def resolve_cache_economics(model: str) -> CacheEconomics:
+    """Resolve the :class:`CacheEconomics` descriptor for *model*.
+
+    Longest-prefix match against :data:`DEFAULT_CACHE_ECONOMICS` (so ``gpt-5``
+    wins over ``gpt``), falling back to a conservative Anthropic-like default
+    when the family is unknown.
+    """
+    prefix = _longest_prefix_match(model, DEFAULT_CACHE_ECONOMICS.keys())
+    if prefix is not None:
+        return DEFAULT_CACHE_ECONOMICS[prefix]
+    return _FALLBACK_CACHE_ECONOMICS
+
+
 def resolve_cache_multipliers(model: str) -> tuple[float, float]:
     """Resolve ``(read_mult, write_mult)`` cache price multipliers for *model*.
 
-    Longest-prefix match against :data:`DEFAULT_CACHE_MULTIPLIERS`, falling back
-    to an Anthropic-like default when the family is unknown.
+    Thin wrapper over :func:`resolve_cache_economics` kept for backward
+    compatibility with callers/tests that only need the two multipliers.
     """
-    prefix = _longest_prefix_match(model, DEFAULT_CACHE_MULTIPLIERS.keys())
-    if prefix is not None:
-        return DEFAULT_CACHE_MULTIPLIERS[prefix]
-    return _FALLBACK_CACHE_MULTIPLIERS
+    eco = resolve_cache_economics(model)
+    return (eco.read_mult, eco.write_mult)
 
 
 def resolve_price(
@@ -195,7 +235,8 @@ class TokenTracker:
                 continue
             any_priced = True
             input_price, output_price = price
-            read_mult, write_mult = resolve_cache_multipliers(model)
+            eco = resolve_cache_economics(model)
+            read_mult, write_mult = eco.read_mult, eco.write_mult
             total += usage.input_tokens / _PER_MILLION * input_price
             total += usage.output_tokens / _PER_MILLION * output_price
             total += usage.cache_read_tokens / _PER_MILLION * input_price * read_mult
@@ -238,7 +279,8 @@ class TokenTracker:
                     cost_label = " (no price)"
                 else:
                     input_price, output_price = price
-                    read_mult, write_mult = resolve_cache_multipliers(model)
+                    eco = resolve_cache_economics(model)
+                    read_mult, write_mult = eco.read_mult, eco.write_mult
                     model_cost = (
                         usage.input_tokens / _PER_MILLION * input_price
                         + usage.output_tokens / _PER_MILLION * output_price

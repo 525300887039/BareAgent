@@ -3892,7 +3892,12 @@ def _run_stdio_session(
                 )
                 continue
             if text == "/cost":
-                ui_console.print_status(token_tracker.summary(config.cost.prices))
+                summary = token_tracker.summary(config.cost.prices)
+                # Surface the active provider's caching paradigm only when caching
+                # actually happened, so non-cached sessions keep the compact output.
+                if token_tracker.total_cache_read or token_tracker.total_cache_write:
+                    summary = f"{summary}\n  Cache mode: {provider.cache_mode}"
+                ui_console.print_status(summary)
                 continue
             if text == "/goal" or text.startswith("/goal "):
                 goal_cmd = parse_goal_command(

@@ -4,7 +4,7 @@ import json
 from abc import ABC, abstractmethod
 from collections.abc import Generator
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from bareagent.core.fileutil import stringify
 
@@ -106,6 +106,16 @@ class LLMResponse:
 
 
 class BaseLLMProvider(ABC):
+    # Prompt-caching capability of this provider channel:
+    #   "explicit" -- caller places cache breakpoints (Anthropic cache_control).
+    #   "auto"     -- provider caches prefixes automatically; no request knob,
+    #                 usage is read-only (OpenAI / DeepSeek / Gemini-compat).
+    #   "none"     -- no prompt caching.
+    # A provider-level fact (not model-level), surfaced by /cost when there is
+    # cache activity. token_tracker deliberately does NOT consume this -- it only
+    # sees model strings, so coupling it to provider identity is avoided.
+    cache_mode: ClassVar[Literal["explicit", "auto", "none"]] = "none"
+
     @abstractmethod
     def create(
         self,

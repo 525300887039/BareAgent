@@ -64,6 +64,16 @@ PROVIDER_PRESETS: dict[str, ProviderPreset] = {
         default_api_key_env="ZHIPUAI_API_KEY",
         candidate_models=("glm-4.6", "glm-4-plus"),
     ),
+    "gemini": ProviderPreset(
+        id="gemini",
+        display_name="Gemini (Google)",
+        route="openai",
+        # Gemini's OpenAI-compatible endpoint; cache-hit usage is reported via
+        # the standard prompt_tokens_details.cached_tokens path (unverified).
+        default_base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        default_api_key_env="GEMINI_API_KEY",
+        candidate_models=("gemini-2.5-pro", "gemini-2.5-flash"),
+    ),
 }
 
 

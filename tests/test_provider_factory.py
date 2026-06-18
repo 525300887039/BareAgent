@@ -112,6 +112,26 @@ def test_create_provider_routes_qwen_to_openai_with_preset_base_url(
     assert provider.kwargs["base_url"] == resolve_preset("qwen").default_base_url
 
 
+def test_create_provider_routes_gemini_to_openai_with_compat_base_url(
+    tmp_path, patched_factory
+) -> None:
+    config = _with_provider(
+        make_test_config(tmp_path),
+        name="gemini",
+        model="gemini-2.5-pro",
+        api_key="key",
+        base_url=None,
+    )
+
+    provider = factory.create_provider(config)
+
+    assert isinstance(provider, FakeOpenAIProvider)
+    assert provider.kwargs["base_url"] == resolve_preset("gemini").default_base_url
+    assert provider.kwargs["base_url"] == (
+        "https://generativelanguage.googleapis.com/v1beta/openai/"
+    )
+
+
 def test_create_provider_routes_glm_to_openai_with_preset_base_url(
     tmp_path, patched_factory
 ) -> None:
