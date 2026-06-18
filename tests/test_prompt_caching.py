@@ -171,11 +171,96 @@ def test_caching_skips_breakpoint_on_trailing_thinking_block(monkeypatch) -> Non
 
     params = provider._build_request_params(messages, _TOOLS)
 
-    # A thinking block must not carry cache_control; the conversation breakpoint
-    # is skipped, leaving only tools + system (== 2).
+    # A thinking block must not carry cache_control: the moving breakpoint is
+    # skipped on the trailing thinking block. The anchor instead lands on the
+    # earlier real user turn, so we keep 3 breakpoints (tools + system + anchor)
+    # rather than losing the conversation segment entirely.
     last_blocks = params["messages"][-1]["content"]
     assert all("cache_control" not in block for block in last_blocks)
-    assert _count_cache_controls(params) == 2
+    anchor_block = params["messages"][0]["content"][-1]
+    assert anchor_block["text"] == "hi"
+    assert anchor_block["cache_control"] == {"type": "ephemeral"}
+    assert _count_cache_controls(params) == 3
+
+
+def _agentic_messages() -> list[dict]:
+    """A real user turn followed by a multi-tool agentic burst."""
+    return [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "do X"},
+        {
+            "role": "assistant",
+            "content": [{"type": "tool_use", "id": "t1", "name": "bash", "input": {}}],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "out1"}],
+        },
+        {
+            "role": "assistant",
+            "content": [{"type": "tool_use", "id": "t2", "name": "bash", "input": {}}],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "t2", "content": "out2"}],
+        },
+    ]
+
+
+def test_caching_anchor_lands_on_real_user_turn_plus_moving(monkeypatch) -> None:
+    provider = _make_anthropic(monkeypatch, cache_config=CacheConfig(enabled=True))
+
+    params = provider._build_request_params(_agentic_messages(), _TOOLS)
+
+    msgs = params["messages"]
+    # Anchor sits on the real user request ("do X"), NOT on the tool_result
+    # user-role messages — so it stays byte-stable through the tool burst.
+    anchor_block = msgs[0]["content"][-1]
+    assert anchor_block["text"] == "do X"
+    assert anchor_block["cache_control"] == {"type": "ephemeral"}
+    # Moving breakpoint on the latest tool_result.
+    last_block = msgs[-1]["content"][-1]
+    assert last_block["type"] == "tool_result"
+    assert last_block["cache_control"] == {"type": "ephemeral"}
+    # The intervening tool_result envelope carries no breakpoint.
+    assert all("cache_control" not in block for block in msgs[2]["content"])
+    # tools + system + anchor + moving == 4 (Anthropic's max, fully used).
+    assert _count_cache_controls(params) == 4
+
+
+def test_caching_single_user_turn_collapses_to_one_conversation_breakpoint(monkeypatch) -> None:
+    provider = _make_anthropic(monkeypatch, cache_config=CacheConfig(enabled=True))
+
+    params = provider._build_request_params(
+        [{"role": "system", "content": "sys"}, {"role": "user", "content": "only turn"}],
+        _TOOLS,
+    )
+
+    # No earlier user turn to anchor on -> tools + system + moving == 3.
+    assert _count_cache_controls(params) == 3
+
+
+def test_caching_anchor_skips_tool_result_only_history(monkeypatch) -> None:
+    # When every earlier user message is a tool_result envelope (no real user
+    # turn before the last message), no anchor is added — just the moving one.
+    provider = _make_anthropic(monkeypatch, cache_config=CacheConfig(enabled=True))
+    messages = [
+        {"role": "system", "content": "sys"},
+        {
+            "role": "assistant",
+            "content": [{"type": "tool_use", "id": "t1", "name": "bash", "input": {}}],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "out1"}],
+        },
+    ]
+
+    params = provider._build_request_params(messages, _TOOLS)
+
+    # tools + system + moving (on the tool_result) == 3; no real user turn to anchor.
+    assert _count_cache_controls(params) == 3
+    assert params["messages"][-1]["content"][-1]["cache_control"] == {"type": "ephemeral"}
 
 
 def test_caching_does_not_mutate_caller_messages(monkeypatch) -> None:
@@ -330,6 +415,16 @@ def test_resolve_cache_multipliers_by_family() -> None:
     assert resolve_cache_multipliers("deepseek-chat") == (0.1, 0.0)
     # Unknown family -> conservative Anthropic-like fallback.
     assert resolve_cache_multipliers("mystery-model") == (0.1, 1.25)
+
+
+def test_resolve_cache_multipliers_gpt5_reads_at_tenth() -> None:
+    # GPT-5 cached input is ~0.1x (90% off); the longer "gpt-5" prefix must win
+    # over "gpt" (0.5x) via longest-prefix match.
+    assert resolve_cache_multipliers("gpt-5") == (0.1, 0.0)
+    assert resolve_cache_multipliers("gpt-5-mini") == (0.1, 0.0)
+    assert resolve_cache_multipliers("gpt-5.1") == (0.1, 0.0)
+    # GPT-4o stays at the 0.5x tier — the fix must not regress it.
+    assert resolve_cache_multipliers("gpt-4o-mini") == (0.5, 0.0)
 
 
 def test_record_accumulates_cache_tokens() -> None:

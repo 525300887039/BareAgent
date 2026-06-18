@@ -21,6 +21,23 @@ _PROTECTED_KEYS = frozenset({"model", "messages", "tools", "system", "thinking",
 _CACHEABLE_BLOCK_TYPES = frozenset({"text", "image", "tool_use", "tool_result", "document"})
 
 
+def _is_real_user_turn(content: Any) -> bool:
+    """True when a user message is genuine input, not a tool_result envelope.
+
+    Tool results are sent back as ``user``-role messages, so they cannot be
+    treated as conversation-level boundaries. A real user turn is a plain string
+    or a block list carrying no ``tool_result`` block.
+    """
+    if isinstance(content, str):
+        return True
+    if isinstance(content, list):
+        return not any(
+            isinstance(block, dict) and block.get("type") == "tool_result"
+            for block in content
+        )
+    return False
+
+
 class AnthropicProvider(BaseLLMProvider):
     def __init__(
         self,
@@ -137,21 +154,43 @@ class AnthropicProvider(BaseLLMProvider):
         messages: list[dict[str, Any]],
         cache_control: dict[str, Any],
     ) -> None:
-        """Attach a ``cache_control`` breakpoint to the last message's last block.
+        """Attach up to two ``cache_control`` breakpoints to the conversation.
 
-        This is the moving incremental-caching breakpoint: each request only
-        appends a couple of blocks since the previous one, so the 20-block
-        lookback reliably finds the prior cached prefix. The message dicts here
-        are freshly built by ``_convert_messages`` (not shared with the caller),
-        so in-place mutation is safe.
+        1. A *moving* breakpoint on the last message's last cacheable block —
+           the incremental-caching breakpoint that advances every request so
+           the 20-block lookback finds the prior cached prefix.
+        2. An *anchor* breakpoint on the most recent real user turn (a user
+           message carrying no tool_result block) before the last message.
+           During an agentic burst — one assistant turn emitting many parallel
+           tool calls, or a long tool loop — the last real user turn does not
+           move, so its cached prefix stays byte-identical across requests and
+           covers the bulk of the history even when a single request appends
+           >20 blocks and the moving breakpoint's lookback can't reach the
+           previous entry.
+
+        Together with the tools + system breakpoints this uses all 4 of
+        Anthropic's breakpoint slots. The message dicts here are freshly built
+        by ``_convert_messages`` (not shared with the caller), so in-place
+        mutation is safe. Collapses to a single breakpoint when there is no
+        distinct earlier user turn (e.g. the opening request).
         """
         if not messages:
             return
-        last = messages[-1]
-        content = last.get("content")
+        self._attach_breakpoint(messages[-1], cache_control)
+        anchor_index = self._find_anchor_index(messages)
+        if anchor_index is not None:
+            self._attach_breakpoint(messages[anchor_index], cache_control)
+
+    @staticmethod
+    def _attach_breakpoint(
+        message: dict[str, Any],
+        cache_control: dict[str, Any],
+    ) -> None:
+        """Attach a breakpoint to *message*'s last cacheable block, in place."""
+        content = message.get("content")
         if isinstance(content, str):
             if content:
-                last["content"] = [
+                message["content"] = [
                     {"type": "text", "text": content, "cache_control": cache_control}
                 ]
             return
@@ -159,6 +198,22 @@ class AnthropicProvider(BaseLLMProvider):
             last_block = content[-1]
             if last_block.get("type") in _CACHEABLE_BLOCK_TYPES:
                 content[-1] = {**last_block, "cache_control": cache_control}
+
+    @staticmethod
+    def _find_anchor_index(messages: list[dict[str, Any]]) -> int | None:
+        """Index of the most recent real user turn before the last message.
+
+        Walks backward from the second-to-last message; returns ``None`` when no
+        real user turn (see :func:`_is_real_user_turn`) exists distinct from the
+        last message, so the caller falls back to a single moving breakpoint.
+        """
+        for index in range(len(messages) - 2, -1, -1):
+            message = messages[index]
+            if message.get("role") != "user":
+                continue
+            if _is_real_user_turn(message.get("content")):
+                return index
+        return None
 
     def _convert_messages(
         self,

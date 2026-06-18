@@ -22,14 +22,19 @@ DEFAULT_PRICES: dict[str, tuple[float, float]] = {
 # ``(read_multiplier, write_multiplier)``.
 #   - Anthropic: read 0.1x, write 1.25x (5m TTL; 1h's 2x is approximated as
 #     1.25x — see PRD Out of Scope, estimate-only).
-#   - OpenAI: cached input billed ~0.5x, no separate write premium.
+#   - OpenAI GPT-4o / o1 / o3 / o4: cached input billed ~0.5x, no write premium.
+#   - OpenAI GPT-5 family: cached input billed ~0.1x (90% off) — the longer
+#     ``gpt-5`` prefix wins over ``gpt`` via longest-prefix match.
 #   - DeepSeek: cache hits ~0.1x, no separate write premium.
-# Unknown models fall back to the Anthropic-like default (0.1, 1.25); cache
-# tokens are only ever populated for providers covered here, so the fallback is
-# a conservative estimate, never load-bearing.
+# Discounts drift with provider versions; the authoritative source is the
+# normalized usage fields on each response — these multipliers only feed the
+# /cost estimate. Unknown models fall back to the Anthropic-like default
+# (0.1, 1.25); cache tokens are only ever populated for providers covered here,
+# so the fallback is a conservative estimate, never load-bearing.
 DEFAULT_CACHE_MULTIPLIERS: dict[str, tuple[float, float]] = {
     "claude": (0.1, 1.25),
     "gpt": (0.5, 0.0),
+    "gpt-5": (0.1, 0.0),
     "o1": (0.5, 0.0),
     "o3": (0.5, 0.0),
     "o4": (0.5, 0.0),
