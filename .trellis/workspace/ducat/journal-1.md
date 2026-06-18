@@ -1305,3 +1305,38 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 ### Next Steps
 
 - None - task complete
+
+
+## Session 40: 省 token 三件套: GPT-5 缓存倍率 + anchor 断点 + grep output_mode
+
+**Date**: 2026-06-19
+**Task**: 省 token 三件套: GPT-5 缓存倍率 + anchor 断点 + grep output_mode
+**Branch**: `feat/token-saving-trio`
+
+### Summary
+
+调研主流 code agent(Claude Code/Cline/Aider/Reasonix 等)的省 token 与前缀缓存做法后,落地三件低风险改进: (1) token_tracker 加 gpt-5 (0.1,0.0) 倍率修正 /cost 对 GPT-5 缓存读 5x 高估; (2) anthropic.py 对话区加 anchor 断点(最近真实 user 轮次,排除 tool_result 伪 user 消息)与移动断点共用满 4 slot, 兜住单 turn 追加 >20 block 致 20-block 回溯失效; (3) grep 加 output_mode content|files_with_matches|count 三档。全量 1121 测试通过, ruff 干净, CLAUDE.md 同步。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `49cd034` | (see git log) |
+| `f6d27e6` | (see git log) |
+| `38d7ff0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
