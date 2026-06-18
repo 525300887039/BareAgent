@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "质量验收基线——lint/typecheck/pytest 全绿、无过度设计、源码无 emoji、Conventional Commits"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "核对 cache_mode/CacheEconomics/Gemini preset 落点符合 provider/ 与 memory/ 分层约定，未越界"}
