@@ -380,6 +380,17 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "description": "Optional glob filter for files.",
                 "default": "",
             },
+            "output_mode": {
+                "type": "string",
+                "enum": ["content", "files_with_matches", "count"],
+                "description": (
+                    "How much to return. 'content' (default): file:line:text per "
+                    "match. 'files_with_matches': only the matching file paths — "
+                    "the cheapest, use when you just need which files match. "
+                    "'count': file:count per file."
+                ),
+                "default": "content",
+            },
         },
         ["pattern"],
     ),
