@@ -1374,3 +1374,38 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 ### Next Steps
 
 - None - task complete
+
+
+## Session 42: 语义代码检索 code_search: 复用 embedding 层 + boot 门控工具
+
+**Date**: 2026-06-20
+**Task**: 语义代码检索 code_search: 复用 embedding 层 + boot 门控工具
+**Branch**: `feat/semantic-code-search`
+
+### Summary
+
+本任务实现在会话开始时已存在于工作树(早于本上下文窗口),经核查完整且忠于收敛的 PRD: code_index.py 纯模块(固定行窗分块 + 懒增量 content-hash 缓存 + cosine top-K + fail-open, 复用 embedding 层)、code_search 工具(DEFERRED + SAFE_TOOLS + 只读子代理可见)经 boot 门控仅在 embedder 可用时注册(不暴露死工具), embedder 复用 [memory] 配置并与 semantic_recall 解耦, 缓存独立落 code-index.json。范围只做语义检索 A, repo map B 留后续。trellis-check 独立 adversarial 验收 0 问题, 全量 1155 passed/47 deselected, ruff 干净。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `826d25a` | (see git log) |
+| `92534f0` | (see git log) |
+| `078528f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

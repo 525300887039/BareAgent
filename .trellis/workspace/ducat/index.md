@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 41
-- **Last Active**: 2026-06-19
+- **Total Sessions**: 42
+- **Last Active**: 2026-06-20
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1376 | Active |
+| `journal-1.md` | ~1411 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 42 | 2026-06-20 | 语义代码检索 code_search: 复用 embedding 层 + boot 门控工具 | `826d25a`, `92534f0`, `078528f` | `feat/semantic-code-search` |
 | 41 | 2026-06-19 | 多 provider 缓存统一抽象层: CacheEconomics + cache_mode + Gemini preset | `4590e7c`, `97c02f6` | `feat/cache-abstraction-layer` |
 | 40 | 2026-06-19 | 省 token 三件套: GPT-5 缓存倍率 + anchor 断点 + grep output_mode | `49cd034`, `f6d27e6`, `38d7ff0` | `feat/token-saving-trio` |
 | 39 | 2026-06-14 | 文档同步 src-layout 路径 + 补 PyPI 安装方式 | `2a93ece` | `main` |
