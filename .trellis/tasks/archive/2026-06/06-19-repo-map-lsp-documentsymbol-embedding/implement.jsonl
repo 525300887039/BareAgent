@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "纯模块可单测、反过度设计、ruff/pytest、源码禁 emoji——code_index.py 是注入式纯逻辑模块 + 工具接线，需轻实现并补单测"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "决定 code_index.py 落 core/ 还是 memory/、工具/handler/config 接线位置、tests/ 放置——与现有 embedding.py/persistent.py/tools.py 分层对齐"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "fail-open 与结构化 tool error 契约——无 embedder/embed 抛错/解码失败须友好降级不崩，对齐 embedding.py 的 fail-open 范式"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "代码索引缓存是持久化 JSON（原子写、项目目录 slug 作用域、identity/hash 失效）——须对齐 EmbeddingCache 与会话/项目作用域约定"}
