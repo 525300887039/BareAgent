@@ -9,6 +9,7 @@ from typing import Any
 from bareagent.concurrency.background import BackgroundManager
 from bareagent.core.fileutil import generate_random_id
 from bareagent.core.handlers.bash import run_bash
+from bareagent.core.handlers.code_search import run_code_search
 from bareagent.core.handlers.file_edit import run_edit
 from bareagent.core.handlers.file_read import run_read
 from bareagent.core.handlers.file_write import run_write
@@ -27,6 +28,7 @@ from bareagent.lsp.tools import (
 )
 from bareagent.mcp.manager import MCPManager
 from bareagent.mcp.registry import build_mcp_handlers, build_mcp_tool_schemas
+from bareagent.memory.code_index import CodeIndex
 from bareagent.memory.persistent import MemoryManager
 from bareagent.planning.skills import (
     LOAD_SKILL_TOOL_SCHEMAS,
@@ -69,6 +71,7 @@ DEFERRED_TOOLS = {
     "lsp_references",
     "lsp_diagnostics",
     "memory",
+    "code_search",
 }
 
 
@@ -265,6 +268,38 @@ MEMORY_TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
         ["command"],
+    ),
+]
+CODE_SEARCH_TOOL_SCHEMAS: list[dict[str, Any]] = [
+    _schema(
+        "code_search",
+        (
+            "Semantic search over the codebase: describe what you are looking for "
+            "in natural language (a concept, behavior, or feature) and get back the "
+            "most relevant code chunks by embedding similarity. Use this to locate "
+            "where a feature lives without reading whole files or guessing grep "
+            "patterns -- it saves tokens versus blind reads and complements `grep` "
+            "(use grep for an exact symbol/string, code_search for an idea). Returns "
+            "the top matches as 'file:start-end' headers with the code body."
+        ),
+        {
+            "query": {
+                "type": "string",
+                "description": "What to look for, in natural language.",
+            },
+            "k": {
+                "type": "integer",
+                "description": "Maximum number of code chunks to return.",
+                "default": 8,
+                "minimum": 1,
+            },
+            "path": {
+                "type": "string",
+                "description": "Optional subtree to scope the search to.",
+                "default": ".",
+            },
+        },
+        ["query"],
     ),
 ]
 DEFERRED_TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -608,6 +643,7 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
 def get_tools(
     mcp_manager: MCPManager | None = None,
     lsp_manager: LanguageServerManager | None = None,
+    code_index: CodeIndex | None = None,
 ) -> list[dict[str, Any]]:
     # LSP tool schemas are already part of TOOL_SCHEMAS (registered via
     # ``DEFERRED_TOOL_SCHEMAS``) so they show up even when no manager is
@@ -616,6 +652,12 @@ def get_tools(
     # symmetry with ``mcp_manager`` and so callers can supply both in one go.
     _ = lsp_manager
     schemas = list(TOOL_SCHEMAS)
+    # ``code_search`` is boot-gated: its schema is only exposed when a usable
+    # embedder produced a CodeIndex (mirroring how MCP/LSP tools only appear when
+    # configured). Without one, the tool would be a dead handler, so it is hidden
+    # entirely rather than returning an "unavailable" stub.
+    if code_index is not None:
+        schemas.extend(CODE_SEARCH_TOOL_SCHEMAS)
     if mcp_manager is not None:
         schemas.extend(build_mcp_tool_schemas(mcp_manager))
     return schemas
@@ -641,6 +683,7 @@ def get_handlers(
     memory_manager: MemoryManager | None = None,
     subagent_retry_policy: Any = None,
     subagent_registry: Any = None,
+    code_index: CodeIndex | None = None,
 ) -> dict[str, Callable[..., Any]]:
     # Hybrid auto-diagnostics hook: built once per ``get_handlers`` call so
     # edit_file / write_file share the same closure. ``None`` when LSP isn't
@@ -689,7 +732,17 @@ def get_handlers(
     else:
         handlers["memory"] = _memory_disabled_handler
 
-    available_tools = tools or get_tools(mcp_manager, lsp_manager)
+    # ``code_search`` handler only when a CodeIndex (built from a usable
+    # embedder) is wired. The schema is withheld in the same case (see
+    # get_tools), so the LLM never sees a tool it cannot call.
+    if code_index is not None:
+        handlers["code_search"] = partial(
+            run_code_search,
+            index=code_index,
+            workspace=workspace,
+        )
+
+    available_tools = tools or get_tools(mcp_manager, lsp_manager, code_index)
     if provider is None:
         handlers["subagent"] = (
             lambda task, agent_type=None, run_in_background=False, isolation="none": (

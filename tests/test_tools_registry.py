@@ -36,9 +36,18 @@ def test_deferred_tools_exist():
     )
 
 
+# Boot-gated DEFERRED tools: present in DEFERRED_TOOLS but only injected into
+# get_tools() when their backing dependency is wired (e.g. code_search needs a
+# usable embedder / CodeIndex), mirroring how MCP/LSP tools only appear when
+# configured. They are excluded from the "always in schema" invariant below.
+_BOOT_GATED_DEFERRED_TOOLS = {"code_search"}
+
+
 def test_all_tools_in_schema():
-    """所有 BASE_TOOLS 和 DEFERRED_TOOLS 都应出现在 get_tools() schema 中"""
+    """所有 BASE_TOOLS 和（非 boot-gated 的）DEFERRED_TOOLS 都应出现在 get_tools() schema 中"""
     schemas = get_tools()
     names = {s["name"] for s in schemas}
-    all_expected = BASE_TOOLS | DEFERRED_TOOLS
+    all_expected = (BASE_TOOLS | DEFERRED_TOOLS) - _BOOT_GATED_DEFERRED_TOOLS
     assert all_expected.issubset(names), f"Missing from schema: {all_expected - names}"
+    # Boot-gated tools stay hidden until their dependency is wired.
+    assert _BOOT_GATED_DEFERRED_TOOLS.isdisjoint(names)

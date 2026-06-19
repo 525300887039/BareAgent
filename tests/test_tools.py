@@ -353,3 +353,87 @@ def test_importing_tools_does_not_parse_tasks_file_on_module_import(
     reloaded = importlib.reload(tools_module)
 
     assert "task_list" in reloaded.TOOL_HANDLERS
+
+
+# -- code_search tool surface (task 06-19) ---------------------------------
+
+
+class _FakeCodeEmbedder:
+    identity = "fake:v1"
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return [[1.0 if "authenticate" in t.lower() else 0.0, 0.1] for t in texts]
+
+
+def _make_code_index(workspace: Path):
+    from bareagent.memory.code_index import CodeIndex
+
+    return CodeIndex(
+        workspace,
+        embedder=_FakeCodeEmbedder(),
+        cache_path=workspace / ".code-index.json",
+    )
+
+
+def test_code_search_is_in_deferred_and_safe_not_in_readonly_blacklist() -> None:
+    from bareagent.core.tools import DEFERRED_TOOLS
+    from bareagent.permission.guard import PermissionGuard
+    from bareagent.planning.agent_types import _READ_ONLY_DEFAULTS
+
+    assert "code_search" in DEFERRED_TOOLS
+    assert "code_search" in PermissionGuard.SAFE_TOOLS
+    # Like grep, code_search is read-only and must NOT be denied to the
+    # read-only sub-agent types (explore / plan / code-review).
+    assert "code_search" not in _READ_ONLY_DEFAULTS["disallowed_tools"]
+
+
+def test_code_search_schema_gated_on_code_index() -> None:
+    # Without a CodeIndex the tool is withheld (no dead tool exposed).
+    names_off = {t["name"] for t in get_tools()}
+    assert "code_search" not in names_off
+
+
+def test_code_search_schema_present_when_code_index_wired(tmp_path: Path) -> None:
+    index = _make_code_index(tmp_path)
+    schema = next(t for t in get_tools(code_index=index) if t["name"] == "code_search")
+    properties = schema["parameters"]["properties"]
+    assert "query" in properties
+    assert "k" in properties
+    assert "path" in properties
+
+
+def test_code_search_explore_subagent_sees_the_tool(tmp_path: Path) -> None:
+    from bareagent.planning.agent_types import filter_tools, resolve_agent_type
+
+    index = _make_code_index(tmp_path)
+    tools = get_tools(code_index=index)
+    explore = resolve_agent_type("explore")
+    visible = {t["name"] for t in filter_tools(tools, explore)}
+    # Read-only agents keep code_search (same as grep); but not write tools.
+    assert "code_search" in visible
+    assert "write_file" not in visible
+
+
+def test_code_search_handler_returns_formatted_hits(tmp_path: Path) -> None:
+    (tmp_path / "auth.py").write_text(
+        "def authenticate(user):\n    return user\n", encoding="utf-8"
+    )
+    index = _make_code_index(tmp_path)
+    handlers = get_handlers(tmp_path, code_index=index)
+    assert "code_search" in handlers
+    result = handlers["code_search"](query="how to authenticate a user", k=5)
+    assert "auth.py:1-2" in result
+    assert "def authenticate" in result
+
+
+def test_code_search_handler_absent_without_index(tmp_path: Path) -> None:
+    handlers = get_handlers(tmp_path)
+    assert "code_search" not in handlers
+
+
+def test_code_search_handler_no_results_points_at_grep(tmp_path: Path) -> None:
+    # Empty workspace -> no chunks -> friendly note steering to grep.
+    index = _make_code_index(tmp_path)
+    handlers = get_handlers(tmp_path, code_index=index)
+    result = handlers["code_search"](query="nonexistent thing", k=5)
+    assert "grep" in result.lower()

@@ -302,3 +302,22 @@ response_timeout = 60.0
 # 自认领的 task 仍逐个无状态执行。关掉则回退到逐请求无状态的旧行为。
 # 走 env 覆盖 BAREAGENT_TEAM_MEMORY_ENABLED，boot 固化 -> restart-required。
 memory_enabled = true
+
+[code_search]
+# 语义代码检索（task 06-19-repo-map-lsp-documentsymbol-embedding）：code_search 工具按
+# 自然语言描述（一个概念/行为/特性）用 embedding 相似度召回最相关的代码块，省 token、
+# 比盲读整文件/反复 grep 更准，与 grep 互补（grep 找精确符号/字符串、code_search 找想法）。
+# 分块 = 固定行窗（语言无关、零解析器依赖）；索引 = 首次调用懒构建 + 内容 hash 增量 embed +
+# 余弦 top-K；缓存独立落项目目录（~/.bareagent/projects/<slug>/code-index.json）。
+# embedder 复用 [memory] 的 embedding 配置（backend/model/base_url/key），与 semantic_recall
+# 开关解耦——只要能建出 embedder 就可用。enabled 仅决定是否「可用」；boot 检测不到可用 embedder
+# 时工具仍不暴露（仿 MCP/LSP「配好才出现」），LLM 不会看到死工具。读操作，不弹权限确认。
+# 走 env 覆盖 BAREAGENT_CODE_SEARCH_ENABLED，boot 固化 -> restart-required。
+enabled = true
+# 默认返回的代码块数（per-call k 覆盖）。
+k = 8
+# 固定行窗分块：每块 chunk_lines 行、相邻块重叠 chunk_overlap 行。
+chunk_lines = 50
+chunk_overlap = 10
+# 超过该字节数的文件跳过（同 grep 策略）。
+max_file_bytes = 1048576

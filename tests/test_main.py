@@ -116,6 +116,107 @@ def test_load_config_reads_provider_wire_api(tmp_path: Path) -> None:
     assert config.provider.wire_api == "responses"
 
 
+def test_parse_code_search_config_defaults_and_overrides() -> None:
+    from bareagent.main import _parse_code_search_config
+
+    defaults = _parse_code_search_config({})
+    assert defaults.enabled is True
+    assert defaults.k == 8
+    assert defaults.chunk_lines == 50
+    assert defaults.chunk_overlap == 10
+    assert defaults.max_file_bytes == 1_048_576
+
+    custom = _parse_code_search_config(
+        {
+            "enabled": False,
+            "k": 12,
+            "chunk_lines": 80,
+            "chunk_overlap": 0,
+            "max_file_bytes": 2048,
+        }
+    )
+    assert custom.enabled is False
+    assert custom.k == 12
+    assert custom.chunk_lines == 80
+    assert custom.chunk_overlap == 0
+    assert custom.max_file_bytes == 2048
+
+
+def test_parse_code_search_config_falls_back_on_bad_values() -> None:
+    from bareagent.main import _parse_code_search_config
+
+    cfg = _parse_code_search_config(
+        {"k": "nope", "chunk_lines": -5, "chunk_overlap": -1, "max_file_bytes": 0}
+    )
+    # Malformed / out-of-range values fall back to defaults; never crashes boot.
+    assert cfg.k == 8
+    assert cfg.chunk_lines == 50
+    assert cfg.chunk_overlap == 10
+    assert cfg.max_file_bytes == 1_048_576
+
+
+def test_parse_code_search_config_env_override(monkeypatch) -> None:
+    from bareagent.main import _parse_code_search_config
+
+    monkeypatch.setenv("BAREAGENT_CODE_SEARCH_ENABLED", "false")
+    cfg = _parse_code_search_config({"enabled": True})
+    assert cfg.enabled is False
+
+
+def test_build_code_index_none_without_embedder(tmp_path: Path, monkeypatch) -> None:
+    from bareagent.main import _build_code_index
+
+    config = make_test_config(tmp_path)
+    monkeypatch.setattr(
+        main_module, "_build_embedder_from_memory_config", lambda _cfg: None
+    )
+    console = AgentConsole(Console(file=StringIO()))
+    # No usable embedder -> no index -> the tool is withheld (boot gate).
+    assert _build_code_index(config, tmp_path, console) is None
+
+
+def test_build_code_index_built_with_embedder_independent_of_semantic_recall(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from bareagent.main import _build_code_index
+
+    class _FakeEmbedder:
+        identity = "fake:v1"
+
+        def embed(self, texts):
+            return [[0.0] for _ in texts]
+
+    config = make_test_config(tmp_path)
+    # semantic_recall stays off; code search builds its own embedder regardless.
+    assert config.memory.semantic_recall is False
+    monkeypatch.setattr(
+        main_module, "_build_embedder_from_memory_config", lambda _cfg: _FakeEmbedder()
+    )
+    console = AgentConsole(Console(file=StringIO()))
+    index = _build_code_index(config, tmp_path, console)
+    assert index is not None
+
+
+def test_build_code_index_none_when_disabled(tmp_path: Path, monkeypatch) -> None:
+    from dataclasses import replace
+
+    from bareagent.main import _build_code_index
+
+    base = make_test_config(tmp_path)
+    config = replace(base, code_search=replace(base.code_search, enabled=False))
+    called = False
+
+    def _spy(_cfg):  # must not even attempt to build an embedder when disabled
+        nonlocal called
+        called = True
+        return object()
+
+    monkeypatch.setattr(main_module, "_build_embedder_from_memory_config", _spy)
+    console = AgentConsole(Console(file=StringIO()))
+    assert _build_code_index(config, tmp_path, console) is None
+    assert called is False
+
+
 def test_load_config_reads_subagent_settings(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(

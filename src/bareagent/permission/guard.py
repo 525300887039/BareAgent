@@ -45,6 +45,9 @@ class PermissionGuard:
         "team_list",
         "web_fetch",
         "web_search",
+        # code_search is read-only semantic retrieval (like grep): it embeds and
+        # ranks files but never mutates anything, so prompting would be noise.
+        "code_search",
         # Memory is sandboxed to its own directory (never user code) and is
         # agent bookkeeping; prompting on every recall/save would be noise.
         # Read-only isolation for sub-agents is handled at the AgentType layer

@@ -87,13 +87,15 @@ from bareagent.lsp import (
 )
 from bareagent.mcp import MCPCallError, MCPConfig, MCPError, MCPManager, parse_mcp_config
 from bareagent.mcp.registry import _flatten_content as _mcp_flatten_content
+from bareagent.memory.code_index import CodeIndex
 from bareagent.memory.compact import Compactor
 from bareagent.memory.conversation_io import parse_import, render_markdown, to_export_json
-from bareagent.memory.embedding import build_embedder
+from bareagent.memory.embedding import Embedder, build_embedder
 from bareagent.memory.persistent import (
     MemoryManager,
     build_forget_instruction,
     build_remember_instruction,
+    default_memory_root,
     resolve_memory_root,
 )
 from bareagent.memory.token_tracker import TokenTracker
@@ -217,6 +219,29 @@ class MemoryConfig:
 
 
 @dataclass(slots=True)
+class CodeSearchConfig:
+    # Semantic code search (task 06-19-repo-map-lsp-documentsymbol-embedding):
+    # the ``code_search`` tool embeds the codebase into fixed line windows and
+    # ranks them against a natural-language query. The embedder is reused from
+    # the ``[memory]`` embedding config (backend/model/base_url/key), decoupled
+    # from the ``semantic_recall`` toggle -- code search builds its own embedder
+    # whenever one is available. ``enabled`` only gates whether the tool is
+    # *eligible*; the tool is still withheld at boot when no usable embedder can
+    # be built (mirroring how MCP/LSP tools only appear when configured), so the
+    # LLM never sees a dead tool. All fields are baked in at boot ->
+    # restart-required. Honors ``BAREAGENT_CODE_SEARCH_ENABLED``.
+    enabled: bool = True
+    # Default number of chunks returned (a per-call ``k`` overrides this).
+    k: int = 8
+    # Fixed line-window chunking: ``chunk_lines`` per window with
+    # ``chunk_overlap`` lines of overlap (language-agnostic, no parser).
+    chunk_lines: int = 50
+    chunk_overlap: int = 10
+    # Files larger than this (bytes) are skipped, same policy as grep.
+    max_file_bytes: int = 1_048_576
+
+
+@dataclass(slots=True)
 class CostConfig:
     # Per-model price overrides keyed by model id. Each entry is a
     # ``{"input": <usd-per-million>, "output": <usd-per-million>}`` dict that
@@ -327,6 +352,7 @@ class Config:
     goal: GoalConfig = field(default_factory=GoalConfig)
     workflow: WorkflowConfig = field(default_factory=WorkflowConfig)
     team: TeamConfig = field(default_factory=TeamConfig)
+    code_search: CodeSearchConfig = field(default_factory=CodeSearchConfig)
 
 
 # Dotted config paths that ``/reload`` can hot-apply to live runtime objects.
@@ -804,6 +830,48 @@ def _parse_team_config(team_raw: dict) -> TeamConfig:
     )
 
 
+def _parse_code_search_config(raw: dict) -> CodeSearchConfig:
+    """Parse the ``[code_search]`` config section (defensive, never crashes boot).
+
+    ``enabled`` honors ``BAREAGENT_CODE_SEARCH_ENABLED`` (mirrors retry / cache /
+    workflow / team ``enabled`` knobs). ``k`` / ``chunk_lines`` / ``chunk_overlap``
+    / ``max_file_bytes`` are config-only positive ints; a missing / malformed /
+    out-of-range value falls back to its default. The embedder is reused from
+    ``[memory]`` -- no embedder fields here.
+    """
+    defaults = CodeSearchConfig()
+
+    def _positive_int(key: str, fallback: int) -> int:
+        try:
+            value = int(raw.get(key, fallback))
+        except (TypeError, ValueError):
+            return fallback
+        return value if value > 0 else fallback
+
+    def _non_negative_int(key: str, fallback: int) -> int:
+        try:
+            value = int(raw.get(key, fallback))
+        except (TypeError, ValueError):
+            return fallback
+        return value if value >= 0 else fallback
+
+    try:
+        enabled = _resolve_bool(
+            bool(raw.get("enabled", defaults.enabled)),
+            "BAREAGENT_CODE_SEARCH_ENABLED",
+        )
+    except (TypeError, ValueError):
+        enabled = defaults.enabled
+
+    return CodeSearchConfig(
+        enabled=enabled,
+        k=_positive_int("k", defaults.k),
+        chunk_lines=_positive_int("chunk_lines", defaults.chunk_lines),
+        chunk_overlap=_non_negative_int("chunk_overlap", defaults.chunk_overlap),
+        max_file_bytes=_positive_int("max_file_bytes", defaults.max_file_bytes),
+    )
+
+
 def _build_goal_provider(
     config: Config,
     session_provider: BaseLLMProvider,
@@ -1015,6 +1083,11 @@ def load_config(
     team_raw = raw_config.get("team", {})
     team_config = _parse_team_config(team_raw if isinstance(team_raw, dict) else {})
 
+    code_search_raw = raw_config.get("code_search", {})
+    code_search_config = _parse_code_search_config(
+        code_search_raw if isinstance(code_search_raw, dict) else {}
+    )
+
     memory_raw = raw_config.get("memory", {})
     memory_config = MemoryConfig(
         enabled=_resolve_bool(
@@ -1064,6 +1137,7 @@ def load_config(
         goal=goal_config,
         workflow=workflow_config,
         team=team_config,
+        code_search=code_search_config,
     )
 
 
@@ -1110,42 +1184,93 @@ def _build_memory_manager(
         return None
 
 
-def _build_memory_embedder(config: Config, ui_console: AgentConsole):
-    """Build the semantic-recall embedder, or None (fail-open to lexical recall).
+def _build_embedder_from_memory_config(config: Config) -> Embedder | None:
+    """Build an embedder from the ``[memory]`` embedding config (or None).
 
-    Off unless ``[memory] semantic_recall`` is set. The openai backend's base_url
-    / api_key fall back to the session provider's when unset; ``build_embedder``
-    returns None on any failure (missing fastembed extra, missing key, unknown
-    backend) so recall silently degrades to lexical.
+    Shared by semantic memory recall and semantic code search so both reuse the
+    same backend/model/base_url/key. Decoupled from the ``semantic_recall``
+    toggle: that gate lives in the caller, not here. The openai backend's
+    base_url / api_key fall back to the session provider's when unset;
+    ``build_embedder`` returns None on any failure (missing fastembed extra,
+    missing key, unknown backend) so callers can fail open.
     """
     memory = config.memory
-    if not memory.semantic_recall:
-        return None
     backend = (memory.embedding_backend or "openai").strip().lower()
     if backend == "openai":
         api_key = memory.embedding_api_key
         if not api_key:
             # _resolve_api_key raises when the provider config has no key at
-            # all; semantic recall is fail-open, so swallow that and let
+            # all; embedding is fail-open, so swallow that and let
             # build_embedder degrade to None rather than crash boot.
             try:
                 api_key = _resolve_api_key(config.provider)
             except ValueError:
                 api_key = ""
-        embedder = build_embedder(
+        return build_embedder(
             "openai",
             memory.embedding_model,
             base_url=memory.embedding_base_url or config.provider.base_url or None,
             api_key=api_key,
         )
-    else:
-        embedder = build_embedder(backend, memory.embedding_model)
+    return build_embedder(backend, memory.embedding_model)
+
+
+def _build_memory_embedder(config: Config, ui_console: AgentConsole):
+    """Build the semantic-recall embedder, or None (fail-open to lexical recall).
+
+    Off unless ``[memory] semantic_recall`` is set. Delegates construction to
+    :func:`_build_embedder_from_memory_config`; ``build_embedder`` returns None on
+    any failure so recall silently degrades to lexical.
+    """
+    if not config.memory.semantic_recall:
+        return None
+    embedder = _build_embedder_from_memory_config(config)
     if embedder is None:
         ui_console.print_status(
             "Semantic recall requested but the embedding backend is unavailable; "
             "using lexical recall."
         )
     return embedder
+
+
+def _build_code_index(
+    config: Config,
+    workspace_path: Path,
+    ui_console: AgentConsole,
+) -> CodeIndex | None:
+    """Build the semantic code-search index, or None when no embedder is usable.
+
+    Gated by ``[code_search] enabled``; the embedder is reused from the
+    ``[memory]`` embedding config (independent of ``semantic_recall``). When no
+    usable embedder can be built the index is None, and the boot wiring then
+    withholds the ``code_search`` tool entirely (no dead tool exposed). The
+    chunk-vector cache lives in the per-project memory home, in its own file so
+    it never collides with the memory recall cache.
+    """
+    cs = config.code_search
+    if not cs.enabled:
+        return None
+    embedder = _build_embedder_from_memory_config(config)
+    if embedder is None:
+        return None
+    # Cache alongside the per-project memory home (derive_memory_slug), in a
+    # distinct file from the memory recall cache (.embedding-cache.json).
+    cache_root = default_memory_root(workspace_path).parent
+    try:
+        cache_root.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # Fall back to the workspace so a missing home dir never blocks boot.
+        cache_root = workspace_path
+    cache_path = cache_root / "code-index.json"
+    ui_console.print_status("Semantic code search enabled (code_search tool available).")
+    return CodeIndex(
+        workspace_path,
+        embedder=embedder,
+        cache_path=cache_path,
+        chunk_lines=cs.chunk_lines,
+        chunk_overlap=cs.chunk_overlap,
+        max_file_bytes=cs.max_file_bytes,
+    )
 
 
 def _memory_context(memory_manager: MemoryManager | None) -> str:
@@ -1764,6 +1889,7 @@ def _build_handlers(
     memory_manager: MemoryManager | None = None,
     system_prompt_override: str | None = None,
     subagent_registry: SubagentRegistry | None = None,
+    code_index: CodeIndex | None = None,
 ) -> dict[str, Callable[..., Any]]:
     system_prompt = system_prompt_override or _extract_system_prompt(messages)
     team_handlers = _make_team_handlers(
@@ -1799,6 +1925,7 @@ def _build_handlers(
         memory_manager=memory_manager,
         subagent_retry_policy=_build_retry_policy(config.retry),
         subagent_registry=subagent_registry,
+        code_index=code_index,
     )
 
 
@@ -3496,6 +3623,11 @@ def _run_stdio_session(
     skillgen_config = _build_skillgen_config(config.skills)
     skill_generator = SkillGenerator(skillgen_config) if skillgen_config.enabled else None
     memory_manager = _build_memory_manager(config, workspace_path, ui_console)
+    # Semantic code search (task 06-19): build a CodeIndex only when a usable
+    # embedder can be constructed. None -> the code_search tool is withheld
+    # everywhere below (get_tools / get_handlers both gate on it), so no dead
+    # tool is exposed. Reused by sub-agents too (it joins the base ``tools``).
+    code_index = _build_code_index(config, workspace_path, ui_console)
     message_bus, main_mailbox_cursor = _switch_session_mailbox(
         workspace_path,
         session_id,
@@ -3535,7 +3667,7 @@ def _run_stdio_session(
     )
     lsp_manager.start_all()
     _install_lsp_cleanup(lsp_manager)
-    tools = get_tools(mcp_manager, lsp_manager)
+    tools = get_tools(mcp_manager, lsp_manager, code_index)
     permission = _build_permission_guard(config)
     _install_stdio_permission_prompt(permission, ui_console)
     read_fn = _build_stdio_read_fn(workspace_path, permission)
@@ -3579,6 +3711,7 @@ def _run_stdio_session(
         lsp_manager=lsp_manager,
         memory_manager=memory_manager,
         subagent_registry=subagent_registry,
+        code_index=code_index,
     )
 
     # Plan-mode workflow: exit_plan_mode is a main-loop-only tool. ``tools`` stays
@@ -3718,6 +3851,7 @@ def _run_stdio_session(
                     lsp_manager=lsp_manager,
                     memory_manager=memory_manager,
                     subagent_registry=subagent_registry,
+                    code_index=code_index,
                 )
                 _install_plan_handler(handlers, plan_approval)
                 install_workflow_handler(handlers)
@@ -3748,6 +3882,7 @@ def _run_stdio_session(
                     lsp_manager=lsp_manager,
                     memory_manager=memory_manager,
                     subagent_registry=subagent_registry,
+                    code_index=code_index,
                 )
                 _install_plan_handler(handlers, plan_approval)
                 install_workflow_handler(handlers)
@@ -3808,6 +3943,7 @@ def _run_stdio_session(
                     lsp_manager=lsp_manager,
                     memory_manager=memory_manager,
                     subagent_registry=subagent_registry,
+                    code_index=code_index,
                 )
                 _install_plan_handler(handlers, plan_approval)
                 install_workflow_handler(handlers)
@@ -3881,6 +4017,7 @@ def _run_stdio_session(
                     lsp_manager=lsp_manager,
                     memory_manager=memory_manager,
                     subagent_registry=subagent_registry,
+                    code_index=code_index,
                 )
                 _install_plan_handler(handlers, plan_approval)
                 install_workflow_handler(handlers)
