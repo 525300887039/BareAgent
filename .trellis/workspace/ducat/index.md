@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 43
+- **Total Sessions**: 44
 - **Last Active**: 2026-06-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1448 | Active |
+| `journal-1.md` | ~1482 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 44 | 2026-06-20 | CI 可见性：pre-push 本地闸 + main 变红通知 | `e09ace3`, `c4846c2` | `feat/ci-visibility` |
 | 43 | 2026-06-20 | Repo Map: 符号骨架 + 结构全景工具 | `328413a`, `e1430cb`, `108df47`, `b2fa3d8`, `6b38bf9` | `feat/repo-map` |
 | 42 | 2026-06-20 | 语义代码检索 code_search: 复用 embedding 层 + boot 门控工具 | `826d25a`, `92534f0`, `078528f` | `feat/semantic-code-search` |
 | 41 | 2026-06-19 | 多 provider 缓存统一抽象层: CacheEconomics + cache_mode + Gemini preset | `4590e7c`, `97c02f6` | `feat/cache-abstraction-layer` |

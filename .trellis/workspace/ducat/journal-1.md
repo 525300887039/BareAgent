@@ -1446,3 +1446,37 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 ### Next Steps
 
 - None - task complete
+
+
+## Session 44: CI 可见性：pre-push 本地闸 + main 变红通知
+
+**Date**: 2026-06-20
+**Task**: CI 可见性：pre-push 本地闸 + main 变红通知
+**Branch**: `feat/ci-visibility`
+
+### Summary
+
+给 BareAgent 加 CI 可见性双防线，防 main 再次长期变红无人察觉。走完整 trellis 流程（建 task → brainstorm 敲定 MVP → 实现 → trellis-check → 提交 → finish-work）。决策不强制 PR（保留直推 main 习惯）。(1) push 前本地闸：scripts/ci-check.sh 跑 CI 同款 uv run ruff + uv run pytest（铁律 uv run 非 python -m pytest，后者前插 cwd 掩盖 sys.path 差异=本次红一周的元凶），uv 缺失 fail-closed；.githooks/pre-push 调脚本拦失败 + 跳过旋钮 BAREAGENT_PREPUSH_SKIP=1/--no-verify；scripts/setup-hooks.sh 设 core.hooksPath。(2) 服务端兜底：ci.yml 加 notify job 调 scripts/ci_notify.py，纯函数 decide_action(CREATE/COMMENT/CLOSE/NOOP) 注入式可单测，main 失败开/复用 ci-failure issue、恢复自动关。跨平台硬化：.gitattributes 窄范围钉 *.sh+hook 为 LF（防 autocrlf 注入 \r 破 Linux CI），脚本入库 100755。tests/test_ci_visibility.py = decide_action 10 参数化 + 防回归静态断言。本机验证 bash scripts/ci-check.sh=1213 passed/47 deselected/exit 0。CLAUDE.md 加 CI 可见性小节。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e09ace3` | (see git log) |
+| `c4846c2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
