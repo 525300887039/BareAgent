@@ -1514,3 +1514,37 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 ### Next Steps
 
 - None - task complete
+
+
+## Session 46: CI windows-latest matrix：覆盖开发主力平台
+
+**Date**: 2026-06-21
+**Task**: CI windows-latest matrix：覆盖开发主力平台
+**Branch**: `main`
+
+### Summary
+
+推荐 #2 落地：把 ci.yml 的 test job 改成 OS 矩阵 [ubuntu-latest, windows-latest] + fail-fast: false，runs-on ${{ matrix.os }}，在 CI 也覆盖开发主力 Windows（main 红一周的根因正属平台差异类）。走完整 trellis 流程。设计：ruff 加 if: runner.os=='Linux' 只跑一次；notify 的 needs:[test,socket] 不改——matrix 的 needs.test.result 聚合两 OS（任一 leg 失败即 failure），windows 失败自动并入 main 变红通知，零额外接线；socket job 维持仅 ubuntu（Windows loopback flake）。决策：阻塞为目标 + 分支 PR 验证 + triage（真 bug 修 / 平台特异 skipif / 失控退 continue-on-error）。验证：PR #3 上 windows leg 干净 runner 一次过、连续两次绿（windows 1218 passed/10 skipped、ubuntu 1216 passed/12 skipped，平台 skipif 差异正常，selected 都 1228），零 triage；合 main 后四 job（test×2 OS + socket + notify）全绿、notify NOOP（conclusions=[test:success,socket:success]，matrix 聚合正确）。guard 加断言 matrix 含 windows-latest+ubuntu-latest+fail-fast:false。另：本会话先用方案 A 推送了用户的 trellis 0.6.3 升级 commit（4c519a5）到 origin 以保 PR 干净。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e5eedaf` | (see git log) |
+| `e8ed899` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
