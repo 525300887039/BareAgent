@@ -276,6 +276,25 @@ ruff check --fix src tests          # 自动修复
 ruff format src tests               # 格式化
 ```
 
+### 本地 CI 闸（pre-push hook）
+
+仓库自带一个 push 前的本地检查闸，跑的就是 CI 同款命令（`uv run ruff check src tests` + `uv run pytest`），
+在代码推上去变红之前先在本地拦下来。**用 `uv run` 而非 `python -m pytest`**——后者会把当前目录前插到
+`sys.path`，掩盖只有 CI 裸 `uv run pytest` 才暴露的导入差异。
+
+```bash
+# 一次性启用（committed hook 不会自动生效，每个新 clone 装一次）
+bash scripts/setup-hooks.sh        # 等价于 git config core.hooksPath .githooks
+
+# 手动跑一遍 CI 同款检查
+bash scripts/ci-check.sh
+
+# 临时跳过本地闸（例如只推 journal）
+BAREAGENT_PREPUSH_SKIP=1 git push  # 或 git push --no-verify
+```
+
+万一本地闸被绕过、main 仍变红，CI 会自动开一个 `ci-failure` issue 跟踪，恢复后自动关闭。
+
 提交信息遵循 Conventional Commits：`Fix:`、`Feat:`、`Refactor:`、`Test:`、`Docs:`
 
 ---

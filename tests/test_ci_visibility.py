@@ -1,0 +1,90 @@
+"""Guard the CI-visibility setup against regression.
+
+Two kinds of checks:
+1. Unit tests for the pure ``decide_action`` decision table in ``scripts/ci_notify.py``.
+2. Static assertions that the CI config keeps the properties that prevent the
+   June 2026 "main red for a week" incident from recurring -- chiefly that CI and
+   the local gate run the faithful ``uv run pytest`` form (never ``python -m pytest``,
+   which prepends cwd to sys.path and masks import failures).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from scripts.ci_notify import Action, decide_action
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+# --- decide_action decision table -------------------------------------------------
+
+@pytest.mark.parametrize(
+    ("open_count", "conclusion", "expected"),
+    [
+        (0, "failure", Action.CREATE),
+        (1, "failure", Action.COMMENT),
+        (3, "failure", Action.COMMENT),
+        (0, "success", Action.NOOP),
+        (1, "success", Action.CLOSE),
+        (2, "success", Action.CLOSE),
+        (0, "cancelled", Action.NOOP),
+        (1, "cancelled", Action.NOOP),
+        (1, "skipped", Action.NOOP),
+        (0, "weird-unknown", Action.NOOP),
+    ],
+)
+def test_decide_action_table(open_count: int, conclusion: str, expected: Action) -> None:
+    assert decide_action(open_count, conclusion) is expected
+
+
+# --- static anti-regression guards ------------------------------------------------
+
+def _read(relpath: str) -> str:
+    return (REPO_ROOT / relpath).read_text(encoding="utf-8")
+
+
+def _command_lines(text: str) -> str:
+    """Drop comment lines so guards check what runs, not explanatory prose.
+
+    Both YAML and shell use ``#`` for comments; the scripts intentionally *mention*
+    ``python -m pytest`` in a comment explaining why it is forbidden.
+    """
+    return "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+
+
+def test_ci_workflow_runs_faithful_uv_run_pytest() -> None:
+    ci = _read(".github/workflows/ci.yml")
+    assert "uv run pytest" in ci
+    # `python -m pytest` prepends cwd to sys.path and would re-mask the import bug.
+    assert "python -m pytest" not in _command_lines(ci)
+
+
+def test_ci_check_script_runs_faithful_uv_run_pytest() -> None:
+    script = _read("scripts/ci-check.sh")
+    assert "uv run pytest" in script
+    assert "uv run ruff check src tests" in script
+    assert "python -m pytest" not in _command_lines(script)
+
+
+def test_ci_workflow_has_notify_job() -> None:
+    ci = _read(".github/workflows/ci.yml")
+    assert "notify:" in ci
+    assert "issues: write" in ci
+    assert "ci_notify.py" in ci
+    assert "refs/heads/main" in ci
+
+
+def test_pre_push_hook_present_and_wired() -> None:
+    hook = _read(".githooks/pre-push")
+    assert "scripts/ci-check.sh" in hook
+    # Bypass knob must stay documented in the hook itself.
+    assert "BAREAGENT_PREPUSH_SKIP" in hook
+
+
+def test_pyproject_keeps_pythonpath_root() -> None:
+    # The actual root-cause fix: without this, `uv run pytest` can't import tests.conftest.
+    pyproject = _read("pyproject.toml")
+    assert 'pythonpath = ["."]' in pyproject

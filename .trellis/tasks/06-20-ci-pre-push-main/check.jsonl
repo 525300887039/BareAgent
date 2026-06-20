@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "校验 ruff 干净、pytest 新增测试、Conventional Commits 大写前缀、禁 emoji、避免过度设计"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "校验 ci-check.sh fail-closed、ci_notify.py 决策逻辑纯函数可单测、不吞错"}

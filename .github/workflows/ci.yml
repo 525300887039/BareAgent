@@ -27,3 +27,24 @@ jobs:
 
       - name: Test (pytest)
         run: uv run pytest
+
+  notify:
+    name: Track main status
+    needs: test
+    # Only on pushes to main, regardless of whether `test` passed or failed, so
+    # we can both open the tracking issue on red and close it on recovery.
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Open / close the CI-failure tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/ci_notify.py \
+            --conclusion "${{ needs.test.result }}" \
+            --sha "${{ github.sha }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

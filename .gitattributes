@@ -1,0 +1,6 @@
+# Shell scripts and the git hook must stay LF so they run under bash on Linux CI
+# and git-bash on Windows. With core.autocrlf=true a CRLF working copy injects a
+# stray $'\r' that breaks the shebang and command lines. Scope is intentionally
+# narrow (no tree-wide `text=auto`) to avoid renormalization churn.
+*.sh text eol=lf
+.githooks/pre-push text eol=lf

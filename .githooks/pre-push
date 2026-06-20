@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Pre-push gate: run the CI-equivalent checks before a push so failures surface
+# locally instead of turning main red. Activated by scripts/setup-hooks.sh
+# (git config core.hooksPath .githooks).
+#
+# Bypass: BAREAGENT_PREPUSH_SKIP=1 git push   or   git push --no-verify
+set -euo pipefail
+
+if [ "${BAREAGENT_PREPUSH_SKIP:-}" = "1" ]; then
+    echo "[pre-push] BAREAGENT_PREPUSH_SKIP=1 -- skipping CI-equivalent checks."
+    exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+
+echo "[pre-push] Running CI-equivalent checks (ruff + uv run pytest)..."
+echo "[pre-push] Skip with BAREAGENT_PREPUSH_SKIP=1 or git push --no-verify."
+exec bash "$repo_root/scripts/ci-check.sh"
