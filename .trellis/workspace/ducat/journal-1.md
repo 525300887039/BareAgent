@@ -1409,3 +1409,40 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 ### Next Steps
 
 - None - task complete
+
+
+## Session 43: Repo Map: 符号骨架 + 结构全景工具
+
+**Date**: 2026-06-20
+**Task**: Repo Map: 符号骨架 + 结构全景工具
+**Branch**: `feat/repo-map`
+
+### Summary
+
+实现 repo_map 按需工具：tree-sitter 抽取整库类/函数真实签名骨架 + 手写幂迭代 PageRank（偏向最近读/改文件的自动会话偏置）+ token 预算二分。纯核心/抽取层/会话层分层可单测，boot 门控（无 [repo-map] extra 不暴露工具），fail-open。关键实现取舍：弃 tree-sitter-language-pack（native Language 与独立 tree_sitter.Query 不兼容）改用各语言 grammar 包 + 自写最小 .scm 查询；focus-first 硬排序保证最近文件可靠 foreground。新增 43 单测，全套 1198 passed。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `328413a` | (see git log) |
+| `e1430cb` | (see git log) |
+| `108df47` | (see git log) |
+| `b2fa3d8` | (see git log) |
+| `6b38bf9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
