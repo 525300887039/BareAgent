@@ -45,6 +45,14 @@ all-tracing = ["bareagent-cli[langfuse,otel]"]
 lsp = ["multilspy>=0.0.15"]
 pdf = ["pypdf>=4.0"]
 embeddings = ["fastembed>=0.8"]
+repo-map = [
+    "tree-sitter>=0.25",
+    "tree-sitter-python>=0.23",
+    "tree-sitter-javascript>=0.23",
+    "tree-sitter-rust>=0.23",
+    "tree-sitter-go>=0.23",
+    "tree-sitter-java>=0.23",
+]
 
 [project.scripts]
 bareagent = "bareagent.main:main"
