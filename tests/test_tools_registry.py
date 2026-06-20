@@ -38,9 +38,10 @@ def test_deferred_tools_exist():
 
 # Boot-gated DEFERRED tools: present in DEFERRED_TOOLS but only injected into
 # get_tools() when their backing dependency is wired (e.g. code_search needs a
-# usable embedder / CodeIndex), mirroring how MCP/LSP tools only appear when
-# configured. They are excluded from the "always in schema" invariant below.
-_BOOT_GATED_DEFERRED_TOOLS = {"code_search"}
+# usable embedder / CodeIndex; repo_map needs the tree-sitter [repo-map] extra),
+# mirroring how MCP/LSP tools only appear when configured. They are excluded from
+# the "always in schema" invariant below.
+_BOOT_GATED_DEFERRED_TOOLS = {"code_search", "repo_map"}
 
 
 def test_all_tools_in_schema():

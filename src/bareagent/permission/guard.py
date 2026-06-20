@@ -48,6 +48,9 @@ class PermissionGuard:
         # code_search is read-only semantic retrieval (like grep): it embeds and
         # ranks files but never mutates anything, so prompting would be noise.
         "code_search",
+        # repo_map is read-only structural retrieval (tree-sitter symbol skeleton
+        # ranked by PageRank): like code_search/grep it only reads, no prompt.
+        "repo_map",
         # Memory is sandboxed to its own directory (never user code) and is
         # agent bookkeeping; prompting on every recall/save would be noise.
         # Read-only isolation for sub-agents is handled at the AgentType layer
