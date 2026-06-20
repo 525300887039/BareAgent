@@ -1,0 +1,6 @@
+; Repo-map tags for Java. See python.scm for the capture convention.
+(class_declaration name: (identifier) @name) @definition.class
+(interface_declaration name: (identifier) @name) @definition.interface
+(method_declaration name: (identifier) @name) @definition.method
+(constructor_declaration name: (identifier) @name) @definition.method
+(method_invocation name: (identifier) @name) @reference.call
