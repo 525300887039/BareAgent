@@ -1144,9 +1144,7 @@ def load_config(
     )
 
     repo_map_raw = raw_config.get("repo_map", {})
-    repo_map_config = _parse_repo_map_config(
-        repo_map_raw if isinstance(repo_map_raw, dict) else {}
-    )
+    repo_map_config = _parse_repo_map_config(repo_map_raw if isinstance(repo_map_raw, dict) else {})
 
     memory_raw = raw_config.get("memory", {})
     memory_config = MemoryConfig(
@@ -1170,8 +1168,7 @@ def load_config(
             bool(memory_raw.get("semantic_recall", False)),
             "BAREAGENT_MEMORY_SEMANTIC_RECALL",
         ),
-        embedding_backend=str(memory_raw.get("embedding_backend", "openai")).strip()
-        or "openai",
+        embedding_backend=str(memory_raw.get("embedding_backend", "openai")).strip() or "openai",
         embedding_model=str(memory_raw.get("embedding_model", "")).strip(),
         embedding_base_url=str(memory_raw.get("embedding_base_url", "")).strip(),
         embedding_api_key=str(memory_raw.get("embedding_api_key", "")).strip(),
@@ -2126,9 +2123,7 @@ def _make_team_handlers(
         # Block for the reply and hand it back to the caller. Mark the response
         # delivered so the polling drain does not surface it to the LLM twice.
         timeout = config.team.response_timeout
-        response = ProtocolFSM(message_bus, agent_name).wait_response(
-            message_id, timeout=timeout
-        )
+        response = ProtocolFSM(message_bus, agent_name).wait_response(message_id, timeout=timeout)
         if response is None:
             return (
                 f"Sent message {message_id} to {normalized_target}; no reply within "
@@ -3549,9 +3544,7 @@ def _drive_goal(
         ui_console.print_status(f"Goal aborted after {state.turns_used} turn(s).")
         return
     except LLMCallError:
-        ui_console.print_error(
-            f"Goal aborted: LLM call failed after {state.turns_used} turn(s)."
-        )
+        ui_console.print_error(f"Goal aborted: LLM call failed after {state.turns_used} turn(s).")
         return
 
     if outcome is GoalOutcome.MET:
@@ -3576,9 +3569,7 @@ def _print_skill_list(store: SkillStore, loader: SkillLoader, console: AgentCons
         # A pending draft whose name matches a loadable skill is a revision that
         # will REPLACE the live version on /skill keep (self-evolution).
         revision = f"  (revision of live '{name}')" if name in live_set else ""
-        pending_lines.append(
-            f"  - {name}{revision}  (/skill keep {name} | /skill discard {name})"
-        )
+        pending_lines.append(f"  - {name}{revision}  (/skill keep {name} | /skill discard {name})")
     lines += pending_lines or ["  (none)"]
     console.print_status("\n".join(lines))
 
@@ -3617,8 +3608,7 @@ def _dispatch_skill_command(
             console.print_status(store.discard(arg))
             return
         console.print_error(
-            f"Unknown /skill subcommand {sub!r}. "
-            "Use: /skill [list | keep <name> | discard <name>]."
+            f"Unknown /skill subcommand {sub!r}. Use: /skill [list | keep <name> | discard <name>]."
         )
     except SkillStoreError as exc:
         console.print_error(f"Error: {exc}")
@@ -4190,9 +4180,7 @@ def _run_stdio_session(
                 _dispatch_loop_command(text, scheduler=scheduler, ui_console=ui_console)
                 continue
             if text == "/workflows" or text.startswith("/workflows "):
-                _dispatch_workflows_command(
-                    text, registry=workflow_registry, ui_console=ui_console
-                )
+                _dispatch_workflows_command(text, registry=workflow_registry, ui_console=ui_console)
                 continue
             if text == "/log" or text.startswith("/log "):
                 viewer_server = _handle_log_command(

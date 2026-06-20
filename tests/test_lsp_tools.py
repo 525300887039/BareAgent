@@ -244,9 +244,7 @@ def test_definition_converts_coordinates_to_0_based(fake_setup) -> None:
 
 def test_definition_no_results(fake_setup) -> None:
     fake_setup["server"].definition_response = []
-    output = fake_setup["handlers"]["lsp_definition"](
-        file=str(fake_setup["sample"]), line=1, col=1
-    )
+    output = fake_setup["handlers"]["lsp_definition"](file=str(fake_setup["sample"]), line=1, col=1)
     assert "no definition" in output
 
 

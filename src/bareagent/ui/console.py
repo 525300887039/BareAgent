@@ -81,9 +81,7 @@ class AgentConsole:
                     "json",
                     word_wrap=True,
                 ),
-                title=(
-                    f"[warning]{theme.icons.warning} Permission Required: {name}[/]"
-                ),
+                title=(f"[warning]{theme.icons.warning} Permission Required: {name}[/]"),
                 subtitle=Text("[y] Allow  [n] Deny  [a] Always allow"),
                 border_style=theme.palette.warning,
                 box=box.ROUNDED,

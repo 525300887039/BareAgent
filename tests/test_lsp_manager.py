@@ -98,9 +98,7 @@ def _make_fake_factory(*, start_delay: float = 0.0, raise_on_enter: bool = False
     return _FakeCls
 
 
-def _build_sync_server_factory(
-    *, start_delay: float = 0.0, raise_on_enter: bool = False
-):
+def _build_sync_server_factory(*, start_delay: float = 0.0, raise_on_enter: bool = False):
     def _build(sync_cls, server, repository_root):
         return sync_cls.create(
             SimpleNamespace(code_language=server.language),
@@ -125,9 +123,7 @@ def patch_multilspy(monkeypatch):
     """Patch the manager's lazy multilspy import + builder with the fake."""
 
     def _patch(*, start_delay: float = 0.0, raise_on_enter: bool = False):
-        sync_cls = _make_fake_factory(
-            start_delay=start_delay, raise_on_enter=raise_on_enter
-        )
+        sync_cls = _make_fake_factory(start_delay=start_delay, raise_on_enter=raise_on_enter)
         monkeypatch.setattr(
             manager_module,
             "_import_sync_language_server",
@@ -136,9 +132,7 @@ def patch_multilspy(monkeypatch):
         monkeypatch.setattr(
             manager_module,
             "_build_sync_server",
-            _build_sync_server_factory(
-                start_delay=start_delay, raise_on_enter=raise_on_enter
-            ),
+            _build_sync_server_factory(start_delay=start_delay, raise_on_enter=raise_on_enter),
         )
         return sync_cls
 

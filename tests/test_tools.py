@@ -30,10 +30,7 @@ def test_file_write_and_read_round_trip(tmp_path: Path) -> None:
 
     assert message == "Wrote 11 characters to nested/example.txt"
     assert run_read("nested/example.txt", workspace=tmp_path) == "1: alpha\n2: beta"
-    assert (
-        run_read("nested/example.txt", offset=1, limit=1, workspace=tmp_path)
-        == "2: beta"
-    )
+    assert run_read("nested/example.txt", offset=1, limit=1, workspace=tmp_path) == "2: beta"
 
 
 def test_file_edit_replaces_text(tmp_path: Path) -> None:
@@ -83,9 +80,7 @@ def test_glob_and_grep_skip_ignored_trees_but_allow_explicit_paths(
     assert run_glob("**/*.py", workspace=tmp_path) == ["src/main.py"]
     assert run_grep("needle", workspace=tmp_path) == ["src/main.py:1:needle"]
     assert run_glob("**/*.py", path=".venv", workspace=tmp_path) == [".venv/lib.py"]
-    assert run_grep("needle", path=".venv", workspace=tmp_path) == [
-        ".venv/lib.py:1:needle"
-    ]
+    assert run_grep("needle", path=".venv", workspace=tmp_path) == [".venv/lib.py:1:needle"]
 
 
 def test_permission_guard_default_mode_for_safe_and_dangerous_tools() -> None:
@@ -112,10 +107,7 @@ def test_permission_guard_default_mode_honors_allow_and_deny_rules() -> None:
 def test_permission_guard_auto_mode_allows_safe_patterns() -> None:
     guard = PermissionGuard(PermissionMode.AUTO)
 
-    assert (
-        guard.requires_confirm("bash", {"command": "pytest tests/test_tools.py"})
-        is False
-    )
+    assert guard.requires_confirm("bash", {"command": "pytest tests/test_tools.py"}) is False
     assert guard.requires_confirm("bash", {"command": "rm -rf build"}) is True
 
 
@@ -123,23 +115,13 @@ def test_permission_guard_plan_mode_blocks_write_operations(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     guard = PermissionGuard(PermissionMode.PLAN)
-    call = ToolCall(
-        id="toolu_1", name="write_file", input={"file_path": "out.txt", "content": "x"}
-    )
+    call = ToolCall(id="toolu_1", name="write_file", input={"file_path": "out.txt", "content": "x"})
 
-    assert (
-        guard.requires_confirm("write_file", {"file_path": "out.txt", "content": "x"})
-        is True
-    )
+    assert guard.requires_confirm("write_file", {"file_path": "out.txt", "content": "x"}) is True
     assert guard.requires_confirm("task_create", {"title": "plan only"}) is True
+    assert guard.requires_confirm("task_update", {"task_id": "abc12345", "status": "done"}) is True
     assert (
-        guard.requires_confirm("task_update", {"task_id": "abc12345", "status": "done"})
-        is True
-    )
-    assert (
-        guard.requires_confirm(
-            "team_send", {"to_agent": "reviewer", "content": "write code"}
-        )
+        guard.requires_confirm("team_send", {"to_agent": "reviewer", "content": "write code"})
         is True
     )
     assert guard.requires_confirm("load_skill", {"skill_name": "git"}) is False
@@ -151,10 +133,7 @@ def test_permission_guard_bypass_mode_allows_everything() -> None:
     guard = PermissionGuard(PermissionMode.BYPASS)
 
     assert guard.requires_confirm("bash", {"command": "rm -rf build"}) is False
-    assert (
-        guard.requires_confirm("write_file", {"file_path": "x", "content": "y"})
-        is False
-    )
+    assert guard.requires_confirm("write_file", {"file_path": "x", "content": "y"}) is False
 
 
 def test_permission_rules_prefix_matching() -> None:
@@ -249,11 +228,7 @@ def test_bash_handler_runs_in_bound_workspace(
     workspace.mkdir()
     other_dir.mkdir()
     monkeypatch.chdir(other_dir)
-    command = (
-        "Get-Location | Select-Object -ExpandProperty Path"
-        if os.name == "nt"
-        else "pwd"
-    )
+    command = "Get-Location | Select-Object -ExpandProperty Path" if os.name == "nt" else "pwd"
 
     output = get_handlers(workspace)["bash"](command)
 
@@ -298,9 +273,7 @@ def test_bash_handler_argv_per_platform(monkeypatch: pytest.MonkeyPatch) -> None
     assert not any("[Console]::OutputEncoding" in part for part in posix_args)
 
 
-@pytest.mark.skipif(
-    os.name != "nt", reason="round-trip exercises the real Windows PowerShell path"
-)
+@pytest.mark.skipif(os.name != "nt", reason="round-trip exercises the real Windows PowerShell path")
 def test_bash_handler_windows_chinese_output_round_trip() -> None:
     output = run_bash('Write-Output "\u4e2d\u6587\u6d4b\u8bd5"')
 

@@ -130,9 +130,7 @@ class LanguageServerManager:
         # channel so the REPL surface treats them as async events (same
         # pattern as ``MCPManager``).
         self._notifier = notifier
-        self._repository_root = (
-            os.path.abspath(repository_root) if repository_root else os.getcwd()
-        )
+        self._repository_root = os.path.abspath(repository_root) if repository_root else os.getcwd()
         self._lock = threading.Lock()
         # Status of every configured server, keyed by language. Populated
         # eagerly in ``start_all`` so callers can ``get_status`` even before
@@ -299,10 +297,7 @@ class LanguageServerManager:
 
         max_workers = max(1, len(servers))
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {
-                pool.submit(self._start_one, server, sync_cls): server
-                for server in servers
-            }
+            futures = {pool.submit(self._start_one, server, sync_cls): server for server in servers}
             for future in as_completed(futures):
                 server = futures[future]
                 try:
@@ -315,9 +310,7 @@ class LanguageServerManager:
                     )
                     with self._lock:
                         self._status[server.language] = ServerStatus.UNHEALTHY
-                        self._status_reasons[server.language] = (
-                            f"{type(exc).__name__}: {exc}"
-                        )
+                        self._status_reasons[server.language] = f"{type(exc).__name__}: {exc}"
                     self._warn(f"LSP server {server.language!r} failed to start: {exc}")
 
         # All servers settled; spin up the watchdog only if at least one is
@@ -481,9 +474,7 @@ class LanguageServerManager:
         if self._status.get(language) != ServerStatus.RUNNING:
             from .errors import LSPHandshakeError
 
-            raise LSPHandshakeError(
-                self.get_status_reason(language) or "handshake failed"
-            )
+            raise LSPHandshakeError(self.get_status_reason(language) or "handshake failed")
         # The watchdog may have been stopped by a previous ``close_all``;
         # reload should bring it back so the recovered server is also
         # monitored.
@@ -546,8 +537,7 @@ class LanguageServerManager:
                     f"handshake timed out after {self._config.start_timeout}s"
                 )
             self._warn(
-                f"LSP server {server.language!r} timed out after "
-                f"{self._config.start_timeout}s"
+                f"LSP server {server.language!r} timed out after {self._config.start_timeout}s"
             )
             return
 
@@ -555,9 +545,7 @@ class LanguageServerManager:
             error = entry.exit_error
             with self._lock:
                 self._status[server.language] = ServerStatus.UNHEALTHY
-                self._status_reasons[server.language] = (
-                    f"{type(error).__name__}: {error}"
-                )
+                self._status_reasons[server.language] = f"{type(error).__name__}: {error}"
             self._warn(f"LSP server {server.language!r} unhealthy: {error}")
             return
 
@@ -645,8 +633,7 @@ class LanguageServerManager:
             on_notification = getattr(handler, "on_notification", None)
             if not callable(on_notification):
                 _log.debug(
-                    "LSP %r: multilspy on_notification missing; "
-                    "diagnostics cache disabled.",
+                    "LSP %r: multilspy on_notification missing; diagnostics cache disabled.",
                     language,
                 )
                 return

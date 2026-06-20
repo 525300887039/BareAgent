@@ -90,9 +90,7 @@ class StdioTransport(Transport):
                 proc.stdin.write(line.encode("utf-8"))
                 proc.stdin.flush()
         except (BrokenPipeError, OSError) as exc:
-            raise MCPTransportError(
-                f"failed to write to subprocess stdin: {exc}"
-            ) from exc
+            raise MCPTransportError(f"failed to write to subprocess stdin: {exc}") from exc
 
     def close(self) -> None:
         if self._closed:
@@ -161,9 +159,7 @@ class StdioTransport(Transport):
                 if disconnect_reason is None:
                     returncode = proc.poll()
                     if returncode is not None:
-                        disconnect_reason = (
-                            f"stdout EOF (subprocess exited with code {returncode})"
-                        )
+                        disconnect_reason = f"stdout EOF (subprocess exited with code {returncode})"
                     else:
                         disconnect_reason = "stdout EOF (subprocess exited)"
                 self._invoke_disconnect(disconnect_reason)
@@ -197,6 +193,4 @@ class StdioTransport(Transport):
         else:
             # Server-initiated request. PR1 does not support these; in PR2 the
             # client will handle method dispatch (ping, sampling, elicitation).
-            _log.warning(
-                "MCP stdio: ignoring server-to-client request (method=%r)", msg.method
-            )
+            _log.warning("MCP stdio: ignoring server-to-client request (method=%r)", msg.method)

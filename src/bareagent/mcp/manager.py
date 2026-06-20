@@ -86,9 +86,7 @@ class MCPManager:
 
         max_workers = max(1, len(servers))
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {
-                pool.submit(self._start_one, server): server for server in servers
-            }
+            futures = {pool.submit(self._start_one, server): server for server in servers}
             for future in as_completed(futures):
                 server = futures[future]
                 try:
@@ -107,9 +105,7 @@ class MCPManager:
         try:
             client = self._build_client(server)
         except Exception as exc:
-            _log.warning(
-                "MCP transport construction failed for %r: %s", server.name, exc
-            )
+            _log.warning("MCP transport construction failed for %r: %s", server.name, exc)
             with self._lock:
                 self._status[server.name] = ServerStatus.UNHEALTHY
             self._warn(f"MCP server {server.name!r} transport setup failed: {exc}")
@@ -287,9 +283,7 @@ class MCPManager:
             return StdioTransport(command, env=server.env or None, cwd=server.cwd)
         if server.transport == "http_legacy":
             if not server.url:
-                raise MCPError(
-                    f"mcp.servers[{server.name}].url required for http_legacy"
-                )
+                raise MCPError(f"mcp.servers[{server.name}].url required for http_legacy")
             return HttpLegacyTransport(
                 server.url,
                 headers=server.headers,
@@ -297,17 +291,13 @@ class MCPManager:
             )
         if server.transport == "http_streamable":
             if not server.url:
-                raise MCPError(
-                    f"mcp.servers[{server.name}].url required for http_streamable"
-                )
+                raise MCPError(f"mcp.servers[{server.name}].url required for http_streamable")
             return HttpStreamableTransport(
                 server.url,
                 headers=server.headers,
                 start_timeout=server.start_timeout,
             )
-        raise MCPError(
-            f"mcp.servers[{server.name}].transport unsupported: {server.transport!r}"
-        )
+        raise MCPError(f"mcp.servers[{server.name}].transport unsupported: {server.transport!r}")
 
     def _warn(self, message: str) -> None:
         if self._console is None:

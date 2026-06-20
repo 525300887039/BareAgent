@@ -63,9 +63,7 @@ def test_format_preview_truncates_long_top_level_string() -> None:
 
 def test_format_preview_keeps_short_values_and_supports_unicode() -> None:
     guard = PermissionGuard(PermissionMode.DEFAULT)
-    preview = guard.format_preview(
-        "mcp__fs__write", {"path": "中文路径.txt", "size": 12}
-    )
+    preview = guard.format_preview("mcp__fs__write", {"path": "中文路径.txt", "size": 12})
     # ensure_ascii=False keeps the original characters in the JSON output.
     assert "中文路径.txt" in preview
     parsed = json.loads(preview)

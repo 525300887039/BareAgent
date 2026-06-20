@@ -191,9 +191,7 @@ def test_schema_passes_through_ref_and_defs_unchanged() -> None:
     """Zod-flavoured schemas (with $ref + $defs) must not be modified."""
     nested_schema = {
         "type": "object",
-        "properties": {
-            "entities": {"type": "array", "items": {"$ref": "#/$defs/Entity"}}
-        },
+        "properties": {"entities": {"type": "array", "items": {"$ref": "#/$defs/Entity"}}},
         "$defs": {
             "Entity": {
                 "type": "object",
@@ -225,9 +223,7 @@ def test_schema_passes_through_pydantic_anyof_null() -> None:
         "required": ["repo_path"],
     }
     client = MagicMock()
-    client.list_tools.return_value = [
-        {"name": "git_log", "description": "", "inputSchema": schema}
-    ]
+    client.list_tools.return_value = [{"name": "git_log", "description": "", "inputSchema": schema}]
     manager = _fake_manager({"g": client})
 
     schemas = build_mcp_tool_schemas(manager)
@@ -262,9 +258,7 @@ def test_namespaced_collision_across_servers_raises() -> None:
     # Use the same server name for both — that mimics the post-namespacing
     # collision case the registry must detect.
     manager = MagicMock()
-    manager.iter_running_clients.side_effect = lambda: iter(
-        [("dup", client_a), ("dup", client_b)]
-    )
+    manager.iter_running_clients.side_effect = lambda: iter([("dup", client_a), ("dup", client_b)])
 
     with pytest.raises(MCPError):
         build_mcp_tool_schemas(manager)
@@ -470,9 +464,7 @@ def test_to_content_blocks_image_over_binary_threshold_is_omitted() -> None:
     # decoding the bytes anywhere.
     target_decoded = 6 * 1024 * 1024
     b64 = "A" * ((target_decoded * 4) // 3)
-    out = _to_content_blocks(
-        [{"type": "image", "data": b64, "mimeType": "image/png"}], config=cfg
-    )
+    out = _to_content_blocks([{"type": "image", "data": b64, "mimeType": "image/png"}], config=cfg)
     assert len(out) == 1
     assert out[0]["type"] == "text"
     assert "Resource omitted: too large" in out[0]["text"]

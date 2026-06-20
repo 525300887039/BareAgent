@@ -221,10 +221,7 @@ def format_theme_list(tm: ThemeManager) -> str:
 
 def format_unknown_theme(theme_name: str) -> str:
     """Build the error message for an unrecognised theme name."""
-    return (
-        f"Unknown theme: {theme_name}. "
-        f"Available: {', '.join(ThemeManager.available_themes())}"
-    )
+    return f"Unknown theme: {theme_name}. Available: {', '.join(ThemeManager.available_themes())}"
 
 
 __all__ = [

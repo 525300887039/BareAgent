@@ -377,9 +377,7 @@ def _file_tags_to_dict(ft: FileTags) -> dict:
 
 def _file_tags_from_dict(relpath: str, raw: dict) -> FileTags:
     defs = tuple(
-        _definition_from_dict(d)
-        for d in raw.get("definitions", [])
-        if isinstance(d, dict)
+        _definition_from_dict(d) for d in raw.get("definitions", []) if isinstance(d, dict)
     )
     refs = tuple(Reference(name=str(name)) for name in raw.get("references", []) if name)
     return FileTags(relpath=relpath, definitions=defs, references=refs)
@@ -524,14 +522,10 @@ class RepoMapIndex:
         # personalization teleport mass alone) keeps a poorly-connected recent
         # file from being buried under well-referenced hubs.
         focus_set = set(personalization)
-        ranked = sorted(
-            nodes, key=lambda r: (r not in focus_set, -scores.get(r, 0.0), r)
-        )
+        ranked = sorted(nodes, key=lambda r: (r not in focus_set, -scores.get(r, 0.0), r))
         prefix = _normalize_prefix(path)
         budget = max_tokens if max_tokens and max_tokens > 0 else self.max_tokens
-        return format_repo_map(
-            files_by_rel, ranked, path_prefix=prefix, max_tokens=budget
-        )
+        return format_repo_map(files_by_rel, ranked, path_prefix=prefix, max_tokens=budget)
 
     def _collect_tags(self) -> list[FileTags]:
         """Walk the workspace, extracting (and caching) tags per file."""

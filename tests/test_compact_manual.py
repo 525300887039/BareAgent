@@ -47,9 +47,7 @@ def test_micro_compact_truncates_old():
         1
         for m in msgs
         if isinstance(m.get("content"), list)
-        and any(
-            "truncated" in str(c).lower() for c in m["content"] if isinstance(c, dict)
-        )
+        and any("truncated" in str(c).lower() for c in m["content"] if isinstance(c, dict))
     )
     assert truncated_count > 0, "Should have truncated some old results"
 

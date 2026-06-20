@@ -113,7 +113,7 @@ WORKFLOW_TOOL_SCHEMA = tool_schema(
                 },
                 "required": ["id", "prompt"],
             },
-        }
+        },
     },
     ["nodes"],
 )

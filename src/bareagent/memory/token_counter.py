@@ -41,9 +41,7 @@ def _estimate_value(value: Any) -> float:
     if isinstance(value, dict):
         block_type = value.get("type")
         if block_type == "tool_use":
-            return _estimate_text(str(value.get("name", ""))) + _estimate_value(
-                value.get("input")
-            )
+            return _estimate_text(str(value.get("name", ""))) + _estimate_value(value.get("input"))
 
         total = 0.0
         if "text" in value:

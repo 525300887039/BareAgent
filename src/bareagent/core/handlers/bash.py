@@ -21,8 +21,7 @@ def run_bash(
         # is wrapped in try/catch so an environment that rejects it never blocks
         # the actual command from running.
         windows_prefix = (
-            "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } "
-            "catch {}; "
+            "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}; "
         )
         completed_command = [
             "powershell",

@@ -122,9 +122,7 @@ def test_stdio_stderr_banner_does_not_break_pipe() -> None:
     try:
         # The echo server prints to stderr at startup; if that broke the reader,
         # the first request would hang. Just doing a round-trip is the assertion.
-        resp = transport.request(
-            Request(id=1, method="p", params={"k": "v"}), timeout=5.0
-        )
+        resp = transport.request(Request(id=1, method="p", params={"k": "v"}), timeout=5.0)
         assert resp.result == {"echo": {"k": "v"}}
     finally:
         transport.close()

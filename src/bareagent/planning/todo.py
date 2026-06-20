@@ -75,9 +75,7 @@ class TodoManager:
                 "status": "pending",
                 "priority": priority.strip() or "normal",
             }
-            return (
-                f"Added TODO {task_id} [{self.tasks[task_id]['priority']}]: {task_text}"
-            )
+            return f"Added TODO {task_id} [{self.tasks[task_id]['priority']}]: {task_text}"
 
     def update(self, task_id: str, status: str) -> str:
         with self._lock:
@@ -88,9 +86,7 @@ class TodoManager:
             normalized_status = status.strip()
             if normalized_status not in VALID_TODO_STATUSES:
                 valid = ", ".join(sorted(VALID_TODO_STATUSES))
-                raise ValueError(
-                    f"Invalid TODO status: {status}. Expected one of: {valid}"
-                )
+                raise ValueError(f"Invalid TODO status: {status}. Expected one of: {valid}")
 
             self.tasks[normalized_id]["status"] = normalized_status
             return f"Updated TODO {normalized_id} -> {normalized_status}"
@@ -102,9 +98,7 @@ class TodoManager:
 
             lines = ["TODO items:"]
             for task_id, item in self.tasks.items():
-                lines.append(
-                    f"- {task_id} [{item['status']}] ({item['priority']}) {item['task']}"
-                )
+                lines.append(f"- {task_id} [{item['status']}] ({item['priority']}) {item['task']}")
             return "\n".join(lines)
 
     def get_nag_reminder(self) -> str | None:

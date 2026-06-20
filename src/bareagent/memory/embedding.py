@@ -104,8 +104,7 @@ def build_embedder(
             )
     except Exception:
         logger.warning(
-            "Embedding backend %r unavailable; semantic recall will fall back to "
-            "lexical.",
+            "Embedding backend %r unavailable; semantic recall will fall back to lexical.",
             normalized,
             exc_info=True,
         )
@@ -183,10 +182,7 @@ class EmbeddingCache:
     def save(self) -> None:
         payload = {
             "identity": self.identity,
-            "entries": {
-                rel: {"hash": h, "vector": vec}
-                for rel, (h, vec) in self._entries.items()
-            },
+            "entries": {rel: {"hash": h, "vector": vec} for rel, (h, vec) in self._entries.items()},
         }
         try:
             atomic_write_text(self.path, json.dumps(payload, ensure_ascii=False))

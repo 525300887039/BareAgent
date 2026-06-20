@@ -34,9 +34,7 @@ def test_grep_find_function():
 
 def test_grep_no_match():
     """grep 无匹配应返回空列表"""
-    result = run_grep(
-        "THIS_STRING_DOES_NOT_EXIST_ANYWHERE_XYZ", path="src/", workspace=WORKSPACE
-    )
+    result = run_grep("THIS_STRING_DOES_NOT_EXIST_ANYWHERE_XYZ", path="src/", workspace=WORKSPACE)
     assert result == []
 
 

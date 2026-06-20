@@ -67,14 +67,8 @@ def test_reset_clears_all_state() -> None:
 def test_resolve_price_prefix_matches_builtin_claude_family() -> None:
     # Dated/suffixed model ids resolve to the family price via startswith.
     assert resolve_price("claude-opus-4-8", None) == DEFAULT_PRICES["claude-opus-4"]
-    assert (
-        resolve_price("claude-sonnet-4-6-20251101", None)
-        == DEFAULT_PRICES["claude-sonnet-4"]
-    )
-    assert (
-        resolve_price("claude-haiku-4-5-20251001", None)
-        == DEFAULT_PRICES["claude-haiku-4"]
-    )
+    assert resolve_price("claude-sonnet-4-6-20251101", None) == DEFAULT_PRICES["claude-sonnet-4"]
+    assert resolve_price("claude-haiku-4-5-20251001", None) == DEFAULT_PRICES["claude-haiku-4"]
 
 
 def test_resolve_price_unknown_model_returns_none() -> None:

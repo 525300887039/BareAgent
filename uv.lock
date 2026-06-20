@@ -142,7 +142,7 @@ requires-dist = [
     { name = "pypdf", marker = "extra == 'pdf'", specifier = ">=4.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "rich", specifier = ">=14.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.11" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.15.8" },
     { name = "tree-sitter", marker = "extra == 'repo-map'", specifier = ">=0.25" },
     { name = "tree-sitter-go", marker = "extra == 'repo-map'", specifier = ">=0.23" },
     { name = "tree-sitter-java", marker = "extra == 'repo-map'", specifier = ">=0.23" },

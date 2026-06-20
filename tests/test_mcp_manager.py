@@ -75,9 +75,7 @@ class _ControllableTransport(Transport):
         return self._started and not self._closed
 
 
-def _patch_construct_transport(
-    manager: MCPManager, transports: dict[str, Transport]
-) -> None:
+def _patch_construct_transport(manager: MCPManager, transports: dict[str, Transport]) -> None:
     def _factory(server: MCPServerConfig) -> Transport:
         return transports[server.name]
 
@@ -85,12 +83,8 @@ def _patch_construct_transport(
 
 
 def test_start_all_parallel_with_one_slow_server_marks_it_unhealthy() -> None:
-    fast_cfg = MCPServerConfig(
-        name="fast", transport="stdio", command=["echo"], start_timeout=2.0
-    )
-    slow_cfg = MCPServerConfig(
-        name="slow", transport="stdio", command=["echo"], start_timeout=0.2
-    )
+    fast_cfg = MCPServerConfig(name="fast", transport="stdio", command=["echo"], start_timeout=2.0)
+    slow_cfg = MCPServerConfig(name="slow", transport="stdio", command=["echo"], start_timeout=0.2)
     transports = {
         "fast": _ControllableTransport(reply_delay=0.0),
         "slow": _ControllableTransport(reply_delay=1.0),  # > timeout
@@ -275,9 +269,7 @@ def test_on_disconnect_marks_unhealthy_and_notifies(monkeypatch) -> None:
 
     assert manager.get_status("srv") == ServerStatus.UNHEALTHY
     assert manager.get_client("srv") is None
-    assert notified == [
-        ("mcp:srv", "MCP server 'srv' disconnected: subprocess died: code 137")
-    ]
+    assert notified == [("mcp:srv", "MCP server 'srv' disconnected: subprocess died: code 137")]
 
 
 def test_build_client_registers_disconnect_handler() -> None:

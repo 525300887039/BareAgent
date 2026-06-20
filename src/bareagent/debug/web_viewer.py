@@ -53,9 +53,7 @@ class DebugViewerHandler(BaseHTTPRequestHandler):
                     self._serve_error(400, "Invalid seq")
                     return
                 try:
-                    self._serve_json(
-                        self.server.logger.get_interaction(session_id, seq)
-                    )
+                    self._serve_json(self.server.logger.get_interaction(session_id, seq))
                 except ValueError:
                     self._serve_error(404, "Not Found")
                 return
@@ -104,9 +102,7 @@ class DebugViewerHandler(BaseHTTPRequestHandler):
 
         subscribe = getattr(self.server.logger, "subscribe_events", None)
         unsubscribe = getattr(self.server.logger, "unsubscribe_events", None)
-        event_queue: Any = (
-            subscribe() if callable(subscribe) else self.server.logger.event_queue
-        )
+        event_queue: Any = subscribe() if callable(subscribe) else self.server.logger.event_queue
 
         try:
             while True:

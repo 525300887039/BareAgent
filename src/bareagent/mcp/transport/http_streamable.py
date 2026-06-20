@@ -64,9 +64,7 @@ class HttpStreamableTransport(Transport):
     def start(self) -> None:
         if self._client is not None:
             raise RuntimeError("HttpStreamableTransport already started")
-        timeout = httpx.Timeout(
-            connect=self._start_timeout, read=None, write=10.0, pool=10.0
-        )
+        timeout = httpx.Timeout(connect=self._start_timeout, read=None, write=10.0, pool=10.0)
         self._client = httpx.Client(timeout=timeout)
 
         # Best-effort GET for server-push notifications. Servers may refuse.
@@ -103,9 +101,7 @@ class HttpStreamableTransport(Transport):
             raise MCPTransportError("transport not started")
         headers = self._merge_headers(_PROTOCOL_HEADERS_POST)
         try:
-            resp = self._client.post(
-                self._url, headers=headers, content=message.encode("utf-8")
-            )
+            resp = self._client.post(self._url, headers=headers, content=message.encode("utf-8"))
             resp.raise_for_status()
         except httpx.HTTPError as exc:
             raise MCPTransportError(f"POST failed: {exc}") from exc
@@ -168,9 +164,7 @@ class HttpStreamableTransport(Transport):
             return
         if not response.content:
             return  # 202 Accepted with empty body — response will arrive on listen stream
-        if "application/json" in content_type or response.content.lstrip().startswith(
-            b"{"
-        ):
+        if "application/json" in content_type or response.content.lstrip().startswith(b"{"):
             self._on_message(response.text)
             return
         _log.warning("MCP http_streamable: unexpected Content-Type %r", content_type)
@@ -195,9 +189,7 @@ class HttpStreamableTransport(Transport):
             _log.warning("MCP http_streamable listener crashed: %s", exc)
         finally:
             if not self._closing:
-                self._invoke_disconnect(
-                    disconnect_reason or "HTTP streamable listen stream ended"
-                )
+                self._invoke_disconnect(disconnect_reason or "HTTP streamable listen stream ended")
             self._fail_all_pending("HTTP streamable listen stream closed")
 
     def _on_message(self, data: str) -> None:
@@ -212,6 +204,4 @@ class HttpStreamableTransport(Transport):
             self._route_notification(msg)
         else:
             assert isinstance(msg, Request)
-            _log.warning(
-                "MCP http_streamable: ignoring server-to-client request %r", msg.method
-            )
+            _log.warning("MCP http_streamable: ignoring server-to-client request %r", msg.method)

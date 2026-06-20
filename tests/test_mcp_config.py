@@ -60,9 +60,7 @@ def test_parses_stdio_http_legacy_and_streamable() -> None:
 
 
 def test_accepts_block_directly_without_outer_mcp_key() -> None:
-    cfg = parse_mcp_config(
-        {"servers": [{"name": "a", "transport": "stdio", "command": ["cat"]}]}
-    )
+    cfg = parse_mcp_config({"servers": [{"name": "a", "transport": "stdio", "command": ["cat"]}]})
     assert cfg.servers[0].name == "a"
 
 
@@ -108,9 +106,7 @@ def test_servers_must_be_a_list() -> None:
 
 
 def test_command_as_string_normalized_to_list() -> None:
-    cfg = parse_mcp_config(
-        _wrap([{"name": "x", "transport": "stdio", "command": "uvx mcp"}])
-    )
+    cfg = parse_mcp_config(_wrap([{"name": "x", "transport": "stdio", "command": "uvx mcp"}]))
     assert cfg.servers[0].command == ["uvx mcp"]
 
 
@@ -124,7 +120,5 @@ def test_defaults_when_no_mcp_block() -> None:
 def test_invalid_env_table_raises() -> None:
     with pytest.raises(MCPError, match="env"):
         parse_mcp_config(
-            _wrap(
-                [{"name": "x", "transport": "stdio", "command": ["c"], "env": {"k": 1}}]
-            )
+            _wrap([{"name": "x", "transport": "stdio", "command": ["c"], "env": {"k": 1}}])
         )

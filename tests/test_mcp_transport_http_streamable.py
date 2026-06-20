@@ -145,15 +145,11 @@ def test_http_streamable_json_post_round_trip(json_server: _StreamableServer) ->
     transport = HttpStreamableTransport(json_server.url)
     transport.start()
     try:
-        resp = transport.request(
-            Request(id=1, method="ping", params={"a": 1}), timeout=5.0
-        )
+        resp = transport.request(Request(id=1, method="ping", params={"a": 1}), timeout=5.0)
         assert resp.id == 1
         assert resp.result == {"echo": {"a": 1}}
         # First POST has no session header; second carries the captured id.
-        resp2 = transport.request(
-            Request(id=2, method="ping", params={"a": 2}), timeout=5.0
-        )
+        resp2 = transport.request(Request(id=2, method="ping", params={"a": 2}), timeout=5.0)
         assert resp2.id == 2
         assert json_server.observed_sessions[0] is None
         assert json_server.observed_sessions[1] == json_server.session_id
@@ -165,9 +161,7 @@ def test_http_streamable_sse_post_round_trip(sse_server: _StreamableSseServer) -
     transport = HttpStreamableTransport(sse_server.url)
     transport.start()
     try:
-        resp = transport.request(
-            Request(id=1, method="ping", params={"a": 1}), timeout=5.0
-        )
+        resp = transport.request(Request(id=1, method="ping", params={"a": 1}), timeout=5.0)
         assert resp.id == 1
         assert resp.result == {"echo": {"a": 1}}
     finally:

@@ -29,9 +29,7 @@ class TestFormatResults:
         assert "test query" in result
 
     def test_single_result(self):
-        results = [
-            {"title": "Example", "url": "https://example.com", "snippet": "A snippet"}
-        ]
+        results = [{"title": "Example", "url": "https://example.com", "snippet": "A snippet"}]
         text = _format_results(results, "test")
         assert "1. Example" in text
         assert "https://example.com" in text
@@ -146,8 +144,7 @@ class TestRunWebSearch:
     def test_anti_bot_page_surfaces_explicit_error(self, mock_bing):
         # An anti-bot / unsupported-browser page must not be reported as "No results".
         mock_bing.side_effect = RuntimeError(
-            "Bing returned no parseable results (likely an anti-bot or "
-            "unsupported-browser page)."
+            "Bing returned no parseable results (likely an anti-bot or unsupported-browser page)."
         )
         with patch.dict("os.environ", {}, clear=False):
             import os

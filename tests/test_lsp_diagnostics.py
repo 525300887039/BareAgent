@@ -119,9 +119,7 @@ def test_format_diagnostics_blank_source_falls_back_to_lsp() -> None:
 def test_format_diagnostics_empty_returns_header_only() -> None:
     # Implementation detail — callers normally short-circuit before this
     # path. Still asserting so the contract is documented.
-    assert format_diagnostics("src/foo.py", []) == (
-        "Newly introduced diagnostics in src/foo.py:"
-    )
+    assert format_diagnostics("src/foo.py", []) == ("Newly introduced diagnostics in src/foo.py:")
 
 
 # ---------------------------------------------------------------------------

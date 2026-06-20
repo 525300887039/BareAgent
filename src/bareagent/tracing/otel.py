@@ -65,9 +65,7 @@ class OpenTelemetryTracer(Tracer):
             SimpleSpanProcessor,
         )
 
-        processor = (
-            BatchSpanProcessor(exporter) if batch else SimpleSpanProcessor(exporter)
-        )
+        processor = BatchSpanProcessor(exporter) if batch else SimpleSpanProcessor(exporter)
         self._provider.add_span_processor(processor)
 
     @contextlib.contextmanager

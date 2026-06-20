@@ -38,9 +38,7 @@ class _LegacyServer:
                 self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
                 # First event: announce endpoint URL.
-                self.wfile.write(
-                    f"event: endpoint\ndata: {outer.endpoint_path}\n\n".encode()
-                )
+                self.wfile.write(f"event: endpoint\ndata: {outer.endpoint_path}\n\n".encode())
                 self.wfile.flush()
                 with outer._sse_lock:
                     outer._sse_writer = self.wfile
@@ -124,9 +122,7 @@ def test_http_legacy_endpoint_negotiation_and_round_trip(
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline and legacy_server._sse_writer is None:
             time.sleep(0.02)
-        resp = transport.request(
-            Request(id=1, method="ping", params={"k": "v"}), timeout=5.0
-        )
+        resp = transport.request(Request(id=1, method="ping", params={"k": "v"}), timeout=5.0)
         assert resp.id == 1
         assert resp.result == {"echo": {"k": "v"}}
         # Verify the POST happened against the negotiated endpoint.

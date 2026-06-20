@@ -37,8 +37,7 @@ def _search_brave(
 ) -> list[dict[str, str]]:
     """通过 Brave Search API 搜索。"""
     url = (
-        f"https://api.search.brave.com/res/v1/web/search"
-        f"?q={quote_plus(query)}&count={max_results}"
+        f"https://api.search.brave.com/res/v1/web/search?q={quote_plus(query)}&count={max_results}"
     )
     request = Request(
         url,

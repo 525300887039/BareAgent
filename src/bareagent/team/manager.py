@@ -107,9 +107,7 @@ class TeammateManager:
         )
 
     def _save(self) -> None:
-        payload = {
-            "teammates": {teammate.name: teammate.to_dict() for teammate in self.list()}
-        }
+        payload = {"teammates": {teammate.name: teammate.to_dict() for teammate in self.list()}}
         atomic_write_json(self.config_file, payload)
 
     def _load(self) -> None:
@@ -133,9 +131,7 @@ class TeammateManager:
                 raise ValueError(f"Invalid teammate payload for {teammate_name}")
             provider_config = raw_teammate.get("provider_config") or {}
             if not isinstance(provider_config, dict):
-                raise ValueError(
-                    f"Teammate provider_config must be an object: {teammate_name}"
-                )
+                raise ValueError(f"Teammate provider_config must be an object: {teammate_name}")
             teammate = Teammate(
                 name=str(raw_teammate.get("name", teammate_name)).strip(),
                 role=str(raw_teammate.get("role", "")).strip(),
@@ -147,9 +143,7 @@ class TeammateManager:
             if not teammate.role:
                 raise ValueError(f"Teammate role must not be empty: {teammate_name}")
             if not teammate.system_prompt:
-                raise ValueError(
-                    f"Teammate system_prompt must not be empty: {teammate_name}"
-                )
+                raise ValueError(f"Teammate system_prompt must not be empty: {teammate_name}")
             loaded[teammate.name] = teammate
 
         self.teammates = loaded

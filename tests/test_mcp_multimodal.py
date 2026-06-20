@@ -60,9 +60,7 @@ def test_to_content_blocks_image_png_jpeg_gif_webp_all_supported() -> None:
 
 
 def test_to_content_blocks_image_unsupported_mime_degrades() -> None:
-    out = _to_content_blocks(
-        [{"type": "image", "data": "AAAA", "mimeType": "image/svg+xml"}]
-    )
+    out = _to_content_blocks([{"type": "image", "data": "AAAA", "mimeType": "image/svg+xml"}])
     assert out == [
         {
             "type": "text",
@@ -87,9 +85,7 @@ def test_to_content_blocks_image_missing_mimetype_degrades() -> None:
 
 
 def test_to_content_blocks_audio_degrades_to_placeholder() -> None:
-    out = _to_content_blocks(
-        [{"type": "audio", "data": "ZmFrZQ==", "mimeType": "audio/wav"}]
-    )
+    out = _to_content_blocks([{"type": "audio", "data": "ZmFrZQ==", "mimeType": "audio/wav"}])
     assert out == [
         {
             "type": "text",
@@ -110,9 +106,7 @@ def test_to_content_blocks_embedded_resource_emits_uri_placeholder() -> None:
             }
         ]
     )
-    assert out == [
-        {"type": "text", "text": "[Resource: file:///report.pdf (application/pdf)]"}
-    ]
+    assert out == [{"type": "text", "text": "[Resource: file:///report.pdf (application/pdf)]"}]
 
 
 def test_to_content_blocks_embedded_resource_missing_fields_uses_unknown() -> None:
@@ -129,12 +123,8 @@ def test_to_content_blocks_embedded_resource_missing_fields_uses_unknown() -> No
 
 
 def test_to_content_blocks_resource_link_emits_uri_placeholder() -> None:
-    out = _to_content_blocks(
-        [{"type": "resource_link", "uri": "https://example.com/x.png"}]
-    )
-    assert out == [
-        {"type": "text", "text": "[Resource link: https://example.com/x.png]"}
-    ]
+    out = _to_content_blocks([{"type": "resource_link", "uri": "https://example.com/x.png"}])
+    assert out == [{"type": "text", "text": "[Resource link: https://example.com/x.png]"}]
 
 
 def test_to_content_blocks_resource_link_missing_uri_uses_unknown() -> None:
@@ -233,9 +223,7 @@ def _make_anthropic(monkeypatch) -> AnthropicProvider:
             _ = kwargs
             self.messages = SimpleNamespace()
 
-    monkeypatch.setattr(
-        "bareagent.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
-    )
+    monkeypatch.setattr("bareagent.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient)
     return AnthropicProvider(api_key="test", model="claude-test")
 
 
@@ -265,9 +253,7 @@ def test_anthropic_tool_result_image_passthrough(monkeypatch) -> None:
             "data": "AAAA",
         },
     }
-    out = provider._convert_tool_result_content(
-        [{"type": "text", "text": "see:"}, image_block]
-    )
+    out = provider._convert_tool_result_content([{"type": "text", "text": "see:"}, image_block])
     assert out == [
         {"type": "text", "text": "see:"},
         {
@@ -391,9 +377,7 @@ def test_openai_tool_result_string_path_unchanged(monkeypatch) -> None:
             }
         ],
     )
-    assert out == [
-        {"role": "tool", "tool_call_id": "call_1", "content": "plain text result"}
-    ]
+    assert out == [{"role": "tool", "tool_call_id": "call_1", "content": "plain text result"}]
 
 
 def test_openai_tool_result_text_only_list_does_not_spawn_user_message(

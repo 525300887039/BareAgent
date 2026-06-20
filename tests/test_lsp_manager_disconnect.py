@@ -89,9 +89,7 @@ def _build_sync_server(sync_cls, server, repository_root):
 @pytest.fixture
 def patched(monkeypatch):
     sync_cls = _build_sync_factory()
-    monkeypatch.setattr(
-        manager_module, "_import_sync_language_server", lambda: sync_cls
-    )
+    monkeypatch.setattr(manager_module, "_import_sync_language_server", lambda: sync_cls)
     monkeypatch.setattr(manager_module, "_build_sync_server", _build_sync_server)
     return sync_cls
 

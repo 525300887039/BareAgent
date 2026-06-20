@@ -85,17 +85,11 @@ def _iter_edit_groups(
                 skipped.append(_describe_resource_op(kind, item))
                 continue
             text_document = item.get("textDocument")
-            uri = (
-                text_document.get("uri")
-                if isinstance(text_document, dict)
-                else None
-            )
+            uri = text_document.get("uri") if isinstance(text_document, dict) else None
             edits = item.get("edits")
             if not isinstance(uri, str) or not isinstance(edits, list):
                 continue
-            groups.setdefault(uri, []).extend(
-                edit for edit in edits if isinstance(edit, dict)
-            )
+            groups.setdefault(uri, []).extend(edit for edit in edits if isinstance(edit, dict))
         return groups
 
     changes = workspace_edit.get("changes")
@@ -103,9 +97,7 @@ def _iter_edit_groups(
         for uri, edits in changes.items():
             if not isinstance(uri, str) or not isinstance(edits, list):
                 continue
-            groups.setdefault(uri, []).extend(
-                edit for edit in edits if isinstance(edit, dict)
-            )
+            groups.setdefault(uri, []).extend(edit for edit in edits if isinstance(edit, dict))
 
     return groups
 

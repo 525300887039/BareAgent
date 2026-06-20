@@ -631,9 +631,7 @@ _TEAM_FALLBACK_HANDLERS: dict[str, Callable[..., Any]] = {
     "team_register": lambda name, role, system_prompt, provider="", model="": (
         f"Team registration unavailable for {name}."
     ),
-    "team_request_review": lambda to_agent, plan: (
-        f"Team review unavailable for {to_agent}."
-    ),
+    "team_request_review": lambda to_agent, plan: f"Team review unavailable for {to_agent}.",
 }
 
 

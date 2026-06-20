@@ -387,9 +387,7 @@ class MemoryManager:
             score = _relevance(query, scoring_text)
             if score <= 0:
                 continue
-            scored.append(
-                RecalledMemory(path=rel, description=description, score=float(score))
-            )
+            scored.append(RecalledMemory(path=rel, description=description, score=float(score)))
         # Highest score first; stable secondary sort on path keeps output
         # deterministic when scores tie.
         scored.sort(key=lambda m: (-m.score, m.path))
@@ -425,9 +423,7 @@ class MemoryManager:
             score = cosine(query_vector, entry[1])
             if score <= 0:
                 continue
-            scored.append(
-                RecalledMemory(path=rel, description=description, score=score)
-            )
+            scored.append(RecalledMemory(path=rel, description=description, score=score))
         scored.sort(key=lambda m: (-m.score, m.path))
         return scored[:k]
 

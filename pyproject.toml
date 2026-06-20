@@ -33,7 +33,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "ruff>=0.11",
+    # Pinned exact so `ruff check` / `ruff format` are reproducible across machines
+    # and CI: a new ruff release can add lint rules (surprise CI red) or reflow code
+    # (whole-tree `ruff format` churn). Bump deliberately, reformatting in the same PR.
+    "ruff==0.15.8",
 ]
 langfuse = ["langfuse>=2.0"]
 otel = [

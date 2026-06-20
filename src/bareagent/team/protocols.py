@@ -59,9 +59,7 @@ class ProtocolFSM:
 
         protocol, _ = decode_protocol_content(request_message.content)
         response_content = (
-            encode_protocol_content(protocol, content)
-            if protocol is not None
-            else content
+            encode_protocol_content(protocol, content) if protocol is not None else content
         )
         return self.bus.send(
             Message(
@@ -77,9 +75,7 @@ class ProtocolFSM:
 
     def broadcast(self, protocol: Protocol, content: str) -> list[str]:
         recipients = [
-            agent_name
-            for agent_name in self.bus.list_agents()
-            if agent_name != self.agent_name
+            agent_name for agent_name in self.bus.list_agents() if agent_name != self.agent_name
         ]
         message_ids: list[str] = []
         for recipient in recipients:

@@ -32,8 +32,7 @@ def _is_real_user_turn(content: Any) -> bool:
         return True
     if isinstance(content, list):
         return not any(
-            isinstance(block, dict) and block.get("type") == "tool_result"
-            for block in content
+            isinstance(block, dict) and block.get("type") == "tool_result" for block in content
         )
     return False
 

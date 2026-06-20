@@ -11,9 +11,7 @@ from bareagent.provider.base import BaseLLMProvider, LLMResponse
 
 
 class StubProvider(BaseLLMProvider):
-    def __init__(
-        self, response: LLMResponse | None = None, error: Exception | None = None
-    ) -> None:
+    def __init__(self, response: LLMResponse | None = None, error: Exception | None = None) -> None:
         self.response = response
         self.error = error
         self.calls: list[dict] = []
@@ -56,9 +54,7 @@ def test_micro_compact_truncates_old_tool_results_in_place() -> None:
         {"role": "system", "content": "You are BareAgent."},
         {
             "role": "assistant",
-            "content": [
-                {"type": "tool_use", "id": "toolu_1", "name": "bash", "input": {}}
-            ],
+            "content": [{"type": "tool_use", "id": "toolu_1", "name": "bash", "input": {}}],
         },
         {
             "role": "user",
@@ -72,9 +68,7 @@ def test_micro_compact_truncates_old_tool_results_in_place() -> None:
         },
         {
             "role": "assistant",
-            "content": [
-                {"type": "tool_use", "id": "toolu_2", "name": "read_file", "input": {}}
-            ],
+            "content": [{"type": "tool_use", "id": "toolu_2", "name": "read_file", "input": {}}],
         },
         {
             "role": "user",
@@ -88,9 +82,7 @@ def test_micro_compact_truncates_old_tool_results_in_place() -> None:
         },
         {
             "role": "assistant",
-            "content": [
-                {"type": "tool_use", "id": "toolu_3", "name": "grep", "input": {}}
-            ],
+            "content": [{"type": "tool_use", "id": "toolu_3", "name": "grep", "input": {}}],
         },
         {
             "role": "user",
@@ -104,9 +96,7 @@ def test_micro_compact_truncates_old_tool_results_in_place() -> None:
         },
         {
             "role": "assistant",
-            "content": [
-                {"type": "tool_use", "id": "toolu_4", "name": "glob", "input": {}}
-            ],
+            "content": [{"type": "tool_use", "id": "toolu_4", "name": "glob", "input": {}}],
         },
         {
             "role": "user",
@@ -233,9 +223,7 @@ def test_transcript_manager_save_and_load_round_trip(tmp_path: Path) -> None:
         {"role": "user", "content": "你好"},
         {
             "role": "assistant",
-            "content": [
-                {"type": "tool_use", "id": "toolu_1", "name": "bash", "input": {}}
-            ],
+            "content": [{"type": "tool_use", "id": "toolu_1", "name": "bash", "input": {}}],
         },
     ]
 
@@ -307,21 +295,15 @@ def test_auto_compact_keeps_messages_when_summary_fails_with_tool_results(
         },
         {
             "role": "user",
-            "content": [
-                {"type": "tool_result", "tool_use_id": "t1", "content": "result 1"}
-            ],
+            "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "result 1"}],
         },
         {
             "role": "assistant",
-            "content": [
-                {"type": "tool_use", "id": "t2", "name": "read_file", "input": {}}
-            ],
+            "content": [{"type": "tool_use", "id": "t2", "name": "read_file", "input": {}}],
         },
         {
             "role": "user",
-            "content": [
-                {"type": "tool_result", "tool_use_id": "t2", "content": "result 2"}
-            ],
+            "content": [{"type": "tool_result", "tool_use_id": "t2", "content": "result 2"}],
         },
         {
             "role": "assistant",
@@ -329,9 +311,7 @@ def test_auto_compact_keeps_messages_when_summary_fails_with_tool_results(
         },
         {
             "role": "user",
-            "content": [
-                {"type": "tool_result", "tool_use_id": "t3", "content": "result 3"}
-            ],
+            "content": [{"type": "tool_result", "tool_use_id": "t3", "content": "result 3"}],
         },
         {
             "role": "assistant",
@@ -339,9 +319,7 @@ def test_auto_compact_keeps_messages_when_summary_fails_with_tool_results(
         },
         {
             "role": "user",
-            "content": [
-                {"type": "tool_result", "tool_use_id": "t4", "content": "result 4"}
-            ],
+            "content": [{"type": "tool_result", "tool_use_id": "t4", "content": "result 4"}],
         },
         {"role": "user", "content": "最新请求"},
     ]

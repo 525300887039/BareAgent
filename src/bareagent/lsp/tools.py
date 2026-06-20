@@ -378,10 +378,7 @@ def _make_semantic_rename_handler(
             note = ""
             if result.skipped:
                 note = " Skipped resource operations: " + "; ".join(result.skipped)
-            return (
-                "Error: rename produced no applicable text edits. "
-                "No files were changed." + note
-            )
+            return "Error: rename produced no applicable text edits. No files were changed." + note
         return _format_rename_result(new_name, result)
 
     return _handler
@@ -572,12 +569,7 @@ def _format_locations(
     for loc in locations:
         if not isinstance(loc, dict):
             continue
-        path = (
-            loc.get("absolutePath")
-            or loc.get("relativePath")
-            or loc.get("uri")
-            or "<unknown>"
-        )
+        path = loc.get("absolutePath") or loc.get("relativePath") or loc.get("uri") or "<unknown>"
         # Prefer a path relative to the repository root for readability.
         if isinstance(path, str) and os.path.isabs(path):
             try:

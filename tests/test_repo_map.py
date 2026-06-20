@@ -142,9 +142,7 @@ def test_render_file_nests_by_containment_with_line_numbers():
 def test_render_file_collapses_multiline_signature():
     files = FileTags(
         "m.py",
-        definitions=(
-            _defn("f", start=1, end=3, signature="def f(\n    a,\n    b,\n):"),
-        ),
+        definitions=(_defn("f", start=1, end=3, signature="def f(\n    a,\n    b,\n):"),),
     )
     out = render_file(files)
     assert out.split("\n")[1] == "  def f( a, b, ): (L1)"
@@ -187,8 +185,7 @@ def test_format_repo_map_truncates_when_top_file_over_budget():
     big = FileTags(
         "a.py",
         definitions=tuple(
-            _defn(f"f{i}", start=i, end=i, signature=f"def f{i}(aaaaaaaaaa)")
-            for i in range(1, 30)
+            _defn(f"f{i}", start=i, end=i, signature=f"def f{i}(aaaaaaaaaa)") for i in range(1, 30)
         ),
     )
     out = format_repo_map({"a.py": big}, ["a.py"], max_tokens=20)
@@ -234,9 +231,7 @@ def test_index_generate_ranks_and_renders(tmp_path: Path):
     extractor = _FakeExtractor(
         {
             "a.py": FileTags("a.py", definitions=(_defn("foo", start=1, end=2),)),
-            "b.py": FileTags(
-                "b.py", references=(Reference("foo"), Reference("foo"))
-            ),
+            "b.py": FileTags("b.py", references=(Reference("foo"), Reference("foo"))),
         }
     )
     index = RepoMapIndex(ws, extractor=extractor, cache_path=cache_path)

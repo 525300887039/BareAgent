@@ -174,9 +174,7 @@ def format_diagnostics(file_path: str, diags: list[Diagnostic]) -> str:
     lines = [header]
     for diag in diags:
         source = diag.source or "lsp"
-        lines.append(
-            f"- [{source} {diag.severity}] Line {diag.line}:{diag.col} — {diag.message}"
-        )
+        lines.append(f"- [{source} {diag.severity}] Line {diag.line}:{diag.col} — {diag.message}")
     return "\n".join(lines)
 
 

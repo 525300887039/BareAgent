@@ -160,9 +160,7 @@ def test_autonomous_agent_replies_and_claims_ready_tasks(tmp_path: Path) -> None
     bus = MessageBus(tmp_path / ".mailbox")
     bus.ensure_mailbox("main")
     task_manager = TaskManager(tmp_path / ".tasks.json")
-    task = task_manager.create(
-        "Review module", description="Inspect the new manager module"
-    )
+    task = task_manager.create("Review module", description="Inspect the new manager module")
     provider = ReplayProvider(["Message handled.", "Task completed."])
     agent = AutonomousAgent(
         name="code-reviewer",
@@ -208,9 +206,7 @@ def test_autonomous_agent_replies_and_claims_ready_tasks(tmp_path: Path) -> None
 def test_autonomous_agent_ignores_stale_shutdown_messages(tmp_path: Path) -> None:
     bus = MessageBus(tmp_path / ".mailbox")
     task_manager = TaskManager(tmp_path / ".tasks.json")
-    task = task_manager.create(
-        "Review module", description="Inspect the new manager module"
-    )
+    task = task_manager.create("Review module", description="Inspect the new manager module")
     bus.send(
         Message(
             id="",
@@ -281,9 +277,7 @@ def test_autonomous_agent_respects_permission_guard_for_received_work(
         provider=provider,
         tools=[],
         handlers={
-            "write_file": lambda file_path, content: handler_calls.append(
-                (file_path, content)
-            )
+            "write_file": lambda file_path, content: handler_calls.append((file_path, content))
         },
         bus=bus,
         task_manager=None,
@@ -510,9 +504,7 @@ def test_team_send_blocks_and_returns_reply(tmp_path: Path) -> None:
     teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
     teammate_manager.register("reviewer", "reviewer", "You review.")
     bg = _FakeBg(running={"team:sess1:reviewer"})
-    handlers = _build_team_handlers(
-        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
-    )
+    handlers = _build_team_handlers(tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg)
 
     stop = threading.Event()
 
@@ -547,9 +539,7 @@ def test_team_send_skips_blocking_when_not_running(tmp_path: Path) -> None:
     teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
     teammate_manager.register("reviewer", "reviewer", "You review.")
     bg = _FakeBg(running=set())  # not running
-    handlers = _build_team_handlers(
-        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
-    )
+    handlers = _build_team_handlers(tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg)
 
     start = time.time()
     result = handlers["team_send"]("reviewer", "hello")
@@ -563,9 +553,7 @@ def test_team_send_to_main_returns_immediately(tmp_path: Path) -> None:
     bus = MessageBus(tmp_path / ".mailbox")
     teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
     bg = _FakeBg()
-    handlers = _build_team_handlers(
-        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
-    )
+    handlers = _build_team_handlers(tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg)
 
     result = handlers["team_send"](MAIN_AGENT_NAME, "note")
     assert result.startswith("Sent message")
@@ -604,18 +592,14 @@ def test_team_shutdown_signals_running_teammate(tmp_path: Path) -> None:
     assert "reviewer" not in spawned
 
     inbox = bus.receive("reviewer")
-    assert any(
-        decode_protocol_content(m.content)[0] == Protocol.SHUTDOWN for m in inbox
-    )
+    assert any(decode_protocol_content(m.content)[0] == Protocol.SHUTDOWN for m in inbox)
 
 
 def test_team_shutdown_when_not_running(tmp_path: Path) -> None:
     bus = MessageBus(tmp_path / ".mailbox")
     teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
     bg = _FakeBg(running=set())
-    handlers = _build_team_handlers(
-        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
-    )
+    handlers = _build_team_handlers(tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg)
 
     result = handlers["team_shutdown"]("reviewer")
     assert "not running" in result
@@ -627,9 +611,7 @@ def test_team_list_reflects_real_liveness(tmp_path: Path) -> None:
     teammate_manager.register("alive", "r", "p")
     teammate_manager.register("dead", "r", "p")
     bg = _FakeBg(running={"team:sess1:alive"})
-    handlers = _build_team_handlers(
-        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
-    )
+    handlers = _build_team_handlers(tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg)
 
     listed = {item["name"]: item["running"] for item in handlers["team_list"]()}
     assert listed == {"alive": True, "dead": False}
@@ -868,9 +850,7 @@ def test_team_register_persists_and_lists(tmp_path: Path) -> None:
     bus = MessageBus(tmp_path / ".mailbox")
     teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
     bg = _FakeBg()
-    handlers = _build_team_handlers(
-        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
-    )
+    handlers = _build_team_handlers(tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg)
 
     result = handlers["team_register"]("reviewer", "code reviewer", "You review code.")
 
@@ -936,9 +916,7 @@ def test_team_request_review_blocks_and_returns_verdict(tmp_path: Path) -> None:
     teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
     teammate_manager.register("reviewer", "reviewer", "You review.")
     bg = _FakeBg(running={"team:sess1:reviewer"})
-    handlers = _build_team_handlers(
-        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg
-    )
+    handlers = _build_team_handlers(tmp_path, bus=bus, teammate_manager=teammate_manager, bg=bg)
 
     seen: list[tuple] = []
     stop = threading.Event()

@@ -67,9 +67,7 @@ def test_anthropic_parse_response_extracts_thinking_and_tool_calls(monkeypatch) 
             _ = kwargs
             self.messages = SimpleNamespace()
 
-    monkeypatch.setattr(
-        "bareagent.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
-    )
+    monkeypatch.setattr("bareagent.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient)
     provider = AnthropicProvider(api_key="test", model="claude-test")
 
     response = SimpleNamespace(
@@ -167,9 +165,7 @@ def test_anthropic_create_stream_yields_text_and_tool_events(monkeypatch) -> Non
             _ = kwargs
             self.messages = SimpleNamespace(stream=lambda **kwargs: FakeStream())
 
-    monkeypatch.setattr(
-        "bareagent.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
-    )
+    monkeypatch.setattr("bareagent.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient)
     provider = AnthropicProvider(api_key="test", model="claude-test")
 
     stream = provider.create_stream(
@@ -232,9 +228,7 @@ def test_openai_parse_response_extracts_tool_calls(monkeypatch) -> None:
     parsed = provider._parse_response(response)
 
     assert parsed.has_tool_calls is True
-    assert parsed.tool_calls == [
-        ToolCall(id="call_1", name="grep", input={"pattern": "TODO"})
-    ]
+    assert parsed.tool_calls == [ToolCall(id="call_1", name="grep", input={"pattern": "TODO"})]
     assert parsed.input_tokens == 13
     assert parsed.output_tokens == 6
 
@@ -260,9 +254,7 @@ def test_openai_create_stream_accumulates_text_and_tool_calls(monkeypatch) -> No
                             SimpleNamespace(
                                 index=0,
                                 id="call_1",
-                                function=SimpleNamespace(
-                                    name="grep", arguments='{"pattern":"TO'
-                                ),
+                                function=SimpleNamespace(name="grep", arguments='{"pattern":"TO'),
                             )
                         ],
                     ),
@@ -325,9 +317,7 @@ def test_openai_create_stream_accumulates_text_and_tool_calls(monkeypatch) -> No
         ),
     ]
     assert response.text == "Check"
-    assert response.tool_calls == [
-        ToolCall(id="call_1", name="grep", input={"pattern": "TODO"})
-    ]
+    assert response.tool_calls == [ToolCall(id="call_1", name="grep", input={"pattern": "TODO"})]
     assert response.input_tokens == 13
     assert response.output_tokens == 6
 
@@ -346,9 +336,7 @@ def test_openai_create_stream_emits_tool_calls_even_without_tool_finish_reason(
                             SimpleNamespace(
                                 index=0,
                                 id="call_1",
-                                function=SimpleNamespace(
-                                    name="echo", arguments='{"value":"STREAM'
-                                ),
+                                function=SimpleNamespace(name="echo", arguments='{"value":"STREAM'),
                             )
                         ],
                     ),
@@ -366,9 +354,7 @@ def test_openai_create_stream_emits_tool_calls_even_without_tool_finish_reason(
                             SimpleNamespace(
                                 index=0,
                                 id=None,
-                                function=SimpleNamespace(
-                                    name=None, arguments='_TOOL"}'
-                                ),
+                                function=SimpleNamespace(name=None, arguments='_TOOL"}'),
                             )
                         ],
                     ),
@@ -496,9 +482,7 @@ def test_openai_parse_responses_api_payload_extracts_tool_calls() -> None:
     parsed = provider._parse_responses_api_response(response)
 
     assert parsed.text == "Checking now."
-    assert parsed.tool_calls == [
-        ToolCall(id="call_1", name="grep", input={"pattern": "TODO"})
-    ]
+    assert parsed.tool_calls == [ToolCall(id="call_1", name="grep", input={"pattern": "TODO"})]
     assert parsed.input_tokens == 13
     assert parsed.output_tokens == 6
 
@@ -526,12 +510,8 @@ def test_openai_create_stream_via_responses_accumulates_text_and_tool_calls(
         }
     )
     events_source = [
-        SimpleNamespace(
-            type="response.output_text.delta", delta="Checking ", item_id="msg_1"
-        ),
-        SimpleNamespace(
-            type="response.output_text.delta", delta="now.", item_id="msg_1"
-        ),
+        SimpleNamespace(type="response.output_text.delta", delta="Checking ", item_id="msg_1"),
+        SimpleNamespace(type="response.output_text.delta", delta="now.", item_id="msg_1"),
         SimpleNamespace(
             type="response.output_item.done",
             item=SimpleNamespace(
@@ -582,9 +562,7 @@ def test_openai_create_stream_via_responses_accumulates_text_and_tool_calls(
         ),
     ]
     assert response.text == "Checking now."
-    assert response.tool_calls == [
-        ToolCall(id="call_1", name="grep", input={"pattern": "TODO"})
-    ]
+    assert response.tool_calls == [ToolCall(id="call_1", name="grep", input={"pattern": "TODO"})]
     assert response.input_tokens == 13
     assert response.output_tokens == 6
 
@@ -600,12 +578,8 @@ def test_openai_create_stream_via_responses_preserves_streamed_tool_calls_when_c
         }
     )
     events_source = [
-        SimpleNamespace(
-            type="response.output_text.delta", delta="Checking ", item_id="msg_1"
-        ),
-        SimpleNamespace(
-            type="response.output_text.delta", delta="now.", item_id="msg_1"
-        ),
+        SimpleNamespace(type="response.output_text.delta", delta="Checking ", item_id="msg_1"),
+        SimpleNamespace(type="response.output_text.delta", delta="now.", item_id="msg_1"),
         SimpleNamespace(
             type="response.output_item.done",
             item=SimpleNamespace(
@@ -656,9 +630,7 @@ def test_openai_create_stream_via_responses_preserves_streamed_tool_calls_when_c
         ),
     ]
     assert response.text == "Checking now."
-    assert response.tool_calls == [
-        ToolCall(id="call_1", name="grep", input={"pattern": "TODO"})
-    ]
+    assert response.tool_calls == [ToolCall(id="call_1", name="grep", input={"pattern": "TODO"})]
     assert response.stop_reason == "tool_calls"
     assert response.to_message() == {
         "role": "assistant",
@@ -728,9 +700,7 @@ def test_anthropic_convert_message_content_missing_id_and_name(monkeypatch) -> N
             _ = kwargs
             self.messages = SimpleNamespace()
 
-    monkeypatch.setattr(
-        "bareagent.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient
-    )
+    monkeypatch.setattr("bareagent.provider.anthropic.anthropic.Anthropic", FakeAnthropicClient)
     provider = AnthropicProvider(api_key="x", model="claude-3-5-sonnet-20241022")
     content = [{"type": "tool_use", "input": {}}]
     result = provider._convert_message_content(content)

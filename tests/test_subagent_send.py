@@ -110,9 +110,7 @@ def test_send_resumes_appends_message_and_returns_footnote() -> None:
 
 def test_send_missing_id_returns_error_not_raise() -> None:
     reg = SubagentRegistry()
-    result = run_subagent_send(
-        "sa-nope", "hi", registry=reg, run_loop=lambda _ctx: "x"
-    )
+    result = run_subagent_send("sa-nope", "hi", registry=reg, run_loop=lambda _ctx: "x")
     assert result.startswith("Error:")
     assert "not found" in result
 

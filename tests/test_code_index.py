@@ -151,9 +151,7 @@ def test_search_fail_open_on_embed_error(tmp_path: Path):
 
 
 def test_second_build_only_embeds_changed_chunks(tmp_path: Path):
-    (tmp_path / "a.py").write_text(
-        "def authenticate():\n    return login()\n", encoding="utf-8"
-    )
+    (tmp_path / "a.py").write_text("def authenticate():\n    return login()\n", encoding="utf-8")
     (tmp_path / "b.py").write_text("def parse():\n    return tokenize()\n", encoding="utf-8")
     embedder = _FakeEmbedder()
     index = _index(tmp_path, embedder)

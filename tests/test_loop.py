@@ -18,9 +18,7 @@ class MockProvider(BaseLLMProvider):
         responses: list[LLMResponse],
         *,
         stream_payloads: list[
-            tuple[list[StreamEvent], LLMResponse]
-            | Exception
-            | Generator[StreamEvent, None, Any]
+            tuple[list[StreamEvent], LLMResponse] | Exception | Generator[StreamEvent, None, Any]
         ]
         | None = None,
     ) -> None:
@@ -36,9 +34,7 @@ class MockProvider(BaseLLMProvider):
 
     def create_stream(self, messages, tools, **kwargs):
         _ = kwargs
-        self.stream_calls.append(
-            {"messages": deepcopy(messages), "tools": deepcopy(tools)}
-        )
+        self.stream_calls.append({"messages": deepcopy(messages), "tools": deepcopy(tools)})
         payload = self._stream_payloads.pop(0)
         if isinstance(payload, Exception):
             raise payload
@@ -82,9 +78,7 @@ class FakeConsole:
 
 class LegacyConsole:
     def __init__(self) -> None:
-        self.console = type(
-            "ConsoleProxy", (), {"print": lambda *args, **kwargs: None}
-        )()
+        self.console = type("ConsoleProxy", (), {"print": lambda *args, **kwargs: None})()
         self.assistant: list[str] = []
         self.tool_calls: list[tuple[str, dict]] = []
         self.tool_results: list[tuple[str, str]] = []
@@ -266,9 +260,7 @@ def test_agent_loop_streams_and_formats_tool_activity(monkeypatch) -> None:
                 ],
                 LLMResponse(
                     text="Checking file.",
-                    tool_calls=[
-                        ToolCall(id="toolu_1", name="echo", input={"value": "hello"})
-                    ],
+                    tool_calls=[ToolCall(id="toolu_1", name="echo", input={"value": "hello"})],
                     stop_reason="tool_use",
                     input_tokens=10,
                     output_tokens=5,
@@ -329,9 +321,7 @@ def test_agent_loop_treats_pre_tool_stream_text_as_streamed_output() -> None:
                 ],
                 LLMResponse(
                     text="Checking file.",
-                    tool_calls=[
-                        ToolCall(id="toolu_1", name="echo", input={"value": "hello"})
-                    ],
+                    tool_calls=[ToolCall(id="toolu_1", name="echo", input={"value": "hello"})],
                     stop_reason="tool_use",
                     input_tokens=10,
                     output_tokens=5,
@@ -403,9 +393,7 @@ def test_agent_loop_falls_back_to_non_stream_mode(monkeypatch) -> None:
     assert len(provider.stream_calls) == 1
     assert len(provider.calls) == 1
     assert console.assistant == ["Done."]
-    assert any(
-        "falling back to non-stream mode" in status for status in console.statuses
-    )
+    assert any("falling back to non-stream mode" in status for status in console.statuses)
 
 
 def test_agent_loop_streams_with_legacy_console_shape(monkeypatch) -> None:
@@ -444,9 +432,7 @@ def test_agent_loop_streams_with_legacy_console_shape(monkeypatch) -> None:
     assert result == "Legacy stream."
     assert len(provider.stream_calls) == 1
     assert console.assistant == []
-    assert [instance.chunks for instance in FakeStreamPrinter.instances] == [
-        ["Legacy stream."]
-    ]
+    assert [instance.chunks for instance in FakeStreamPrinter.instances] == [["Legacy stream."]]
     assert FakeStreamPrinter.instances[0].args == (console.console,)
 
 
@@ -516,9 +502,7 @@ def test_agent_loop_does_not_retry_after_partial_stream_failure(monkeypatch) -> 
     assert len(provider.stream_calls) == 1
     assert len(provider.calls) == 0
     assert console.errors == ["LLM call failed: RuntimeError: stream reset"]
-    assert [instance.chunks for instance in FakeStreamPrinter.instances] == [
-        ["Partial reply"]
-    ]
+    assert [instance.chunks for instance in FakeStreamPrinter.instances] == [["Partial reply"]]
 
 
 class _RecordingTracker:
@@ -645,9 +629,7 @@ def test_agent_loop_terminates_after_max_iterations() -> None:
         input_tokens=10,
         output_tokens=5,
     )
-    provider = MockProvider(
-        [tool_response, tool_response, tool_response, tool_response]
-    )
+    provider = MockProvider([tool_response, tool_response, tool_response, tool_response])
     console = FakeConsole()
 
     with pytest.raises(LLMCallError, match="exceeded 3 iterations"):
@@ -689,9 +671,7 @@ class FakeHookEngine:
         self.pre_calls.append((tool_name, tool_input))
         return self._pre_block
 
-    def run_post_tool_use(
-        self, tool_name, tool_input, tool_output, *, is_error, session_id, cwd
-    ):
+    def run_post_tool_use(self, tool_name, tool_input, tool_output, *, is_error, session_id, cwd):
         self.post_calls.append((tool_name, tool_input, tool_output, is_error))
 
 
@@ -852,8 +832,15 @@ def test_agent_loop_warns_on_empty_response(caplog) -> None:
 
 def test_agent_loop_no_warning_on_normal_text(caplog) -> None:
     provider = MockProvider(
-        [LLMResponse(text="Hello.", tool_calls=[], stop_reason="end_turn",
-                     input_tokens=5, output_tokens=2)]
+        [
+            LLMResponse(
+                text="Hello.",
+                tool_calls=[],
+                stop_reason="end_turn",
+                input_tokens=5,
+                output_tokens=2,
+            )
+        ]
     )
     console = FakeConsole()
     with caplog.at_level(logging.WARNING, logger="bareagent.core.loop"):
@@ -896,8 +883,9 @@ def test_agent_loop_no_warning_on_tool_only_turn(caplog) -> None:
                 input_tokens=5,
                 output_tokens=3,
             ),
-            LLMResponse(text="Done.", tool_calls=[], stop_reason="end_turn",
-                        input_tokens=5, output_tokens=2),
+            LLMResponse(
+                text="Done.", tool_calls=[], stop_reason="end_turn", input_tokens=5, output_tokens=2
+            ),
         ]
     )
     console = FakeConsole()

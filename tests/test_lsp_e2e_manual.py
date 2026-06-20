@@ -43,9 +43,7 @@ def _python_lsp_available() -> bool:
 
 pytestmark = pytest.mark.skipif(
     not _python_lsp_available(),
-    reason=(
-        'jedi-language-server not on PATH (install via `uv pip install -e ".[lsp]"`)'
-    ),
+    reason=('jedi-language-server not on PATH (install via `uv pip install -e ".[lsp]"`)'),
 )
 
 
@@ -124,9 +122,7 @@ def test_pyright_outline(manager: LanguageServerManager, lsp_workspace: Path) ->
 # ---------------------------------------------------------------------------
 
 
-def test_pyright_diagnostics(
-    manager: LanguageServerManager, lsp_workspace: Path
-) -> None:
+def test_pyright_diagnostics(manager: LanguageServerManager, lsp_workspace: Path) -> None:
     _schemas, handlers = build_lsp_tools(manager)
     target = lsp_workspace / "bad.py"
 
@@ -151,9 +147,7 @@ def test_pyright_diagnostics(
 # ---------------------------------------------------------------------------
 
 
-def test_pyright_definition(
-    manager: LanguageServerManager, lsp_workspace: Path
-) -> None:
+def test_pyright_definition(manager: LanguageServerManager, lsp_workspace: Path) -> None:
     _schemas, handlers = build_lsp_tools(manager)
     use_file = lsp_workspace / "use.py"
     # "result = add(1, 2)" — column points at 'add' (1-based col 10).
@@ -175,18 +169,14 @@ def test_pyright_definition(
 # ---------------------------------------------------------------------------
 
 
-def test_jedi_semantic_rename(
-    manager: LanguageServerManager, lsp_workspace: Path
-) -> None:
+def test_jedi_semantic_rename(manager: LanguageServerManager, lsp_workspace: Path) -> None:
     _schemas, handlers = build_lsp_tools(manager)
     good = lsp_workspace / "good.py"
     # ``def add(...)`` — 1-based col 5 points at the ``add`` identifier.
     output = ""
     deadline = time.monotonic() + LSP_TIMEOUT
     while time.monotonic() < deadline:
-        output = handlers["semantic_rename"](
-            file=str(good), line=1, col=5, new_name="plus"
-        )
+        output = handlers["semantic_rename"](file=str(good), line=1, col=5, new_name="plus")
         if not output.startswith("Error"):
             break
         time.sleep(0.5)

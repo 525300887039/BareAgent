@@ -64,12 +64,8 @@ def parse_mcp_config(raw: dict[str, Any]) -> MCPConfig:
         raise MCPError("'mcp' must be a table")
 
     cfg = MCPConfig(
-        max_result_text_bytes=_int(
-            block, "max_result_text_bytes", _DEFAULT_MAX_TEXT_BYTES
-        ),
-        max_result_binary_bytes=_int(
-            block, "max_result_binary_bytes", _DEFAULT_MAX_BINARY_BYTES
-        ),
+        max_result_text_bytes=_int(block, "max_result_text_bytes", _DEFAULT_MAX_TEXT_BYTES),
+        max_result_binary_bytes=_int(block, "max_result_binary_bytes", _DEFAULT_MAX_BINARY_BYTES),
         start_timeout=_float(block, "start_timeout", _DEFAULT_START_TIMEOUT),
     )
 
@@ -94,9 +90,7 @@ def _parse_server(
 ) -> MCPServerConfig:
     name = entry.get("name")
     if not isinstance(name, str) or not name:
-        raise MCPError(
-            f"mcp.servers[{index}].name is required and must be a non-empty string"
-        )
+        raise MCPError(f"mcp.servers[{index}].name is required and must be a non-empty string")
 
     transport = entry.get("transport")
     if transport not in _VALID_TRANSPORTS:
@@ -117,9 +111,7 @@ def _parse_server(
         elif isinstance(command, list) and all(isinstance(s, str) for s in command):
             server.command = list(command)
         else:
-            raise MCPError(
-                f"mcp.servers[{name}].command is required for stdio transport"
-            )
+            raise MCPError(f"mcp.servers[{name}].command is required for stdio transport")
         if not server.command:
             raise MCPError(f"mcp.servers[{name}].command must not be empty")
         args = entry.get("args", [])
@@ -139,17 +131,13 @@ def _parse_server(
     else:
         url = entry.get("url")
         if not isinstance(url, str) or not url:
-            raise MCPError(
-                f"mcp.servers[{name}].url is required for transport {transport!r}"
-            )
+            raise MCPError(f"mcp.servers[{name}].url is required for transport {transport!r}")
         server.url = url
         headers = entry.get("headers", {})
         if not isinstance(headers, dict) or not all(
             isinstance(k, str) and isinstance(v, str) for k, v in headers.items()
         ):
-            raise MCPError(
-                f"mcp.servers[{name}].headers must be a string->string table"
-            )
+            raise MCPError(f"mcp.servers[{name}].headers must be a string->string table")
         server.headers = dict(headers)
 
     return server

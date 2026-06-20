@@ -21,6 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # --- decide_action decision table -------------------------------------------------
 
+
 @pytest.mark.parametrize(
     ("open_count", "conclusion", "expected"),
     [
@@ -43,17 +44,18 @@ def test_decide_action_table(open_count: int, conclusion: str, expected: Action)
 
 # --- combine_conclusions: reduce multiple job results to one signal ----------------
 
+
 @pytest.mark.parametrize(
     ("results", "expected"),
     [
-        (["success", "success"], "success"),       # all green -> green
-        (["success", "failure"], "failure"),       # any red -> red
+        (["success", "success"], "success"),  # all green -> green
+        (["success", "failure"], "failure"),  # any red -> red
         (["failure", "success"], "failure"),
         (["failure", "failure"], "failure"),
-        (["success", "cancelled"], ""),            # ambiguous -> no signal
+        (["success", "cancelled"], ""),  # ambiguous -> no signal
         (["success", "skipped"], ""),
         (["cancelled", "skipped"], ""),
-        ([], ""),                                   # nothing -> no signal
+        ([], ""),  # nothing -> no signal
         (["success"], "success"),
         (["failure"], "failure"),
     ],
@@ -63,6 +65,7 @@ def test_combine_conclusions(results: list[str], expected: str) -> None:
 
 
 # --- static anti-regression guards ------------------------------------------------
+
 
 def _read(relpath: str) -> str:
     return (REPO_ROOT / relpath).read_text(encoding="utf-8")
@@ -127,6 +130,22 @@ def test_ci_test_job_covers_windows() -> None:
     assert "windows-latest" in ci
     assert "ubuntu-latest" in ci
     assert "fail-fast: false" in ci
+
+
+def test_ruff_pinned_exact() -> None:
+    # Pinning ruff exact keeps `ruff check`/`format` reproducible: a new release can
+    # add lint rules (surprise CI red) or reflow code (whole-tree format churn).
+    pyproject = _read("pyproject.toml")
+    assert "ruff==" in pyproject
+    assert "ruff>=" not in pyproject
+
+
+def test_format_check_enforced_in_ci_and_local_gate() -> None:
+    # Bulk-reformat only "sticks" if both CI and the pre-push gate reject drift.
+    ci = _read(".github/workflows/ci.yml")
+    gate = _read("scripts/ci-check.sh")
+    assert "ruff format --check src tests" in ci
+    assert "ruff format --check src tests" in gate
 
 
 def test_pre_push_hook_present_and_wired() -> None:

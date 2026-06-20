@@ -46,9 +46,7 @@ def inject_notifications(
     notification_message = {
         "role": "system",
         "content": (
-            f"{_NOTIFICATION_PREFIX}\n"
-            + "\n".join(lines)
-            + "\n</background-notifications>"
+            f"{_NOTIFICATION_PREFIX}\n" + "\n".join(lines) + "\n</background-notifications>"
         ),
     }
     if messages and messages[-1].get("role") == "user":

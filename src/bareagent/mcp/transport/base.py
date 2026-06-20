@@ -71,9 +71,7 @@ class Transport(ABC):
         try:
             return future.result(timeout=timeout)
         except TimeoutError as exc:
-            raise MCPProtocolError(
-                f"request {request.id} timed out after {timeout}s"
-            ) from exc
+            raise MCPProtocolError(f"request {request.id} timed out after {timeout}s") from exc
         finally:
             with self._pending_lock:
                 self._pending.pop(request.id, None)

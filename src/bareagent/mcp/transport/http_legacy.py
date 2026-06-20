@@ -65,9 +65,7 @@ class HttpLegacyTransport(Transport):
     def start(self) -> None:
         if self._client is not None:
             raise RuntimeError("HttpLegacyTransport already started")
-        timeout = httpx.Timeout(
-            connect=self._start_timeout, read=None, write=10.0, pool=10.0
-        )
+        timeout = httpx.Timeout(connect=self._start_timeout, read=None, write=10.0, pool=10.0)
         self._client = httpx.Client(timeout=timeout)
         headers = self._merge_headers(_PROTOCOL_HEADERS_GET)
         try:
@@ -85,9 +83,7 @@ class HttpLegacyTransport(Transport):
 
         if not self._endpoint_event.wait(timeout=self._start_timeout):
             self.close()
-            raise MCPTransportError(
-                "did not receive endpoint event within start timeout"
-            )
+            raise MCPTransportError("did not receive endpoint event within start timeout")
 
     def send(self, message: str) -> None:
         if self._closed:
@@ -112,11 +108,7 @@ class HttpLegacyTransport(Transport):
         self._fail_all_pending("HTTP legacy transport closed")
 
     def is_alive(self) -> bool:
-        return (
-            not self._closed
-            and self._client is not None
-            and self._endpoint_url is not None
-        )
+        return not self._closed and self._client is not None and self._endpoint_url is not None
 
     # --- internals ---
 
@@ -149,9 +141,7 @@ class HttpLegacyTransport(Transport):
                 elif event["event"] == "message":
                     self._on_message(event["data"])
                 else:
-                    _log.warning(
-                        "MCP http_legacy: unknown SSE event %r", event["event"]
-                    )
+                    _log.warning("MCP http_legacy: unknown SSE event %r", event["event"])
         except httpx.HTTPError as exc:
             disconnect_reason = f"SSE stream broken: {exc}"
             _log.warning("MCP http_legacy: SSE stream broken: %s", exc)
@@ -160,9 +150,7 @@ class HttpLegacyTransport(Transport):
             _log.warning("MCP http_legacy reader crashed: %s", exc)
         finally:
             if not self._closing:
-                self._invoke_disconnect(
-                    disconnect_reason or "SSE stream ended unexpectedly"
-                )
+                self._invoke_disconnect(disconnect_reason or "SSE stream ended unexpectedly")
             self._fail_all_pending("SSE stream closed (server disconnect or error)")
 
     def _on_endpoint(self, data: str) -> None:
@@ -187,6 +175,4 @@ class HttpLegacyTransport(Transport):
         else:
             # Server-to-client Request: not handled in PR1.
             assert isinstance(msg, Request)
-            _log.warning(
-                "MCP http_legacy: ignoring server-to-client request %r", msg.method
-            )
+            _log.warning("MCP http_legacy: ignoring server-to-client request %r", msg.method)

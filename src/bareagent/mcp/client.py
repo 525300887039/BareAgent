@@ -111,9 +111,7 @@ class MCPClient:
             self._transport.notify(Notification(method="notifications/initialized"))
         except MCPTransportError as exc:
             self._safe_close()
-            raise MCPHandshakeError(
-                f"failed to send initialized notification: {exc}"
-            ) from exc
+            raise MCPHandshakeError(f"failed to send initialized notification: {exc}") from exc
 
         self._started = True
 
@@ -152,9 +150,7 @@ class MCPClient:
         request = Request(id=new_request_id(), method="tools/list")
         response = self._transport.request(request, timeout=timeout)
         if response.error is not None:
-            raise MCPCallError(
-                f"MCP Error: {response.error.code} {response.error.message}"
-            )
+            raise MCPCallError(f"MCP Error: {response.error.code} {response.error.message}")
         result = response.result if isinstance(response.result, dict) else {}
         tools = result.get("tools")
         if not isinstance(tools, list):
@@ -193,9 +189,7 @@ class MCPClient:
         )
         response = self._transport.request(request, timeout=timeout)
         if response.error is not None:
-            raise MCPCallError(
-                f"MCP Error: {response.error.code} {response.error.message}"
-            )
+            raise MCPCallError(f"MCP Error: {response.error.code} {response.error.message}")
         result = response.result
         if not isinstance(result, dict):
             return {"content": [], "isError": False}
@@ -242,9 +236,7 @@ class MCPClient:
         )
         response = self._transport.request(request, timeout=timeout)
         if response.error is not None:
-            raise MCPCallError(
-                f"MCP Error: {response.error.code} {response.error.message}"
-            )
+            raise MCPCallError(f"MCP Error: {response.error.code} {response.error.message}")
         result = response.result
         if not isinstance(result, dict):
             return {"messages": []}
@@ -261,9 +253,7 @@ class MCPClient:
         request = Request(id=new_request_id(), method="resources/list")
         response = self._transport.request(request, timeout=timeout)
         if response.error is not None:
-            raise MCPCallError(
-                f"MCP Error: {response.error.code} {response.error.message}"
-            )
+            raise MCPCallError(f"MCP Error: {response.error.code} {response.error.message}")
         result = response.result if isinstance(response.result, dict) else {}
         resources = result.get("resources")
         if not isinstance(resources, list):
@@ -286,9 +276,7 @@ class MCPClient:
         )
         response = self._transport.request(request, timeout=timeout)
         if response.error is not None:
-            raise MCPCallError(
-                f"MCP Error: {response.error.code} {response.error.message}"
-            )
+            raise MCPCallError(f"MCP Error: {response.error.code} {response.error.message}")
         result = response.result
         if not isinstance(result, dict):
             return {"contents": [], "isError": False}
@@ -305,9 +293,7 @@ class MCPClient:
         request = Request(id=new_request_id(), method="prompts/list")
         response = self._transport.request(request, timeout=timeout)
         if response.error is not None:
-            raise MCPCallError(
-                f"MCP Error: {response.error.code} {response.error.message}"
-            )
+            raise MCPCallError(f"MCP Error: {response.error.code} {response.error.message}")
         result = response.result if isinstance(response.result, dict) else {}
         prompts = result.get("prompts")
         if not isinstance(prompts, list):
@@ -324,8 +310,7 @@ class MCPClient:
                 # ``/mcp:<server>:<prompt>`` REPL syntax. Skip + warn rather
                 # than silently surface unusable entries.
                 _log.warning(
-                    "MCP server %r prompt %r contains characters outside "
-                    "[a-zA-Z0-9_-]; skipping",
+                    "MCP server %r prompt %r contains characters outside [a-zA-Z0-9_-]; skipping",
                     self._config.name,
                     name,
                 )

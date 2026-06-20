@@ -26,9 +26,7 @@ def _make_manager(
     client: MagicMock | None = None,
 ) -> MagicMock:
     manager = MagicMock()
-    manager.get_client.side_effect = lambda name: (
-        client if name == server_name else None
-    )
+    manager.get_client.side_effect = lambda name: client if name == server_name else None
     return manager
 
 
@@ -75,9 +73,7 @@ def test_parser_skips_non_kv_tokens_with_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     with caplog.at_level(logging.WARNING, logger="bareagent.main"):
-        parsed = _parse_mcp_prompt_command(
-            "/mcp:fetch:summarize url=https://x.com loose depth=3"
-        )
+        parsed = _parse_mcp_prompt_command("/mcp:fetch:summarize url=https://x.com loose depth=3")
     assert parsed == ("fetch", "summarize", {"url": "https://x.com", "depth": "3"})
     assert any("loose" in rec.getMessage() for rec in caplog.records)
 

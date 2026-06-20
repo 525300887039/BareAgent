@@ -70,9 +70,7 @@ def test_hook_snapshot_then_diff_happy_path() -> None:
     mgr = _StubManager(LSPConfig(auto_diagnostics_on_edit=True), rows_after_edit=rows)
     hook = _build_diagnostics_hook(mgr)  # type: ignore[arg-type]
     assert hook is not None
-    before = hook(
-        "a.py", None
-    )  # snapshot before — empty since rows only added on diff?
+    before = hook("a.py", None)  # snapshot before — empty since rows only added on diff?
     # Our stub returns the same rows pre/post; the diff should be empty.
     appendix = hook("a.py", before)
     assert appendix is None

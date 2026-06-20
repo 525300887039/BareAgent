@@ -254,7 +254,7 @@ def test_load_config_parses_semantic_recall_fields(tmp_path):
     config_file = tmp_path / "config.toml"
     config_file.write_text(
         '[provider]\nname = "anthropic"\nmodel = "m"\napi_key_env = "K"\n\n'
-        "[memory]\nsemantic_recall = true\nembedding_backend = \"local\"\n"
+        '[memory]\nsemantic_recall = true\nembedding_backend = "local"\n'
         'embedding_model = "BAAI/bge-small-en-v1.5"\n',
         encoding="utf-8",
     )

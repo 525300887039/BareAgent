@@ -167,9 +167,7 @@ def test_build_code_index_none_without_embedder(tmp_path: Path, monkeypatch) -> 
     from bareagent.main import _build_code_index
 
     config = make_test_config(tmp_path)
-    monkeypatch.setattr(
-        main_module, "_build_embedder_from_memory_config", lambda _cfg: None
-    )
+    monkeypatch.setattr(main_module, "_build_embedder_from_memory_config", lambda _cfg: None)
     console = AgentConsole(Console(file=StringIO()))
     # No usable embedder -> no index -> the tool is withheld (boot gate).
     assert _build_code_index(config, tmp_path, console) is None
@@ -447,9 +445,7 @@ def test_load_config_rejects_unknown_subagent_default_type(tmp_path: Path) -> No
     except ValueError as exc:
         assert "subagent.default_type" in str(exc)
     else:
-        raise AssertionError(
-            "Expected load_config() to reject an unknown subagent.default_type"
-        )
+        raise AssertionError("Expected load_config() to reject an unknown subagent.default_type")
 
 
 def test_make_teammate_provider_factory_inherits_custom_api_key_env(
@@ -493,9 +489,7 @@ def test_generate_session_id_avoids_saved_and_reserved_collisions(
     transcript_dir = tmp_path / ".transcripts"
     transcript_dir.mkdir()
     existing_session_id = "20260404-120000-123456-abc123"
-    transcript_path = (
-        transcript_dir / f"{existing_session_id}_2026-04-04T12-00-00.jsonl"
-    )
+    transcript_path = transcript_dir / f"{existing_session_id}_2026-04-04T12-00-00.jsonl"
     transcript_path.write_text(
         json.dumps({"role": "user", "content": "saved"}, ensure_ascii=False) + "\n",
         encoding="utf-8",
@@ -535,8 +529,7 @@ def test_slash_theme_appears_after_mode_in_slash_commands() -> None:
 def test_help_text_describes_theme_command() -> None:
     assert (
         "  /theme     Switch color theme "
-        "(catppuccin-mocha, dracula, nord, tokyo-night, gruvbox)\n"
-        in main_module._HELP_TEXT
+        "(catppuccin-mocha, dracula, nord, tokyo-night, gruvbox)\n" in main_module._HELP_TEXT
     )
 
 
@@ -545,10 +538,7 @@ def test_slash_log_appears_in_slash_commands() -> None:
 
 
 def test_help_text_describes_log_command() -> None:
-    assert (
-        "  /log       Debug log viewer (status|serve|open|<seq>)\n"
-        in main_module._HELP_TEXT
-    )
+    assert "  /log       Debug log viewer (status|serve|open|<seq>)\n" in main_module._HELP_TEXT
 
 
 def test_handle_log_command_reports_disabled_debug(tmp_path: Path) -> None:
@@ -565,8 +555,7 @@ def test_handle_log_command_reports_disabled_debug(tmp_path: Path) -> None:
 
     assert viewer_server is None
     assert messages == [
-        "Debug logging is disabled. Set [debug] enabled = true in config.toml "
-        "or BAREAGENT_DEBUG=1"
+        "Debug logging is disabled. Set [debug] enabled = true in config.toml or BAREAGENT_DEBUG=1"
     ]
 
 
@@ -574,9 +563,7 @@ def test_handle_log_command_reports_status_and_interaction_summary(
     tmp_path: Path,
 ) -> None:
     config = make_test_config(tmp_path)
-    config.debug = DebugConfig(
-        enabled=True, log_dir=".logs", viewer_port=8321, pretty=True
-    )
+    config.debug = DebugConfig(enabled=True, log_dir=".logs", viewer_port=8321, pretty=True)
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
     seq = logger.log_request(
         [{"role": "user", "content": "hello"}],
@@ -632,9 +619,7 @@ def test_handle_log_command_serves_and_opens_viewer(
     monkeypatch,
 ) -> None:
     config = make_test_config(tmp_path)
-    config.debug = DebugConfig(
-        enabled=True, log_dir=".logs", viewer_port=9001, pretty=True
-    )
+    config.debug = DebugConfig(enabled=True, log_dir=".logs", viewer_port=9001, pretty=True)
     logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="sess-1")
     started: list[tuple[InteractionLogger, int]] = []
     opened: list[str] = []
@@ -730,9 +715,7 @@ def test_main_runs_stdio_session(
             model=None,
         ),
     )
-    monkeypatch.setattr(
-        main_module, "resolve_config_path", lambda path: Path("config.toml")
-    )
+    monkeypatch.setattr(main_module, "resolve_config_path", lambda path: Path("config.toml"))
     monkeypatch.setattr(main_module, "load_config", lambda *args, **kwargs: config)
     monkeypatch.setattr(main_module, "create_provider", lambda loaded: provider)
 
@@ -865,15 +848,9 @@ def test_stdio_theme_switch_preserves_injected_console(
         "_build_stdio_read_fn",
         lambda *_args, **_kwargs: lambda: next(inputs),
     )
-    monkeypatch.setattr(
-        main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1"
-    )
-    monkeypatch.setattr(
-        main_module, "_load_task_manager", lambda *_args, **_kwargs: object()
-    )
-    monkeypatch.setattr(
-        main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object()
-    )
+    monkeypatch.setattr(main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1")
+    monkeypatch.setattr(main_module, "_load_task_manager", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
         main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
     )
@@ -888,20 +865,11 @@ def test_stdio_theme_switch_preserves_injected_console(
         lambda *_args, **_kwargs: lambda _messages, force=False: None,
     )
     monkeypatch.setattr(main_module, "_build_handlers", lambda **_kwargs: {})
-    monkeypatch.setattr(
-        main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
-        main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
-        main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None
-    )
+    monkeypatch.setattr(main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None)
 
-    assert (
-        main_module._run_stdio_session(config, object(), agent_console=agent_console)
-        == 0
-    )
+    assert main_module._run_stdio_session(config, object(), agent_console=agent_console) == 0
 
     rendered = output_buffer.getvalue()
     assert "BareAgent REPL" in rendered
@@ -948,15 +916,9 @@ def test_run_stdio_session_installs_permission_prompt_adapter(
         lambda *_args, **_kwargs: lambda: next(inputs),
     )
     monkeypatch.setattr(main_module.sys.stdin, "isatty", lambda: True)
-    monkeypatch.setattr(
-        main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1"
-    )
-    monkeypatch.setattr(
-        main_module, "_load_task_manager", lambda *_args, **_kwargs: object()
-    )
-    monkeypatch.setattr(
-        main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object()
-    )
+    monkeypatch.setattr(main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1")
+    monkeypatch.setattr(main_module, "_load_task_manager", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
         main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
     )
@@ -972,15 +934,9 @@ def test_run_stdio_session_installs_permission_prompt_adapter(
         lambda *_args, **_kwargs: lambda _messages, force=False: None,
     )
     monkeypatch.setattr(main_module, "_build_handlers", lambda **_kwargs: {})
-    monkeypatch.setattr(
-        main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
-        main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
-        main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None
-    )
+    monkeypatch.setattr(main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None)
 
     assert (
         main_module._run_stdio_session(
@@ -1026,15 +982,9 @@ def test_run_stdio_session_skips_permission_prompt_adapter_without_tty(
         lambda *_args, **_kwargs: lambda: next(inputs),
     )
     monkeypatch.setattr(main_module.sys.stdin, "isatty", lambda: False)
-    monkeypatch.setattr(
-        main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1"
-    )
-    monkeypatch.setattr(
-        main_module, "_load_task_manager", lambda *_args, **_kwargs: object()
-    )
-    monkeypatch.setattr(
-        main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object()
-    )
+    monkeypatch.setattr(main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1")
+    monkeypatch.setattr(main_module, "_load_task_manager", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
         main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
     )
@@ -1050,15 +1000,9 @@ def test_run_stdio_session_skips_permission_prompt_adapter_without_tty(
         lambda *_args, **_kwargs: lambda _messages, force=False: None,
     )
     monkeypatch.setattr(main_module, "_build_handlers", lambda **_kwargs: {})
-    monkeypatch.setattr(
-        main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
-        main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
-        main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None
-    )
+    monkeypatch.setattr(main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None)
 
     assert main_module._run_stdio_session(config, object(), workspace=tmp_path) == 0
     assert guard._ask_user_fn is None
@@ -1171,15 +1115,9 @@ def test_resume_replays_transcript_to_stdio_console(
         "_build_stdio_read_fn",
         lambda *_args, **_kwargs: lambda: next(inputs),
     )
-    monkeypatch.setattr(
-        main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1"
-    )
-    monkeypatch.setattr(
-        main_module, "_load_task_manager", lambda *_args, **_kwargs: object()
-    )
-    monkeypatch.setattr(
-        main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object()
-    )
+    monkeypatch.setattr(main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1")
+    monkeypatch.setattr(main_module, "_load_task_manager", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
         main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
     )
@@ -1189,15 +1127,9 @@ def test_resume_replays_transcript_to_stdio_console(
     monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
     monkeypatch.setattr(main_module, "Compactor", _FakeCompactor)
     monkeypatch.setattr(main_module, "_build_handlers", lambda **_kwargs: {})
-    monkeypatch.setattr(
-        main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
-        main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
-        main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None
-    )
+    monkeypatch.setattr(main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None)
 
     assert (
         main_module._run_stdio_session(
@@ -1263,15 +1195,9 @@ def test_clear_command_clears_terminal_before_starting_new_session(
         "_build_stdio_read_fn",
         lambda *_args, **_kwargs: lambda: next(inputs),
     )
-    monkeypatch.setattr(
-        main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1"
-    )
-    monkeypatch.setattr(
-        main_module, "_load_task_manager", lambda *_args, **_kwargs: object()
-    )
-    monkeypatch.setattr(
-        main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object()
-    )
+    monkeypatch.setattr(main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1")
+    monkeypatch.setattr(main_module, "_load_task_manager", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
         main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
     )
@@ -1281,15 +1207,9 @@ def test_clear_command_clears_terminal_before_starting_new_session(
     monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
     monkeypatch.setattr(main_module, "Compactor", _FakeCompactor)
     monkeypatch.setattr(main_module, "_build_handlers", lambda **_kwargs: {})
-    monkeypatch.setattr(
-        main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
-        main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
-        main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None
-    )
+    monkeypatch.setattr(main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None)
 
     assert (
         main_module._run_stdio_session(
@@ -1326,15 +1246,9 @@ def test_run_stdio_session_passes_interaction_logger_when_debug_enabled(
         "_build_stdio_read_fn",
         lambda *_args, **_kwargs: lambda: next(inputs),
     )
-    monkeypatch.setattr(
-        main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1"
-    )
-    monkeypatch.setattr(
-        main_module, "_load_task_manager", lambda *_args, **_kwargs: object()
-    )
-    monkeypatch.setattr(
-        main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object()
-    )
+    monkeypatch.setattr(main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1")
+    monkeypatch.setattr(main_module, "_load_task_manager", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(
         main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
     )
@@ -1349,15 +1263,9 @@ def test_run_stdio_session_passes_interaction_logger_when_debug_enabled(
         lambda *_args, **_kwargs: lambda _messages, force=False: None,
     )
     monkeypatch.setattr(main_module, "_build_handlers", lambda **_kwargs: {})
-    monkeypatch.setattr(
-        main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
-        main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(
-        main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None
-    )
+    monkeypatch.setattr(main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None)
 
     def _fake_agent_loop(**kwargs):
         captured["interaction_logger"] = kwargs.get("interaction_logger")

@@ -86,9 +86,7 @@ def parse_lsp_config(raw: dict[str, Any]) -> LSPConfig:
 def _parse_server(entry: dict[str, Any], index: int) -> LSPServerConfig:
     language = entry.get("language")
     if not isinstance(language, str) or not language:
-        raise LSPError(
-            f"lsp.servers[{index}].language is required and must be a non-empty string"
-        )
+        raise LSPError(f"lsp.servers[{index}].language is required and must be a non-empty string")
 
     extensions_raw = entry.get("extensions")
     if not isinstance(extensions_raw, list) or not extensions_raw:
@@ -97,9 +95,7 @@ def _parse_server(entry: dict[str, Any], index: int) -> LSPServerConfig:
             "non-empty list of strings"
         )
     if not all(isinstance(ext, str) and ext for ext in extensions_raw):
-        raise LSPError(
-            f"lsp.servers[{language}].extensions must contain non-empty strings"
-        )
+        raise LSPError(f"lsp.servers[{language}].extensions must contain non-empty strings")
     extensions = [ext.lower() for ext in extensions_raw]
     for ext in extensions:
         if not ext.startswith("."):

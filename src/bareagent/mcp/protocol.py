@@ -127,25 +127,17 @@ def decode_message(line: str) -> Request | Response | Notification:
         raise MCPProtocolError(f"invalid JSON: {exc.msg}") from exc
 
     if isinstance(payload, list):
-        raise MCPProtocolError(
-            "JSON-RPC batch arrays are not supported (MCP 2025-06-18)"
-        )
+        raise MCPProtocolError("JSON-RPC batch arrays are not supported (MCP 2025-06-18)")
     if not isinstance(payload, dict):
-        raise MCPProtocolError(
-            f"JSON-RPC envelope must be an object, got {type(payload).__name__}"
-        )
+        raise MCPProtocolError(f"JSON-RPC envelope must be an object, got {type(payload).__name__}")
 
     if payload.get("jsonrpc") != JSONRPC_VERSION:
-        raise MCPProtocolError(
-            f"missing or wrong jsonrpc version: {payload.get('jsonrpc')!r}"
-        )
+        raise MCPProtocolError(f"missing or wrong jsonrpc version: {payload.get('jsonrpc')!r}")
 
     if "method" in payload:
         method = payload["method"]
         if not isinstance(method, str):
-            raise MCPProtocolError(
-                f"method must be a string, got {type(method).__name__}"
-            )
+            raise MCPProtocolError(f"method must be a string, got {type(method).__name__}")
         params = payload.get("params")
         if params is not None and not isinstance(params, dict):
             raise MCPProtocolError("params must be an object")
@@ -166,9 +158,7 @@ def decode_message(line: str) -> Request | Response | Notification:
     has_result = "result" in payload
     has_error = "error" in payload
     if has_result == has_error:
-        raise MCPProtocolError(
-            "response must contain exactly one of 'result' or 'error'"
-        )
+        raise MCPProtocolError("response must contain exactly one of 'result' or 'error'")
 
     if has_error:
         err = payload["error"]

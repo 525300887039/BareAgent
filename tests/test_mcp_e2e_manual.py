@@ -18,9 +18,7 @@ from bareagent.mcp.registry import build_mcp_handlers
 def _require_uvx() -> None:
     """Skip the module when ``uvx`` is not available locally."""
     if shutil.which("uvx") is None:
-        pytest.skip(
-            "uvx not installed; skip mcp-server-fetch E2E", allow_module_level=False
-        )
+        pytest.skip("uvx not installed; skip mcp-server-fetch E2E", allow_module_level=False)
 
 
 @pytest.fixture()
@@ -63,14 +61,10 @@ def test_fetch_call(fetch_manager: MCPManager) -> None:
     non-empty text content block."""
     handlers = build_mcp_handlers(fetch_manager)
     handler = handlers.get("mcp__fetch__fetch")
-    assert handler is not None, (
-        f"mcp__fetch__fetch handler missing; got {list(handlers)}"
-    )
+    assert handler is not None, f"mcp__fetch__fetch handler missing; got {list(handlers)}"
     out = handler(url="https://example.com")
     # Multimodal path returns list[dict]; error path returns string Error:.
-    assert isinstance(out, list), (
-        f"expected list[dict], got {type(out).__name__}: {out!r}"
-    )
+    assert isinstance(out, list), f"expected list[dict], got {type(out).__name__}: {out!r}"
     assert out, "expected at least one content block"
     text_blocks = [b for b in out if isinstance(b, dict) and b.get("type") == "text"]
     assert text_blocks, f"expected at least one text block, got {out}"

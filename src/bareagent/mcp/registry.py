@@ -44,9 +44,7 @@ _PR5_OMITTED_TYPES = {"image", "audio", "resource", "resource_link"}
 # Anthropic Messages API accepts only these mime types in tool_result image
 # blocks; anything else is degraded to a text placeholder so we never push a
 # payload the API will reject.
-_SUPPORTED_IMAGE_MIME_TYPES = frozenset(
-    {"image/png", "image/jpeg", "image/gif", "image/webp"}
-)
+_SUPPORTED_IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
 
 _RESOURCE_LIST_SUFFIX = "resource_list"
 _RESOURCE_READ_SUFFIX = "resource_read"
@@ -130,9 +128,7 @@ def build_mcp_tool_schemas(manager: MCPManager) -> list[dict[str, Any]]:
             seen_in_server.add(original_name)
             full_name = mcp_tool_name(server_name, original_name)
             if full_name in seen:
-                raise MCPError(
-                    f"MCP tool name collision after namespacing: {full_name!r}"
-                )
+                raise MCPError(f"MCP tool name collision after namespacing: {full_name!r}")
             seen.add(full_name)
             schema: dict[str, Any] = {
                 "name": full_name,
@@ -146,9 +142,7 @@ def build_mcp_tool_schemas(manager: MCPManager) -> list[dict[str, Any]]:
             for schema in _resource_tool_schemas(server_name):
                 full_name = schema["name"]
                 if full_name in seen:
-                    raise MCPError(
-                        f"MCP tool name collision after namespacing: {full_name!r}"
-                    )
+                    raise MCPError(f"MCP tool name collision after namespacing: {full_name!r}")
                 seen.add(full_name)
                 schemas.append(schema)
     return schemas
@@ -189,17 +183,13 @@ def build_mcp_handlers(manager: MCPManager) -> dict[str, Callable[..., Any]]:
                 continue
             seen_in_server.add(original_name)
             full_name = mcp_tool_name(server_name, original_name)
-            handlers[full_name] = _make_handler(
-                manager, server_name, original_name, config
-            )
+            handlers[full_name] = _make_handler(manager, server_name, original_name, config)
 
         if _client_has_capability(client, "resources"):
             list_name = mcp_tool_name(server_name, _RESOURCE_LIST_SUFFIX)
             read_name = mcp_tool_name(server_name, _RESOURCE_READ_SUFFIX)
             handlers[list_name] = _make_resource_list_handler(manager, server_name)
-            handlers[read_name] = _make_resource_read_handler(
-                manager, server_name, config
-            )
+            handlers[read_name] = _make_resource_read_handler(manager, server_name, config)
     return handlers
 
 
@@ -308,9 +298,7 @@ def _resource_tool_schemas(server_name: str) -> list[dict[str, Any]]:
     return [
         {
             "name": mcp_tool_name(server_name, _RESOURCE_LIST_SUFFIX),
-            "description": (
-                f"List available resources from MCP server {server_name!r}"
-            ),
+            "description": (f"List available resources from MCP server {server_name!r}"),
             "input_schema": {
                 "type": "object",
                 "properties": {},
@@ -419,9 +407,7 @@ def _to_content_blocks(
             blocks.append({"type": "text", "text": text})
             continue
         if block_type == "image":
-            blocks.append(
-                _image_block_or_placeholder(block, max_binary_bytes=max_binary_bytes)
-            )
+            blocks.append(_image_block_or_placeholder(block, max_binary_bytes=max_binary_bytes))
             continue
         if block_type == "audio":
             _log.warning(
@@ -436,9 +422,7 @@ def _to_content_blocks(
             )
             continue
         if block_type == "embedded_resource":
-            blocks.append(
-                _embedded_resource_placeholder(block, max_binary_bytes=max_binary_bytes)
-            )
+            blocks.append(_embedded_resource_placeholder(block, max_binary_bytes=max_binary_bytes))
             continue
         if block_type == "resource_link":
             uri = block.get("uri")
@@ -527,8 +511,7 @@ def _embedded_resource_placeholder(
         estimated = _estimate_base64_bytes(blob)
         if estimated > max_binary_bytes:
             _log.warning(
-                "MCP embedded_resource blob exceeds max_result_binary_bytes "
-                "(%d > %d); omitting",
+                "MCP embedded_resource blob exceeds max_result_binary_bytes (%d > %d); omitting",
                 estimated,
                 max_binary_bytes,
             )

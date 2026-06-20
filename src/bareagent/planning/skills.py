@@ -110,9 +110,7 @@ class SkillLoader:
         if not skills:
             return "No skills are available."
 
-        lines = [
-            "Available skills (load the full SKILL.md only when you need the details):"
-        ]
+        lines = ["Available skills (load the full SKILL.md only when you need the details):"]
         for skill in skills:
             lines.append(f"- {skill.skill_name}: {skill.description}")
         return "\n".join(lines)

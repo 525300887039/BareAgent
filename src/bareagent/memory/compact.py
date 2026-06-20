@@ -27,9 +27,7 @@ def _micro_compact(
     if tool_name_by_id is None:
         tool_name_by_id = collect_tool_names(messages)
     tool_result_indices = [
-        index
-        for index, message in enumerate(messages)
-        if is_tool_result_message(message)
+        index for index, message in enumerate(messages) if is_tool_result_message(message)
     ]
     if keep_recent > 0:
         compact_indices = set(tool_result_indices[:-keep_recent])
@@ -49,9 +47,7 @@ def _micro_compact(
                 continue
             tool_use_id = str(block.get("tool_use_id", ""))
             tool_name = tool_name_by_id.get(tool_use_id, "unknown")
-            block["content"] = (
-                f"[truncated: {tool_name} result, {len(original_text)} chars]"
-            )
+            block["content"] = f"[truncated: {tool_name} result, {len(original_text)} chars]"
     return tool_name_by_id
 
 
@@ -128,9 +124,7 @@ class Compactor:
             return
 
         system_messages = [
-            _clone_message(message)
-            for message in messages
-            if message.get("role") == "system"
+            _clone_message(message) for message in messages if message.get("role") == "system"
         ]
         messages.clear()
         messages.extend(system_messages)
@@ -175,10 +169,7 @@ def _serialize_block(block: Any, tool_name_by_id: dict[str, str]) -> str:
     if block_type == "text":
         return str(block.get("text", ""))
     if block_type == "tool_use":
-        return (
-            f"[tool_use:{block.get('name', 'unknown')}] "
-            f"{stringify(block.get('input', {}))}"
-        )
+        return f"[tool_use:{block.get('name', 'unknown')}] {stringify(block.get('input', {}))}"
     if block_type == "tool_result":
         tool_use_id = str(block.get("tool_use_id", ""))
         tool_name = tool_name_by_id.get(tool_use_id, "unknown")
