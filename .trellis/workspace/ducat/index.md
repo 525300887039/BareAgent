@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 46
+- **Total Sessions**: 47
 - **Last Active**: 2026-06-21
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1550 | Active |
+| `journal-1.md` | ~1585 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 47 | 2026-06-21 | pyright 类型检查接入 CI（配了却没强制执行的门） | `ddd6ad5`, `51652a7`, `f621859` | `main` |
 | 46 | 2026-06-21 | CI windows-latest matrix：覆盖开发主力平台 | `e5eedaf`, `e8ed899` | `main` |
 | 45 | 2026-06-20 | CI socket job：捡回 localhost-socket 测试零覆盖 + 纳入 main 变红通知 | `9b5dc99`, `f5118a9` | `main` |
 | 44 | 2026-06-20 | CI 可见性：pre-push 本地闸 + main 变红通知 | `e09ace3`, `c4846c2` | `feat/ci-visibility` |

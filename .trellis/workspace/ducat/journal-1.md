@@ -1548,3 +1548,38 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 ### Next Steps
 
 - None - task complete
+
+
+## Session 47: pyright 类型检查接入 CI（配了却没强制执行的门）
+
+**Date**: 2026-06-21
+**Task**: pyright 类型检查接入 CI（配了却没强制执行的门）
+**Branch**: `main`
+
+### Summary
+
+pyproject 早配了 [tool.pyright] 却从未在 CI/push 执行。探查得 10 errors/7 warnings（warnings 全是未装可选依赖的 reportMissingImports，不致红）。10 个 error 全部行为保持的真修复（零 ignore/零放松级别）：main.py 内联 isinstance narrowing、code_index/persistent 各加 embedder assert、repo_map assert personalization、repo_map_extract Node.text or b""。接线：dev extra exact pin pyright==1.1.409、ci.yml test job 加 Linux-gated「Type check (pyright)」step（阻塞，并入 needs.test.result→notify 已覆盖）、ci-check.sh 加 uv run pyright（4 步）、test_ci_visibility.py 加 3 条 guard。CLAUDE.md CI 可见性补 (5) pyright 段。论证 CI error 集 ⊆ 本机集（CI 只装 .[dev]）。PR #5 全绿（ubuntu/windows/socket）ff-merge main，main CI success、notify NOOP 无误开 issue。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ddd6ad5` | (see git log) |
+| `51652a7` | (see git log) |
+| `f621859` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
