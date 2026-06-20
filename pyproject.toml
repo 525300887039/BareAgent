@@ -118,5 +118,5 @@ pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
 include = ["src/bareagent"]
-typeCheckingMode = "basic"
+typeCheckingMode = "standard"
 reportMissingImports = "warning"

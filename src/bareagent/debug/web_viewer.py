@@ -15,7 +15,10 @@ _VIEWER_HTML = Path(__file__).with_name("viewer.html")
 class DebugViewerHandler(BaseHTTPRequestHandler):
     """Serve the debug viewer SPA and read-only interaction APIs."""
 
-    server: DebugViewerServer
+    # BaseRequestHandler types `server` as BaseServer; narrow it to the concrete
+    # server we always run under so handler code gets typed access. Intentional and
+    # runtime-guaranteed (HTTPServer assigns the server instance before dispatch).
+    server: DebugViewerServer  # pyright: ignore[reportIncompatibleVariableOverride]
 
     def log_message(self, format: str, *args: Any) -> None:
         """Silence the default HTTP request logging."""

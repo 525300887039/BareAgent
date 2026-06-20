@@ -711,8 +711,10 @@ def _with_recency(
 
     # Expose the wrapped partial so worktree rebind can still recover the
     # diagnostics_hook keyword off write_file / edit_file (see
-    # _extract_diagnostics_hook, which follows __wrapped__).
-    _wrapped.__wrapped__ = handler
+    # _extract_diagnostics_hook, which follows __wrapped__). Assign via __dict__:
+    # the FunctionType stub doesn't type __wrapped__ as settable (pyright), and
+    # ruff's B010 forbids setattr with a constant attribute name.
+    _wrapped.__dict__["__wrapped__"] = handler
     return _wrapped
 
 

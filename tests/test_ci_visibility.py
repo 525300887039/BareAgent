@@ -182,3 +182,10 @@ def test_pyright_pinned_exact() -> None:
     pyproject = _read("pyproject.toml")
     assert "pyright==" in pyproject
     assert "pyright>=" not in pyproject
+
+
+def test_pyright_standard_mode() -> None:
+    # The type gate is tightened to `standard`; guard against a silent revert to
+    # `basic`, which would stop enforcing the stricter override / optional checks.
+    pyproject = _read("pyproject.toml")
+    assert 'typeCheckingMode = "standard"' in pyproject
