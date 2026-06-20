@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.ci_notify import Action, decide_action
+from scripts.ci_notify import Action, combine_conclusions, decide_action
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,10 +34,32 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
         (1, "cancelled", Action.NOOP),
         (1, "skipped", Action.NOOP),
         (0, "weird-unknown", Action.NOOP),
+        (1, "", Action.NOOP),
     ],
 )
 def test_decide_action_table(open_count: int, conclusion: str, expected: Action) -> None:
     assert decide_action(open_count, conclusion) is expected
+
+
+# --- combine_conclusions: reduce multiple job results to one signal ----------------
+
+@pytest.mark.parametrize(
+    ("results", "expected"),
+    [
+        (["success", "success"], "success"),       # all green -> green
+        (["success", "failure"], "failure"),       # any red -> red
+        (["failure", "success"], "failure"),
+        (["failure", "failure"], "failure"),
+        (["success", "cancelled"], ""),            # ambiguous -> no signal
+        (["success", "skipped"], ""),
+        (["cancelled", "skipped"], ""),
+        ([], ""),                                   # nothing -> no signal
+        (["success"], "success"),
+        (["failure"], "failure"),
+    ],
+)
+def test_combine_conclusions(results: list[str], expected: str) -> None:
+    assert combine_conclusions(results) == expected
 
 
 # --- static anti-regression guards ------------------------------------------------
@@ -75,6 +97,27 @@ def test_ci_workflow_has_notify_job() -> None:
     assert "issues: write" in ci
     assert "ci_notify.py" in ci
     assert "refs/heads/main" in ci
+
+
+def test_ci_workflow_has_socket_job() -> None:
+    ci = _read(".github/workflows/ci.yml")
+    assert "socket:" in ci
+    # The socket job's whole point: run the otherwise-zero-coverage socket suite.
+    assert "uv run pytest -m socket" in ci
+
+
+def test_notify_depends_on_socket_job() -> None:
+    # Socket-job failures on main must also trigger the ci-failure issue; if notify
+    # only watched `test`, a socket regression would redden CI with no tracking issue.
+    ci = _read(".github/workflows/ci.yml")
+    assert "needs: [test, socket]" in ci
+    assert "socket:${{ needs.socket.result }}" in ci
+
+
+def test_socket_marker_registered() -> None:
+    # `-m socket` selection relies on the marker being declared (no strict-marker churn).
+    pyproject = _read("pyproject.toml")
+    assert '"socket:' in pyproject
 
 
 def test_pre_push_hook_present_and_wired() -> None:

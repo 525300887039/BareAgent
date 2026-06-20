@@ -28,11 +28,34 @@ jobs:
       - name: Test (pytest)
         run: uv run pytest
 
+  socket:
+    name: Socket tests (localhost)
+    # The localhost-socket suite (web viewer + MCP http transport) is excluded
+    # from the default run because it flakes on dev loopback; run it here on Linux
+    # where loopback is reliable, so it isn't left with zero automated coverage.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv (+ Python 3.12)
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          uv pip install -e ".[dev]"
+
+      - name: Socket tests (pytest -m socket)
+        run: uv run pytest -m socket
+
   notify:
     name: Track main status
-    needs: test
-    # Only on pushes to main, regardless of whether `test` passed or failed, so
-    # we can both open the tracking issue on red and close it on recovery.
+    needs: [test, socket]
+    # Only on pushes to main, regardless of whether the upstream jobs passed or
+    # failed, so we can both open the tracking issue on red and close it on recovery.
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -45,6 +68,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 scripts/ci_notify.py \
-            --conclusion "${{ needs.test.result }}" \
+            --conclusion "test:${{ needs.test.result }}" \
+            --conclusion "socket:${{ needs.socket.result }}" \
             --sha "${{ github.sha }}" \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

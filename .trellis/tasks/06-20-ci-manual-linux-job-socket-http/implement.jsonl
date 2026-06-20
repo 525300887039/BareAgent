@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "pytest marker/测试约定、ruff、Conventional Commits、反过度设计、禁 emoji——改 conftest/ci_notify/guard 测试都要遵守"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "combine_conclusions 纯函数注入式可单测、不吞错的参照（对齐 ci_notify.decide_action 既有风格）"}

@@ -102,6 +102,7 @@ markers = [
     "manual: needs manual run / external services / real sockets (excluded by default; run with -m manual)",
     "slow: long-running tests",
     "e2e: end-to-end tests needing external servers (lsp/mcp/api)",
+    "socket: localhost-socket tests (web viewer + MCP http transport); flaky on dev loopback, run on Linux CI with -m socket",
 ]
 
 [tool.pyright]

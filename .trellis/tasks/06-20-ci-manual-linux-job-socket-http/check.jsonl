@@ -1,0 +1,1 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "校验 ruff 干净、新增 combine_conclusions/guard 有 pytest、Conventional Commits、禁 emoji、不过度设计"}

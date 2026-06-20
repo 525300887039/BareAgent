@@ -61,10 +61,14 @@ def pytest_collection_modifyitems(config, items):
         uses_socket_fixture = bool(
             _SOCKET_SERVER_FIXTURES.intersection(getattr(item, "fixturenames", ()))
         )
-        if (
-            path.endswith("_manual.py")
-            or "test_web_viewer" in path
-            or uses_socket_fixture
-        ):
+        # Pure localhost-socket tests: the web-viewer suite + MCP http transport.
+        # No API keys / external services, so they run fine on Linux CI even though
+        # they flake on this dev machine's loopback.
+        is_socket = "test_web_viewer" in path or uses_socket_fixture
+        if path.endswith("_manual.py") or is_socket:
             item.add_marker(pytest.mark.manual)
             item.add_marker(pytest.mark.slow)
+        if is_socket:
+            # Extra `socket` tag so CI can select exactly this subset (`-m socket`)
+            # without pulling in the *_manual.py files (which need keys/servers).
+            item.add_marker(pytest.mark.socket)
