@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核对源码禁 emoji、类型注解完整、简洁不过度设计、纯模块可单测；本任务纯类多需逐项检查"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核对 fail-open 全覆盖：extra 未装 / 解析失败 / 空仓库 / 坏缓存均不崩，handler never-raise"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "核对缓存 identity/hash/prune/原子写正确，FileRecencyTracker 会话切换清空、/compact 保留，子代理不喂"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核对纯核心/抽取层/缓存层/会话层/boot 接线数据流一致：focus 注入、boot 门控、子代理可见性、不破坏 code_search/LSP/memory recall"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "核对是否真复用 EmbeddingCache/iter_search_files/符号渲染范式而非重复造轮子"}
+{"file": ".trellis/tasks/06-20-repo-map/research/tree-sitter-packaging.md", "reason": "核对依赖版本/extra 命名/vendored .scm 许可署名、签名提取与 5 语言范围与决策一致，TS 确在 Out of Scope"}
