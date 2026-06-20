@@ -92,6 +92,11 @@ select = ["E", "F", "I", "B", "UP", "W"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Put the repo root on sys.path so `from tests.conftest import ...` resolves under
+# plain `pytest` / `uv run pytest` (CI). Without it, only `python -m pytest`
+# (which prepends cwd) works, so CI failed to import test_main / test_config_reload
+# / test_memory_tool / test_provider_factory with "No module named 'tests'".
+pythonpath = ["."]
 addopts = "-m 'not manual'"
 markers = [
     "manual: needs manual run / external services / real sockets (excluded by default; run with -m manual)",
