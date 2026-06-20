@@ -1583,3 +1583,37 @@ pyproject 早配了 [tool.pyright] 却从未在 CI/push 执行。探查得 10 er
 ### Next Steps
 
 - None - task complete
+
+
+## Session 48: pyright 类型门收紧到 standard 模式
+
+**Date**: 2026-06-21
+**Task**: pyright 类型门收紧到 standard 模式
+**Branch**: `main`
+
+### Summary
+
+承接 06-21-pyright-ci，把 pyright typeCheckingMode 由 basic 收紧到 standard（ratchet method/variable override、optional 下标等到 error，拦未来回归）。standard 仅新增 2 error 全清：core/tools.py 的 recency wrapper __wrapped__ 赋值改经 _wrapped.__dict__[...]（setattr 撞 ruff B010、直接 x.__wrapped__= 撞 pyright FunctionType stub，__dict__ 两者都过、无 ignore）；web_viewer.py 的 DebugViewerHandler.server 收窄加 targeted # pyright: ignore[reportIncompatibleVariableOverride]+reason（仓库首个 ignore，故意类型收窄，选 targeted 而非全局降级保规则对未来生效）。pyproject basic->standard、test_ci_visibility.py 加 guard 断言、CLAUDE.md (5) 段同步。探查走临时改 pyproject 跑 pyright 后 git checkout 还原。PR #6 全绿 ff-merge main、main CI success、notify NOOP。教训：ruff B010 与 pyright FunctionType.__wrapped__ 不可写是真工具冲突，__dict__ 赋值是双过的干净解。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `eb05c9f` | (see git log) |
+| `3618287` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
