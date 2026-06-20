@@ -42,6 +42,18 @@ ruff format src tests               # 格式化
 
 **CI 自动发布**：`.github/workflows/release.yml` —— 推 `v*` tag → 正式 **PyPI**；手动 `workflow_dispatch` → **TestPyPI** 演练。PyPI **Trusted Publishing (OIDC) 无 token**：`id-token: write` 仅加在 publish job，checkout 必须 `fetch-depth: 0`（否则 hatch-vcs 看不到 tag），build job 内置 `twine check`，环境 `pypi`/`testpypi`（建议给 `pypi` 加 required reviewer）。**首发前需用户手动**在 pypi.org + test.pypi.org 各登记一次 pending publisher（owner=`525300887039` / repo=`BareAgent` / workflow=`release.yml`）+ 建 GitHub Environments——完整步骤与排错见 `docs/releasing.md`。
 
+## CI 可见性 (task 06-20-ci-pre-push-main)
+
+防止 main CI 再次长期变红无人察觉（真实事件：CI 从 ~2026-06-14 红到 06-20，根因是 `from tests.conftest import` 在裸 `uv run pytest` 下 `ModuleNotFoundError`，已用 `pyproject [tool.pytest.ini_options] pythonpath=["."]` 修好——见 commit `2a8fbee`）。**元问题**：本机习惯 `python -m pytest`（前插 cwd 到 sys.path）掩盖了 CI 裸 `uv run pytest` 才暴露的导入差异，且无「push 前」/「main 变红时」提醒。决策**不强制 PR / branch protection**（单人仓库、大量 chore 直接推 main 是刻意低摩擦工作流），靠两道互补防线兜：
+
+**(1) push 前本地闸**：`scripts/ci-check.sh`（bash，地基，被 hook 与手动复用）跑 CI 同款 `uv run ruff check src tests` + `uv run pytest`——**铁律：用 `uv run` 而非 `python -m pytest`**（后者前插 cwd 掩盖 sys.path 差异，正是元凶）；`uv` 缺失 fail-closed（exit 127）。`.githooks/pre-push` 调脚本拦失败，跳过旋钮 `BAREAGENT_PREPUSH_SKIP=1` + git 原生 `--no-verify`；`scripts/setup-hooks.sh` 一次性 `git config core.hooksPath .githooks`（committed hook 不自动生效，每 clone 装一次）。
+
+**(2) main 变红服务端兜底**：`.github/workflows/ci.yml` 加 `notify` job（`needs: test`，`if: always() && github.event_name=='push' && refs/heads/main`，`permissions: issues: write`）调 `scripts/ci_notify.py`。决策逻辑抽成**纯函数 `decide_action(open_issue_count, conclusion) -> Action`**（CREATE/COMMENT/CLOSE/NOOP，注入式可单测），thin `main` 经 `gh` CLI 落地：main 失败→无 open issue 则开/有则评论，成功→有则评论恢复+关闭，cancelled/skipped→NOOP；去重靠固定 label `ci-failure`（幂等建）、标题纯文字无 emoji。
+
+**跨平台硬化**：`.gitattributes` **窄范围**钉 `*.sh` + `.githooks/pre-push` 为 `eol=lf`（本机 `core.autocrlf=true` 会把 shell 脚本工作区转 CRLF，Linux CI 的 bash 遇 `\r` 破 shebang/命令）；**不**做全树 `text=auto` 以免 renormalize churn。脚本/hook 入库为 `100755`（Windows `core.filemode=false`，靠 `git update-index --chmod=+x`）。
+
+**防回归 guard**：`tests/test_ci_visibility.py` = `decide_action` 10 参数化决策表单测 + 静态断言（ci.yml/ci-check.sh 用 `uv run pytest` 非 `python -m pytest`（只看非注释行，保留解释注释）、ci.yml 有 notify job + `issues: write`、pre-push hook 接线在位、pyproject 保留 `pythonpath=["."]`）——把「CI 别退回掩盖态」这条教训机制化固化。MVP 不做：branch protection、Slack/邮件通知、PR（非 main）失败通知、pre-commit / PowerShell hook、按目标分支跑全套/子集、`workflow_run` 跨 workflow 解耦（均后续扩展位）。关键文件：`scripts/{ci-check.sh,setup-hooks.sh,ci_notify.py}`、`.githooks/pre-push`、`.github/workflows/ci.yml`（notify job）、`.gitattributes`、`tests/test_ci_visibility.py`。README「本地 CI 闸」小节有安装/手动跑/跳过说明。
+
 ## 架构
 
 ### 核心智能体循环 (`src/core/loop.py`)
