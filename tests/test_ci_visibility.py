@@ -120,6 +120,15 @@ def test_socket_marker_registered() -> None:
     assert '"socket:' in pyproject
 
 
+def test_ci_test_job_covers_windows() -> None:
+    # CI must keep testing the Windows dev platform, not just Linux; fail-fast off
+    # so a Windows-only failure doesn't mask/cancel the Linux result.
+    ci = _read(".github/workflows/ci.yml")
+    assert "windows-latest" in ci
+    assert "ubuntu-latest" in ci
+    assert "fail-fast: false" in ci
+
+
 def test_pre_push_hook_present_and_wired() -> None:
     hook = _read(".githooks/pre-push")
     assert "scripts/ci-check.sh" in hook

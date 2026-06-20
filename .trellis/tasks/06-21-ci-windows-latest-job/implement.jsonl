@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "ruff/pytest 约定、Conventional Commits、反过度设计、禁 emoji——改 ci.yml/guard 测试、若加 skipif 标记都要遵守"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "若 triage 需在 tests/ 加 skipif 标记或调整，参照测试布局与 src-layout 约定"}
