@@ -209,6 +209,7 @@ class CodeIndex:
 
     def _search(self, query: str, k: int) -> list[CodeSearchResult]:
         """Embedding cosine ranking. Raises on embed failure (caller fails open)."""
+        assert self._embedder is not None  # caller (search) guards the None case
         chunks = self._collect_chunks(self._workspace)
         if not chunks:
             return []

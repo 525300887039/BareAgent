@@ -395,6 +395,7 @@ class MemoryManager:
 
     def _semantic_recall(self, query: str, k: int) -> list[RecalledMemory]:
         """Embedding cosine ranking. Raises on embed failure (caller falls back)."""
+        assert self._embedder is not None  # caller (recall) guards the None case
         docs = self._collect_scoring_docs()
         if not docs:
             return []

@@ -188,6 +188,7 @@ def pagerank(
     else:
         total_p = 0.0
     if total_p > 0:
+        assert personalization is not None  # total_p > 0 only when personalization is truthy
         teleport = {x: max(0.0, personalization.get(x, 0.0)) / total_p for x in node_list}
     else:
         teleport = {x: 1.0 / n for x in node_list}

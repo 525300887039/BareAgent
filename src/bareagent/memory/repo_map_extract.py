@@ -141,7 +141,7 @@ class TreeSitterExtractor:
         for _pattern, captures in cursor.matches(tree.root_node):
             def_cap = next((c for c in captures if c.startswith("definition.")), None)
             name_nodes = captures.get("name")
-            name = name_nodes[0].text.decode("utf-8", "replace") if name_nodes else ""
+            name = (name_nodes[0].text or b"").decode("utf-8", "replace") if name_nodes else ""
             if def_cap:
                 node = captures[def_cap][0]
                 defs.append(

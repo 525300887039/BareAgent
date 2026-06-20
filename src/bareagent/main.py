@@ -2946,10 +2946,12 @@ def _install_workflow_handler(
         spec = validated
 
         tool_budget = kwargs.get("token_budget")
-        valid_budget = (
-            isinstance(tool_budget, int) and not isinstance(tool_budget, bool) and tool_budget > 0
-        )
-        effective_budget = int(tool_budget) if valid_budget else default_token_budget
+        # Inline the isinstance narrowing so the int type carries into the branch
+        # (a separate bool flag wouldn't narrow tool_budget for the type checker).
+        if isinstance(tool_budget, int) and not isinstance(tool_budget, bool) and tool_budget > 0:
+            effective_budget = tool_budget
+        else:
+            effective_budget = default_token_budget
         resume_from = kwargs.get("resume_from")
         background = bool(kwargs.get("run_in_background"))
 
