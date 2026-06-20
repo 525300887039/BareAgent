@@ -16,13 +16,16 @@ fi
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$repo_root"
 
-echo "[ci-check] (1/3) uv run ruff check src tests"
+echo "[ci-check] (1/4) uv run ruff check src tests"
 uv run ruff check src tests
 
-echo "[ci-check] (2/3) uv run ruff format --check src tests"
+echo "[ci-check] (2/4) uv run ruff format --check src tests"
 uv run ruff format --check src tests
 
-echo "[ci-check] (3/3) uv run pytest"
+echo "[ci-check] (3/4) uv run pyright"
+uv run pyright
+
+echo "[ci-check] (4/4) uv run pytest"
 uv run pytest
 
 echo "[ci-check] OK -- CI-equivalent checks passed."

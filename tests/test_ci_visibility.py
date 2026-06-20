@@ -159,3 +159,26 @@ def test_pyproject_keeps_pythonpath_root() -> None:
     # The actual root-cause fix: without this, `uv run pytest` can't import tests.conftest.
     pyproject = _read("pyproject.toml")
     assert 'pythonpath = ["."]' in pyproject
+
+
+def test_ci_workflow_runs_pyright() -> None:
+    # pyright is configured in [tool.pyright] but must actually run in CI; otherwise
+    # it's a "configured but never enforced" gate -- the failure mode this task closed.
+    ci = _read(".github/workflows/ci.yml")
+    assert "uv run pyright" in ci
+
+
+def test_ci_check_script_runs_pyright() -> None:
+    # The pre-push gate must run pyright too, so type errors are caught before push,
+    # keeping the local gate faithful to CI (same as ruff / format-check / pytest).
+    script = _read("scripts/ci-check.sh")
+    assert "uv run pyright" in script
+
+
+def test_pyright_pinned_exact() -> None:
+    # Exact pin keeps type results reproducible: a new pyright release can surface
+    # new errors (surprise CI red). The PyPI package is a wrapper that downloads the
+    # matching node pyright, so pinning the package pins the checker version.
+    pyproject = _read("pyproject.toml")
+    assert "pyright==" in pyproject
+    assert "pyright>=" not in pyproject

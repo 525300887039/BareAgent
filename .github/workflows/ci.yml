@@ -37,6 +37,12 @@ jobs:
           uv run ruff check src tests
           uv run ruff format --check src tests
 
+      - name: Type check (pyright)
+        # Type results are platform-independent; run once (on Linux) only. Blocking:
+        # errors fail the test job -> fold into needs.test.result -> notify covers it.
+        if: runner.os == 'Linux'
+        run: uv run pyright
+
       - name: Test (pytest)
         run: uv run pytest
 

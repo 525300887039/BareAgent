@@ -37,6 +37,11 @@ dev = [
     # and CI: a new ruff release can add lint rules (surprise CI red) or reflow code
     # (whole-tree `ruff format` churn). Bump deliberately, reformatting in the same PR.
     "ruff==0.15.8",
+    # Pinned exact for the same reason: a new pyright release can surface new type
+    # errors (surprise CI red). The PyPI package is a wrapper that downloads the
+    # matching node pyright, so pinning this pins the checker. Bump deliberately,
+    # re-triaging any new errors in the same PR.
+    "pyright==1.1.409",
 ]
 langfuse = ["langfuse>=2.0"]
 otel = [
