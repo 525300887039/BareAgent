@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from bareagent.concurrency.background import BackgroundManager
+from bareagent.core.file_recency import FileRecencyTracker
 from bareagent.core.fileutil import generate_random_id
 from bareagent.core.handlers.bash import run_bash
 from bareagent.core.handlers.code_search import run_code_search
@@ -16,6 +17,7 @@ from bareagent.core.handlers.file_write import run_write
 from bareagent.core.handlers.glob_search import run_glob
 from bareagent.core.handlers.grep_search import run_grep
 from bareagent.core.handlers.memory import run_memory
+from bareagent.core.handlers.repo_map import run_repo_map
 from bareagent.core.handlers.web_fetch import run_web_fetch
 from bareagent.core.handlers.web_search import run_web_search
 from bareagent.core.schema import tool_schema as _schema
@@ -30,6 +32,7 @@ from bareagent.mcp.manager import MCPManager
 from bareagent.mcp.registry import build_mcp_handlers, build_mcp_tool_schemas
 from bareagent.memory.code_index import CodeIndex
 from bareagent.memory.persistent import MemoryManager
+from bareagent.memory.repo_map import RepoMapIndex
 from bareagent.planning.skills import (
     LOAD_SKILL_TOOL_SCHEMAS,
     SkillLoader,
@@ -72,6 +75,7 @@ DEFERRED_TOOLS = {
     "lsp_diagnostics",
     "memory",
     "code_search",
+    "repo_map",
 }
 
 
@@ -300,6 +304,43 @@ CODE_SEARCH_TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
         ["query"],
+    ),
+]
+REPO_MAP_TOOL_SCHEMAS: list[dict[str, Any]] = [
+    _schema(
+        "repo_map",
+        (
+            "Get a structural overview of the codebase: class / function / method "
+            "signature skeletons (declarations only, no bodies), grouped by file and "
+            "ranked by importance (a PageRank over the file reference graph, biased "
+            "toward files you've recently read or edited). Use this to orient in an "
+            "unfamiliar repo or recall its shape without reading whole files. "
+            "Complements `code_search` (find relevant code by idea) and `grep` (exact "
+            "match): repo_map gives the *structure*. Each symbol is shown with its "
+            "line number so you can jump in with read_file / lsp_outline. Supported "
+            "languages: Python, JavaScript, Rust, Go, Java."
+        ),
+        {
+            "path": {
+                "type": "string",
+                "description": "Optional subtree to scope the rendered map to.",
+                "default": ".",
+            },
+            "focus": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Optional file paths and/or identifiers to foreground; merged "
+                    "with the automatic recent-files focus to bias the ranking."
+                ),
+            },
+            "max_tokens": {
+                "type": "integer",
+                "description": "Optional token budget for the map (overrides the default).",
+                "minimum": 1,
+            },
+        },
+        [],
     ),
 ]
 DEFERRED_TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -640,10 +681,48 @@ TOOL_HANDLERS: dict[str, Callable[..., Any]] = {
 }
 
 
+def _with_recency(
+    handler: Callable[..., Any],
+    tracker: FileRecencyTracker,
+    workspace: Path,
+) -> Callable[..., Any]:
+    """Wrap a file handler so it records the touched path in the recency tracker.
+
+    The path is normalized to a workspace-relative posix string (to match the
+    repo map's relpaths); paths outside the workspace are ignored. Recording is
+    best-effort and never affects the handler's result or raises.
+    """
+
+    def _wrapped(*args: Any, **kwargs: Any) -> Any:
+        result = handler(*args, **kwargs)
+        try:
+            file_path = kwargs.get("file_path")
+            if file_path is None and args:
+                file_path = args[0]
+            if isinstance(file_path, str) and file_path:
+                resolved = Path(file_path)
+                if not resolved.is_absolute():
+                    resolved = workspace / resolved
+                resolved = resolved.resolve(strict=False)
+                root = workspace.resolve(strict=False)
+                if resolved.is_relative_to(root):
+                    tracker.record(resolved.relative_to(root).as_posix())
+        except Exception:
+            pass
+        return result
+
+    # Expose the wrapped partial so worktree rebind can still recover the
+    # diagnostics_hook keyword off write_file / edit_file (see
+    # _extract_diagnostics_hook, which follows __wrapped__).
+    _wrapped.__wrapped__ = handler
+    return _wrapped
+
+
 def get_tools(
     mcp_manager: MCPManager | None = None,
     lsp_manager: LanguageServerManager | None = None,
     code_index: CodeIndex | None = None,
+    repo_map_index: RepoMapIndex | None = None,
 ) -> list[dict[str, Any]]:
     # LSP tool schemas are already part of TOOL_SCHEMAS (registered via
     # ``DEFERRED_TOOL_SCHEMAS``) so they show up even when no manager is
@@ -658,6 +737,10 @@ def get_tools(
     # entirely rather than returning an "unavailable" stub.
     if code_index is not None:
         schemas.extend(CODE_SEARCH_TOOL_SCHEMAS)
+    # ``repo_map`` is boot-gated the same way: only exposed when the tree-sitter
+    # extractor (the optional [repo-map] extra) produced a RepoMapIndex.
+    if repo_map_index is not None:
+        schemas.extend(REPO_MAP_TOOL_SCHEMAS)
     if mcp_manager is not None:
         schemas.extend(build_mcp_tool_schemas(mcp_manager))
     return schemas
@@ -684,6 +767,9 @@ def get_handlers(
     subagent_retry_policy: Any = None,
     subagent_registry: Any = None,
     code_index: CodeIndex | None = None,
+    repo_map_index: RepoMapIndex | None = None,
+    recency_tracker: FileRecencyTracker | None = None,
+    repo_map_recent_files: int = 5,
 ) -> dict[str, Callable[..., Any]]:
     # Hybrid auto-diagnostics hook: built once per ``get_handlers`` call so
     # edit_file / write_file share the same closure. ``None`` when LSP isn't
@@ -702,6 +788,13 @@ def get_handlers(
         "web_fetch": run_web_fetch,
         "web_search": run_web_search,
     }
+
+    # Feed the recency tracker (main loop only) so repo_map can auto-bias toward
+    # recently touched files. Wrapping happens here, never on subagent handlers
+    # (they pass recency_tracker=None), so worktree rebind never sees a wrapper.
+    if recency_tracker is not None:
+        for _name in ("read_file", "write_file", "edit_file"):
+            handlers[_name] = _with_recency(handlers[_name], recency_tracker, workspace)
 
     active_todo_manager = todo_manager or TodoManager()
     active_skill_loader = skill_loader or SkillLoader(resolve_skills_dir())
@@ -742,7 +835,18 @@ def get_handlers(
             workspace=workspace,
         )
 
-    available_tools = tools or get_tools(mcp_manager, lsp_manager, code_index)
+    # ``repo_map`` handler only when a RepoMapIndex was built (tree-sitter extra
+    # present); the schema is withheld in the same case (see get_tools).
+    if repo_map_index is not None:
+        handlers["repo_map"] = partial(
+            run_repo_map,
+            index=repo_map_index,
+            workspace=workspace,
+            recency_tracker=recency_tracker,
+            recent_files=repo_map_recent_files,
+        )
+
+    available_tools = tools or get_tools(mcp_manager, lsp_manager, code_index, repo_map_index)
     if provider is None:
         handlers["subagent"] = (
             lambda task, agent_type=None, run_in_background=False, isolation="none": (
@@ -804,10 +908,18 @@ def rebind_workspace_handlers(
 
 
 def _extract_diagnostics_hook(handler: Any) -> Any:
-    """Read a ``diagnostics_hook`` keyword off a partial, or ``None``."""
-    keywords = getattr(handler, "keywords", None)
-    if isinstance(keywords, dict):
-        return keywords.get("diagnostics_hook")
+    """Read a ``diagnostics_hook`` keyword off a partial, or ``None``.
+
+    Follows ``__wrapped__`` so a recency-wrapped handler (see _with_recency)
+    still yields the underlying partial's hook.
+    """
+    seen = 0
+    while handler is not None and seen < 8:
+        keywords = getattr(handler, "keywords", None)
+        if isinstance(keywords, dict) and "diagnostics_hook" in keywords:
+            return keywords["diagnostics_hook"]
+        handler = getattr(handler, "__wrapped__", None)
+        seen += 1
     return None
 
 

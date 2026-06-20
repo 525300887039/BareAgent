@@ -24,6 +24,7 @@ from bareagent.concurrency.background import BackgroundManager
 from bareagent.concurrency.scheduler import Scheduler, SchedulerError
 from bareagent.core.config_paths import DEFAULT_CONFIG_PATH, local_config_path
 from bareagent.core.context import PLAN_MODE_DIRECTIVE, assemble_system_prompt
+from bareagent.core.file_recency import FileRecencyTracker
 from bareagent.core.fileutil import (
     atomic_write_text,
     generate_random_id,
@@ -98,6 +99,8 @@ from bareagent.memory.persistent import (
     default_memory_root,
     resolve_memory_root,
 )
+from bareagent.memory.repo_map import RepoMapIndex
+from bareagent.memory.repo_map_extract import build_extractor
 from bareagent.memory.token_tracker import TokenTracker
 from bareagent.memory.transcript import TranscriptManager
 from bareagent.permission.guard import (
@@ -242,6 +245,24 @@ class CodeSearchConfig:
 
 
 @dataclass(slots=True)
+class RepoMapConfig:
+    # Repo map (task 06-20-repo-map): the ``repo_map`` tool extracts a whole-repo
+    # symbol skeleton via tree-sitter (the optional ``[repo-map]`` extra) and
+    # ranks files by PageRank, biased toward recently touched files. ``enabled``
+    # only gates eligibility; the tool is still withheld at boot when tree-sitter
+    # / grammars are unavailable (mirroring code_search / MCP / LSP), so the LLM
+    # never sees a dead tool. All fields are baked in at boot -> restart-required.
+    # Honors ``BAREAGENT_REPO_MAP_ENABLED``.
+    enabled: bool = True
+    # Default token budget for the rendered map (a per-call max_tokens overrides).
+    max_tokens: int = 1024
+    # Files larger than this (bytes) are skipped (same policy as grep / code_search).
+    max_file_bytes: int = 1_048_576
+    # Number of recently touched files auto-injected as PageRank focus.
+    recent_files: int = 5
+
+
+@dataclass(slots=True)
 class CostConfig:
     # Per-model price overrides keyed by model id. Each entry is a
     # ``{"input": <usd-per-million>, "output": <usd-per-million>}`` dict that
@@ -353,6 +374,7 @@ class Config:
     workflow: WorkflowConfig = field(default_factory=WorkflowConfig)
     team: TeamConfig = field(default_factory=TeamConfig)
     code_search: CodeSearchConfig = field(default_factory=CodeSearchConfig)
+    repo_map: RepoMapConfig = field(default_factory=RepoMapConfig)
 
 
 # Dotted config paths that ``/reload`` can hot-apply to live runtime objects.
@@ -872,6 +894,39 @@ def _parse_code_search_config(raw: dict) -> CodeSearchConfig:
     )
 
 
+def _parse_repo_map_config(raw: dict) -> RepoMapConfig:
+    """Parse the ``[repo_map]`` config section (defensive, never crashes boot).
+
+    ``enabled`` honors ``BAREAGENT_REPO_MAP_ENABLED`` (mirrors code_search / retry
+    / cache). ``max_tokens`` / ``max_file_bytes`` / ``recent_files`` are config-only
+    positive ints; a missing / malformed / out-of-range value falls back to its
+    default. tree-sitter packages come from the ``[repo-map]`` extra, not config.
+    """
+    defaults = RepoMapConfig()
+
+    def _positive_int(key: str, fallback: int) -> int:
+        try:
+            value = int(raw.get(key, fallback))
+        except (TypeError, ValueError):
+            return fallback
+        return value if value > 0 else fallback
+
+    try:
+        enabled = _resolve_bool(
+            bool(raw.get("enabled", defaults.enabled)),
+            "BAREAGENT_REPO_MAP_ENABLED",
+        )
+    except (TypeError, ValueError):
+        enabled = defaults.enabled
+
+    return RepoMapConfig(
+        enabled=enabled,
+        max_tokens=_positive_int("max_tokens", defaults.max_tokens),
+        max_file_bytes=_positive_int("max_file_bytes", defaults.max_file_bytes),
+        recent_files=_positive_int("recent_files", defaults.recent_files),
+    )
+
+
 def _build_goal_provider(
     config: Config,
     session_provider: BaseLLMProvider,
@@ -1088,6 +1143,11 @@ def load_config(
         code_search_raw if isinstance(code_search_raw, dict) else {}
     )
 
+    repo_map_raw = raw_config.get("repo_map", {})
+    repo_map_config = _parse_repo_map_config(
+        repo_map_raw if isinstance(repo_map_raw, dict) else {}
+    )
+
     memory_raw = raw_config.get("memory", {})
     memory_config = MemoryConfig(
         enabled=_resolve_bool(
@@ -1138,6 +1198,7 @@ def load_config(
         workflow=workflow_config,
         team=team_config,
         code_search=code_search_config,
+        repo_map=repo_map_config,
     )
 
 
@@ -1270,6 +1331,41 @@ def _build_code_index(
         chunk_lines=cs.chunk_lines,
         chunk_overlap=cs.chunk_overlap,
         max_file_bytes=cs.max_file_bytes,
+    )
+
+
+def _build_repo_map_index(
+    config: Config,
+    workspace_path: Path,
+    ui_console: AgentConsole,
+) -> RepoMapIndex | None:
+    """Build the repo-map index, or None when tree-sitter is unavailable.
+
+    Gated by ``[repo_map] enabled``; the tree-sitter extractor (the optional
+    ``[repo-map]`` extra) is built fail-open via :func:`build_extractor`. When it
+    returns None (extra not installed / no grammar) the index is None and the
+    boot wiring withholds the ``repo_map`` tool entirely (no dead tool exposed).
+    The tag cache lives in the per-project memory home, in its own file.
+    """
+    rm = config.repo_map
+    if not rm.enabled:
+        return None
+    extractor = build_extractor()
+    if extractor is None:
+        return None
+    cache_root = default_memory_root(workspace_path).parent
+    try:
+        cache_root.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        cache_root = workspace_path
+    cache_path = cache_root / "repo-map-cache.json"
+    ui_console.print_status("Repo map enabled (repo_map tool available).")
+    return RepoMapIndex(
+        workspace_path,
+        extractor=extractor,
+        cache_path=cache_path,
+        max_tokens=rm.max_tokens,
+        max_file_bytes=rm.max_file_bytes,
     )
 
 
@@ -1890,6 +1986,8 @@ def _build_handlers(
     system_prompt_override: str | None = None,
     subagent_registry: SubagentRegistry | None = None,
     code_index: CodeIndex | None = None,
+    repo_map_index: RepoMapIndex | None = None,
+    recency_tracker: FileRecencyTracker | None = None,
 ) -> dict[str, Callable[..., Any]]:
     system_prompt = system_prompt_override or _extract_system_prompt(messages)
     team_handlers = _make_team_handlers(
@@ -1926,6 +2024,9 @@ def _build_handlers(
         subagent_retry_policy=_build_retry_policy(config.retry),
         subagent_registry=subagent_registry,
         code_index=code_index,
+        repo_map_index=repo_map_index,
+        recency_tracker=recency_tracker,
+        repo_map_recent_files=config.repo_map.recent_files,
     )
 
 
@@ -3628,6 +3729,14 @@ def _run_stdio_session(
     # everywhere below (get_tools / get_handlers both gate on it), so no dead
     # tool is exposed. Reused by sub-agents too (it joins the base ``tools``).
     code_index = _build_code_index(config, workspace_path, ui_console)
+    # Repo map (task 06-20): build a RepoMapIndex only when the tree-sitter
+    # extractor (the optional [repo-map] extra) is available. None -> the
+    # repo_map tool is withheld everywhere below (get_tools / get_handlers both
+    # gate on it). The recency tracker feeds its automatic PageRank focus.
+    repo_map_index = _build_repo_map_index(config, workspace_path, ui_console)
+    # Session-scoped recently-touched files; fed by the main loop's read/edit/
+    # write handlers, read by repo_map. Same lifecycle as spawned_agents.
+    recency_tracker = FileRecencyTracker(config.repo_map.recent_files)
     message_bus, main_mailbox_cursor = _switch_session_mailbox(
         workspace_path,
         session_id,
@@ -3667,7 +3776,7 @@ def _run_stdio_session(
     )
     lsp_manager.start_all()
     _install_lsp_cleanup(lsp_manager)
-    tools = get_tools(mcp_manager, lsp_manager, code_index)
+    tools = get_tools(mcp_manager, lsp_manager, code_index, repo_map_index)
     permission = _build_permission_guard(config)
     _install_stdio_permission_prompt(permission, ui_console)
     read_fn = _build_stdio_read_fn(workspace_path, permission)
@@ -3712,6 +3821,8 @@ def _run_stdio_session(
         memory_manager=memory_manager,
         subagent_registry=subagent_registry,
         code_index=code_index,
+        repo_map_index=repo_map_index,
+        recency_tracker=recency_tracker,
     )
 
     # Plan-mode workflow: exit_plan_mode is a main-loop-only tool. ``tools`` stays
@@ -3831,6 +3942,7 @@ def _run_stdio_session(
                 pending_workflow_messages.clear()
                 subagent_registry.clear()
                 workflow_registry.clear()
+                recency_tracker.clear()
                 handlers = _build_handlers(
                     workspace_path=workspace_path,
                     todo_manager=todo_manager,
@@ -3852,6 +3964,8 @@ def _run_stdio_session(
                     memory_manager=memory_manager,
                     subagent_registry=subagent_registry,
                     code_index=code_index,
+                    repo_map_index=repo_map_index,
+                    recency_tracker=recency_tracker,
                 )
                 _install_plan_handler(handlers, plan_approval)
                 install_workflow_handler(handlers)
@@ -3883,6 +3997,8 @@ def _run_stdio_session(
                     memory_manager=memory_manager,
                     subagent_registry=subagent_registry,
                     code_index=code_index,
+                    repo_map_index=repo_map_index,
+                    recency_tracker=recency_tracker,
                 )
                 _install_plan_handler(handlers, plan_approval)
                 install_workflow_handler(handlers)
@@ -3923,6 +4039,7 @@ def _run_stdio_session(
                     pending_workflow_messages.clear()
                     subagent_registry.clear()
                     workflow_registry.clear()
+                    recency_tracker.clear()
                 handlers = _build_handlers(
                     workspace_path=workspace_path,
                     todo_manager=todo_manager,
@@ -3944,6 +4061,8 @@ def _run_stdio_session(
                     memory_manager=memory_manager,
                     subagent_registry=subagent_registry,
                     code_index=code_index,
+                    repo_map_index=repo_map_index,
+                    recency_tracker=recency_tracker,
                 )
                 _install_plan_handler(handlers, plan_approval)
                 install_workflow_handler(handlers)
@@ -3997,6 +4116,7 @@ def _run_stdio_session(
                 pending_workflow_messages.clear()
                 subagent_registry.clear()
                 workflow_registry.clear()
+                recency_tracker.clear()
                 handlers = _build_handlers(
                     workspace_path=workspace_path,
                     todo_manager=todo_manager,
@@ -4018,6 +4138,8 @@ def _run_stdio_session(
                     memory_manager=memory_manager,
                     subagent_registry=subagent_registry,
                     code_index=code_index,
+                    repo_map_index=repo_map_index,
+                    recency_tracker=recency_tracker,
                 )
                 _install_plan_handler(handlers, plan_approval)
                 install_workflow_handler(handlers)
