@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新模块/handler/配置/vendored 查询的落点约定（纯模块在 memory/、handler 在 core/handlers/、boot 接线在 main.py），对齐 code_index 分层"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "fail-open / never-raise 契约：tree-sitter extra 未装、解析失败、空仓库都要友好降级不崩；handler 返回 Error: 字符串而非抛异常"}
+{"file": ".trellis/spec/backend/state-persistence.md", "reason": "content-hash 增量缓存（复用 EmbeddingCache 范式：identity 整体失效 + per-file hash + prune + 原子写）+ 会话作用域 FileRecencyTracker 生命周期约定"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "源码禁 emoji、类型注解、纯逻辑模块注入式可单测、简洁不过度设计；本任务多个纯类需严格遵守"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "fail-open 降级路径用 logger.warning(exc_info=True) 的约定，对齐 code_index.search 异常吞吐风格"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "强复用导向：复用 memory/embedding.py 的 EmbeddingCache/text_hash、core/handlers/search_utils.py 的 iter_search_files、lsp/tools.py 符号渲染思路"}
+{"file": ".trellis/tasks/06-20-repo-map/research/tree-sitter-packaging.md", "reason": "实现必读：tree-sitter 0.25 + tree-sitter-language-pack 1.9 API 用法（Query/get_parser）、vendored Aider .scm 出处与许可、签名提取需自写、5 语言查询清单、Windows wheel 事实"}
+{"file": ".trellis/tasks/archive/2026-06/06-19-repo-map-lsp-documentsymbol-embedding/prd.md", "reason": "姊妹件 code_search 决策史与 boot 门控/fail-open/缓存范式模板，本任务严格对齐（按需工具、SAFE_TOOLS、子代理只读可见、boot 门控不暴露死工具）"}
