@@ -321,3 +321,22 @@ chunk_lines = 50
 chunk_overlap = 10
 # 超过该字节数的文件跳过（同 grep 策略）。
 max_file_bytes = 1048576
+
+[repo_map]
+# Repo Map（task 06-20-repo-map）：repo_map 工具用 tree-sitter 抽取整库的「符号骨架」
+# （类/函数/方法的真实签名行，剥实现体），按 PageRank（文件引用图 + 偏向最近读/改文件）排序、
+# 贴 token 预算，给 LLM 一张结构全景。与 code_search（按想法找相关代码块）、grep（精确匹配）互补：
+# repo_map 给「结构」。每个符号带行号，便于续跳 read_file/lsp_outline。
+# 来源 = tree-sitter（需可选 extra：uv pip install -e ".[repo-map]"，含 tree-sitter +
+# python/javascript/rust/go/java 语法包）；查询是自带的最小 .scm（drop-in：加文件 + 扩展名映射
+# = 加语言）。缓存独立落项目目录（~/.bareagent/projects/<slug>/repo-map-cache.json）。
+# enabled 仅决定是否「可用」；boot 检测不到 tree-sitter 时工具仍不暴露（仿 MCP/LSP「配好才出现」），
+# LLM 不会看到死工具。只读操作，不弹权限确认。
+# 走 env 覆盖 BAREAGENT_REPO_MAP_ENABLED，boot 固化 -> restart-required。
+enabled = true
+# 渲染地图的默认 token 预算（per-call max_tokens 覆盖）。
+max_tokens = 1024
+# 超过该字节数的文件跳过（同 grep / code_search 策略）。
+max_file_bytes = 1048576
+# 自动作为 PageRank focus 注入的「最近读/改文件」条数。
+recent_files = 5
