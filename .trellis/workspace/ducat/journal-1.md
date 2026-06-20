@@ -1480,3 +1480,37 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 ### Next Steps
 
 - None - task complete
+
+
+## Session 45: CI socket job：捡回 localhost-socket 测试零覆盖 + 纳入 main 变红通知
+
+**Date**: 2026-06-20
+**Task**: CI socket job：捡回 localhost-socket 测试零覆盖 + 纳入 main 变红通知
+**Branch**: `main`
+
+### Summary
+
+推荐 #1 落地：给 ci.yml 加 Linux socket job，跑此前零自动化覆盖的 web_viewer + MCP http transport 共 11 个 localhost-socket 测试（本机 loopback flake 标 manual 永久跳过、CI 默认 -m 'not manual' 也排除；Linux 上稳跑）。走完整 trellis 流程。关键设计：conftest 给「web_viewer(路径) + socket fixture」两支额外打 pytest.mark.socket（*_manual.py 不打，零重叠——后者需 key/外部 server 不能进 CI），-m socket 在 CLI 覆盖 addopts 的 -m 'not manual' 故精确选中这 11 个；pyproject 登记 socket marker。决策：阻塞 job（非阻塞=覆盖剧场）+ 分支 PR 先验证连续绿再 ff-merge；纳入 notify needs:[test,socket]（阻塞 job 失败=main 红，否则留通知盲点），ci_notify 加纯函数 combine_conclusions（任一 failure→failure / 全 success→success / 否则 NOOP）归并多 job 结论喂 decide_action，issue 带失败 job 名。验证：PR #2 上 socket job 三次连续绿（11 passed/1263 deselected），合 main 后三 job 全绿、notify 落 NOOP（conclusions=[test:success,socket:success]→success→noop）端到端证实多 job 归并正确。本机默认 pytest 行为字节级不变（1227 passed/47 deselected）。另：本会话前段还修了 uv.lock 漏更 repo-map extra（38f0c07）。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9b5dc99` | (see git log) |
+| `f5118a9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
