@@ -15,6 +15,7 @@ If you find yourself reaching for SQLite or a key-value store, stop and reconsid
 | Inter-agent messages | `.mailbox/<session_id>/<agent>.jsonl` | JSONL, append-only | `src/team/mailbox.py` |
 | Persistent tasks (with deps) | `.tasks.json` | Single JSON object, atomic write | `src/planning/tasks.py` |
 | Session transcripts | `.transcripts/<session_id>_<timestamp>.jsonl` | JSONL snapshot | `src/memory/transcript.py` |
+| Session fork lineage | `.transcripts/.tree.json` | Single JSON object, atomic write | `src/memory/session_tree.py` |
 | LLM request/response logs | `.logs/<session_id>/<seq>_request.json` + `<seq>_response.json` | JSON, sequence-numbered | `src/debug/interaction_log.py` |
 | Teammate roster | `.team.json` | JSON, atomic write | `src/team/manager.py` |
 | User config (defaults) | `config.toml` | TOML, checked in | `src/main.py` |
