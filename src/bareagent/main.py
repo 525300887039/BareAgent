@@ -29,6 +29,7 @@ from bareagent.core.fileutil import (
     atomic_write_text,
     generate_random_id,
     is_tool_result_message,
+    utc_timestamp_iso,
 )
 from bareagent.core.fileutil import (
     optional_string as _coerce_optional_string,
@@ -101,6 +102,15 @@ from bareagent.memory.persistent import (
 )
 from bareagent.memory.repo_map import RepoMapIndex
 from bareagent.memory.repo_map_extract import build_extractor
+from bareagent.memory.session_tree import (
+    ForkRecord,
+    enumerate_fork_points,
+    load_tree,
+    record_fork,
+    render_tree,
+    slice_for_fork_point,
+    tree_path,
+)
 from bareagent.memory.token_tracker import TokenTracker
 from bareagent.memory.transcript import TranscriptManager
 from bareagent.permission.guard import (
@@ -1536,6 +1546,8 @@ _SLASH_COMMANDS = [
     "/theme",
     "/sessions",
     "/resume",
+    "/fork",
+    "/tree",
     "/export",
     "/import",
     "/cost",
@@ -1567,6 +1579,8 @@ _HELP_TEXT = (
     "  /theme     Switch color theme (catppuccin-mocha, dracula, nord, tokyo-night, gruvbox)\n"
     "  /sessions  List saved sessions\n"
     "  /resume    Resume a previous session\n"
+    "  /fork      Branch from a past turn (no arg = list points | <N> = fork there)\n"
+    "  /tree      Show the session fork tree (lineage + current node)\n"
     "  /export    Export conversation (markdown default | json) [path]\n"
     "  /import    Import a conversation file (.json/.jsonl) into a new session\n"
     "  /cost      Show token usage and estimated cost for this session\n"
@@ -4061,6 +4075,115 @@ def _run_stdio_session(
                 install_subagent_send_handler(handlers)
                 _replay_stdio_transcript(messages, ui_console)
                 ui_console.print_status(f"Resumed session: {resumed_session}")
+                continue
+            if text == "/fork" or text.startswith("/fork "):
+                _, _, raw_fork_arg = text.partition(" ")
+                raw_fork_arg = raw_fork_arg.strip()
+                fork_points = enumerate_fork_points(messages)
+                if not raw_fork_arg:
+                    if not fork_points:
+                        ui_console.print_status(
+                            "No fork points yet (need at least one completed assistant turn)."
+                        )
+                    else:
+                        for fork_point in fork_points:
+                            ui_console.console.print(
+                                f"{fork_point.number}. user: {fork_point.user_preview}"
+                                f"  ->  assistant: {fork_point.assistant_preview}"
+                            )
+                        ui_console.print_status("Use /fork <N> to branch from a point.")
+                    continue
+                try:
+                    fork_number = int(raw_fork_arg)
+                except ValueError:
+                    ui_console.print_error("Usage: /fork <N> (N is a fork-point number from /fork)")
+                    continue
+                try:
+                    forked_messages = slice_for_fork_point(messages, fork_number)
+                except ValueError as exc:
+                    ui_console.print_error(str(exc))
+                    continue
+                # Validation passed: only now mutate state (fail-safe — any failure
+                # above already continued with zero changes). Capture the parent id
+                # and persist a parent snapshot so the lineage node exists on disk.
+                parent_sid = _get_compact_session_id(compact_fn)
+                _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
+                messages[:] = forked_messages
+                token_tracker.reset()
+                new_sid = _generate_session_id(
+                    transcript_mgr,
+                    reserved_ids={parent_sid},
+                )
+                _set_compact_session_id(compact_fn, new_sid)
+                _set_interaction_logger_session(interaction_logger, new_sid)
+                message_bus, main_mailbox_cursor = _switch_session_mailbox(
+                    workspace_path,
+                    new_sid,
+                    current_bus=message_bus,
+                )
+                spawned_agents = {}
+                pending_team_messages.clear()
+                pending_workflow_messages.clear()
+                subagent_registry.clear()
+                workflow_registry.clear()
+                recency_tracker.clear()
+                handlers = _build_handlers(
+                    workspace_path=workspace_path,
+                    todo_manager=todo_manager,
+                    task_manager=task_manager,
+                    skill_loader=skill_loader,
+                    provider=provider,
+                    tools=tools,
+                    permission=permission,
+                    bg_manager=bg_manager,
+                    messages=messages,
+                    config=config,
+                    runtime_id=new_sid,
+                    teammate_manager=teammate_manager,
+                    message_bus=message_bus,
+                    spawned_agents=spawned_agents,
+                    agent_name=MAIN_AGENT_NAME,
+                    mcp_manager=mcp_manager,
+                    lsp_manager=lsp_manager,
+                    memory_manager=memory_manager,
+                    subagent_registry=subagent_registry,
+                    code_index=code_index,
+                    repo_map_index=repo_map_index,
+                    recency_tracker=recency_tracker,
+                )
+                _install_plan_handler(handlers, plan_approval)
+                install_workflow_handler(handlers)
+                install_subagent_send_handler(handlers)
+                _replay_stdio_transcript(messages, ui_console)
+                _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
+                fork_len = len(forked_messages)
+                try:
+                    record_fork(
+                        tree_path(transcript_mgr.transcript_dir),
+                        new_sid,
+                        ForkRecord(
+                            parent=parent_sid,
+                            fork_point=fork_number,
+                            parent_len=fork_len,
+                            created=utc_timestamp_iso(),
+                        ),
+                    )
+                except Exception as exc:  # lineage is best-effort, never abort the fork
+                    ui_console.print_error(f"Fork succeeded but lineage was not recorded: {exc}")
+                ui_console.print_status(
+                    f"Forked from {parent_sid} @ turn {fork_number} "
+                    f"into {new_sid} ({fork_len} messages)."
+                )
+                continue
+            if text == "/tree":
+                try:
+                    tree_sessions = transcript_mgr.list_sessions()
+                    fork_tree = load_tree(tree_path(transcript_mgr.transcript_dir))
+                    current_sid = _get_compact_session_id(compact_fn)
+                    rendered_tree = render_tree(tree_sessions, fork_tree, current_sid)
+                    ui_console.print_status(rendered_tree or "No sessions.")
+                except Exception as exc:  # never-raise: /tree is a read-only view
+                    ui_console.print_error(f"Could not render session tree: {exc}")
                 continue
             if text == "/export" or text.startswith("/export "):
                 _dispatch_export_command(
