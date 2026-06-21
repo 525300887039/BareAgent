@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 48
+- **Total Sessions**: 49
 - **Last Active**: 2026-06-21
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1619 | Active |
+| `journal-1.md` | ~1653 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 49 | 2026-06-21 | 会话 fork 与树状分支 (/fork + /tree) | `0e373dd`, `07100a1` | `feat/session-fork` |
 | 48 | 2026-06-21 | pyright 类型门收紧到 standard 模式 | `eb05c9f`, `3618287` | `main` |
 | 47 | 2026-06-21 | pyright 类型检查接入 CI（配了却没强制执行的门） | `ddd6ad5`, `51652a7`, `f621859` | `main` |
 | 46 | 2026-06-21 | CI windows-latest matrix：覆盖开发主力平台 | `e5eedaf`, `e8ed899` | `main` |

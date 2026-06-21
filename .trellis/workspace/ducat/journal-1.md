@@ -1617,3 +1617,37 @@ pyproject 早配了 [tool.pyright] 却从未在 CI/push 执行。探查得 10 er
 ### Next Steps
 
 - None - task complete
+
+
+## Session 49: 会话 fork 与树状分支 (/fork + /tree)
+
+**Date**: 2026-06-21
+**Task**: 会话 fork 与树状分支 (/fork + /tree)
+**Branch**: `feat/session-fork`
+
+### Summary
+
+新增纯模块 memory/session_tree.py（fork 点枚举+合法切分 / 谱系 sidecar .tree.json / 森林渲染，28 单测）+ main.py /fork /tree 接线（inline 镜像 /import session-switch）。正确性内核：只 offer 无-tool_use assistant turn 末尾为合法分叉点，深拷贝前缀，由构造合法故无回退分支。谱系 fail-open + atomic_write_json。同步 CLAUDE.md + state-persistence spec。本地总闸全绿（ruff/format/pyright standard/1262 pytest）。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0e373dd` | (see git log) |
+| `07100a1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
