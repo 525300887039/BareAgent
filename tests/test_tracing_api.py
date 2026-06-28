@@ -110,6 +110,20 @@ def test_proxy_tracer_delegates_to_inner() -> None:
     assert proxy.current_span() is None
 
 
+def test_proxy_tracer_filters_content_tags_when_disabled() -> None:
+    recorder = _RecordingTracer()
+    proxy = ProxyTracer(recorder)
+    proxy.is_content_tracing_enabled = False
+
+    with proxy.trace("llm_call", tags={"model": "test"}) as span:
+        span.set_tag("input_tokens", 42)
+        span.set_content_tag("input", "secret prompt")
+        assert proxy.current_span() is span
+
+    assert recorder.spans[0].tags == {"model": "test", "input_tokens": 42}
+    assert recorder.spans[0].content_tags == {}
+
+
 def test_proxy_tracer_flush_and_shutdown_delegate() -> None:
     recorder = _RecordingTracer()
     proxy = ProxyTracer(recorder)
@@ -145,6 +159,33 @@ def test_proxy_tracer_content_tracing_env_var(
     monkeypatch.setenv("BAREAGENT_CONTENT_TRACING_ENABLED", "true")
     proxy2 = ProxyTracer()
     assert proxy2.is_content_tracing_enabled is True
+
+
+def test_configure_tracing_applies_content_enabled() -> None:
+    from bareagent.tracing.setup import configure_tracing
+
+    original = tracer.is_content_tracing_enabled
+    try:
+        configure_tracing(type("Cfg", (), {"content_enabled": False})())
+        assert tracer.is_content_tracing_enabled is False
+        configure_tracing(type("Cfg", (), {"content_enabled": True})())
+        assert tracer.is_content_tracing_enabled is True
+    finally:
+        tracer.is_content_tracing_enabled = original
+
+
+def test_proxy_tracer_set_session_id_delegates_to_inner() -> None:
+    class _SessionTracer(_RecordingTracer):
+        def __init__(self) -> None:
+            super().__init__()
+            self.session_id = "old"
+
+    recorder = _SessionTracer()
+    proxy = ProxyTracer(recorder)
+
+    proxy.set_session_id("new")
+
+    assert recorder.session_id == "new"
 
 
 def test_proxy_tracer_hot_swap_is_thread_safe() -> None:

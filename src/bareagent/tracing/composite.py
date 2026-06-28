@@ -95,6 +95,18 @@ class CompositeTracer(Tracer):
             except Exception:
                 pass
 
+    def set_session_id(self, session_id: str) -> None:
+        for tracer in self._tracers:
+            try:
+                setter = getattr(tracer, "set_session_id", None)
+                if callable(setter):
+                    setter(session_id)
+                elif hasattr(tracer, "session_id"):
+                    session_tracer: Any = tracer
+                    session_tracer.session_id = session_id
+            except Exception:
+                pass
+
     # ---- Delegate InteractionLogger query methods to first JsonFileTracer ----
 
     def _json_file_tracer(self) -> Any:

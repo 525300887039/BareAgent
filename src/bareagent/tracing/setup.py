@@ -6,7 +6,7 @@ import os
 from typing import Any
 
 from bareagent.tracing._api import Tracer
-from bareagent.tracing._proxy import enable_tracing
+from bareagent.tracing._proxy import enable_tracing, tracer
 
 
 def configure_tracing(
@@ -29,6 +29,8 @@ def configure_tracing(
     When multiple backends are active a :class:`CompositeTracer` fans
     out to all of them.
     """
+
+    tracer.is_content_tracing_enabled = bool(getattr(tracing_config, "content_enabled", True))
 
     backends: list[Tracer] = []
 

@@ -147,6 +147,25 @@ def test_composite_flush_and_shutdown_isolate_errors() -> None:
     assert good.shut_down is True
 
 
+def test_composite_set_session_id_fans_out_to_session_backends(tmp_path: Path) -> None:
+    logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="old-json")
+    json_tracer = JsonFileTracer(logger)
+
+    class _SessionTracer(_RecordingTracer):
+        def __init__(self) -> None:
+            super().__init__()
+            self.session_id = "old-other"
+
+    other = _SessionTracer()
+    composite = CompositeTracer([json_tracer, other])
+
+    composite.set_session_id("new-session")
+
+    assert json_tracer.session_id == "new-session"
+    assert logger.session_id == "new-session"
+    assert other.session_id == "new-session"
+
+
 def test_composite_current_span_returns_first_non_none() -> None:
     a = _RecordingTracer()
     b = _RecordingTracer()

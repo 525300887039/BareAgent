@@ -28,6 +28,7 @@ from bareagent.mcp import MCPConfig
 from bareagent.memory.transcript import TranscriptManager
 from bareagent.permission.guard import PermissionGuard, PermissionMode
 from bareagent.provider.base import ThinkingConfig
+from bareagent.tracing._api import NullTracer
 from bareagent.ui.console import AgentConsole
 from tests.conftest import make_test_config
 
@@ -1276,6 +1277,98 @@ def test_run_stdio_session_passes_interaction_logger_when_debug_enabled(
     assert main_module._run_stdio_session(config, object(), workspace=tmp_path) == 0
     assert captured["interaction_logger"] is not None
     assert captured["interaction_logger"].session_id == "session-1"  # type: ignore[union-attr]
+
+
+def test_switch_runtime_session_updates_compact_logger_and_tracing(tmp_path: Path) -> None:
+    from bareagent.tracing import tracer as global_tracer
+
+    class _Compact:
+        def __init__(self) -> None:
+            self.session_id = "old"
+
+        def set_session_id(self, session_id: str) -> None:
+            self.session_id = session_id
+
+    class _SessionTracer(NullTracer):
+        def __init__(self) -> None:
+            self.session_id = "old"
+
+    compact = _Compact()
+    logger = InteractionLogger(log_dir=tmp_path / ".logs", session_id="old")
+    tracer_backend = _SessionTracer()
+    original_inner = global_tracer.inner
+    try:
+        global_tracer.inner = tracer_backend
+
+        main_module._switch_runtime_session(compact, logger, "new-session")
+
+        assert compact.session_id == "new-session"
+        assert logger.session_id == "new-session"
+        assert tracer_backend.session_id == "new-session"
+    finally:
+        global_tracer.inner = original_inner
+
+
+def test_run_stdio_session_shutdowns_tracer_on_exit(monkeypatch, tmp_path: Path) -> None:
+    from bareagent.tracing import tracer as global_tracer
+
+    config = make_test_config(tmp_path)
+    inputs = iter(["/exit"])
+
+    class _ShutdownTracer(NullTracer):
+        def __init__(self) -> None:
+            self.shutdown_called = False
+
+        def shutdown(self) -> None:
+            self.shutdown_called = True
+
+    class _FakeSkillLoader:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def get_skill_list_prompt(self) -> str:
+            return ""
+
+    tracer_backend = _ShutdownTracer()
+    original_inner = global_tracer.inner
+    try:
+        global_tracer.inner = tracer_backend
+        monkeypatch.setattr(
+            main_module,
+            "_build_stdio_read_fn",
+            lambda *_args, **_kwargs: lambda: next(inputs),
+        )
+        monkeypatch.setattr(
+            main_module, "_generate_session_id", lambda *_args, **_kwargs: "session-1"
+        )
+        monkeypatch.setattr(main_module, "_load_task_manager", lambda *_args, **_kwargs: object())
+        monkeypatch.setattr(
+            main_module, "_load_teammate_manager", lambda *_args, **_kwargs: object()
+        )
+        monkeypatch.setattr(
+            main_module, "_switch_session_mailbox", lambda *_args, **_kwargs: (None, None)
+        )
+        monkeypatch.setattr(main_module, "_initial_messages", lambda *_args, **_kwargs: [])
+        monkeypatch.setattr(main_module, "get_tools", lambda *_a, **_kw: [])
+        monkeypatch.setattr(main_module, "SkillLoader", _FakeSkillLoader)
+        monkeypatch.setattr(main_module, "resolve_skills_dir", lambda: tmp_path)
+        monkeypatch.setattr(main_module, "Compactor", lambda **_kwargs: object())
+        monkeypatch.setattr(
+            main_module,
+            "_build_loop_compact",
+            lambda *_args, **_kwargs: lambda _messages, force=False: None,
+        )
+        monkeypatch.setattr(main_module, "_build_handlers", lambda **_kwargs: {})
+        monkeypatch.setattr(main_module, "_drain_team_mailbox", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(main_module, "_broadcast_team_shutdown", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(
+            main_module, "_save_transcript_snapshot", lambda *_args, **_kwargs: None
+        )
+
+        assert main_module._run_stdio_session(config, object(), workspace=tmp_path) == 0
+        assert tracer_backend.shutdown_called is True
+    finally:
+        global_tracer.inner = original_inner
 
 
 def test_nag_reminder_skips_tool_result_messages() -> None:

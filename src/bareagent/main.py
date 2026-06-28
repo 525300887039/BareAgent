@@ -1833,6 +1833,24 @@ def _set_interaction_logger_session(
     interaction_logger.session_id = session_id
 
 
+def _set_tracing_session(session_id: str) -> None:
+    from bareagent.tracing import tracer as global_tracer
+
+    setter = getattr(global_tracer, "set_session_id", None)
+    if callable(setter):
+        setter(session_id)
+
+
+def _switch_runtime_session(
+    compact_fn: object,
+    interaction_logger: InteractionLogger | None,
+    session_id: str,
+) -> None:
+    _set_compact_session_id(compact_fn, session_id)
+    _set_interaction_logger_session(interaction_logger, session_id)
+    _set_tracing_session(session_id)
+
+
 def _configure_tracing(
     config: Config,
     *,
@@ -3936,8 +3954,7 @@ def _run_stdio_session(
                     transcript_mgr,
                     reserved_ids={_get_compact_session_id(compact_fn)},
                 )
-                _set_compact_session_id(compact_fn, new_session_id)
-                _set_interaction_logger_session(interaction_logger, new_session_id)
+                _switch_runtime_session(compact_fn, interaction_logger, new_session_id)
                 message_bus, main_mailbox_cursor = _switch_session_mailbox(
                     workspace_path,
                     new_session_id,
@@ -4030,11 +4047,7 @@ def _run_stdio_session(
                 token_tracker.reset()
                 resumed_session = requested_session or transcript_mgr.get_latest_session()
                 if resumed_session is not None:
-                    _set_compact_session_id(compact_fn, resumed_session)
-                    _set_interaction_logger_session(
-                        interaction_logger,
-                        resumed_session,
-                    )
+                    _switch_runtime_session(compact_fn, interaction_logger, resumed_session)
                     message_bus, main_mailbox_cursor = _switch_session_mailbox(
                         workspace_path,
                         resumed_session,
@@ -4114,8 +4127,7 @@ def _run_stdio_session(
                     transcript_mgr,
                     reserved_ids={parent_sid},
                 )
-                _set_compact_session_id(compact_fn, new_sid)
-                _set_interaction_logger_session(interaction_logger, new_sid)
+                _switch_runtime_session(compact_fn, interaction_logger, new_sid)
                 message_bus, main_mailbox_cursor = _switch_session_mailbox(
                     workspace_path,
                     new_sid,
@@ -4219,8 +4231,7 @@ def _run_stdio_session(
                     transcript_mgr,
                     reserved_ids={_get_compact_session_id(compact_fn)},
                 )
-                _set_compact_session_id(compact_fn, new_sid)
-                _set_interaction_logger_session(interaction_logger, new_sid)
+                _switch_runtime_session(compact_fn, interaction_logger, new_sid)
                 message_bus, main_mailbox_cursor = _switch_session_mailbox(
                     workspace_path,
                     new_sid,
@@ -4523,6 +4534,12 @@ def _run_stdio_session(
             pass
         try:
             lsp_manager.close_all()
+        except Exception:
+            pass
+        try:
+            from bareagent.tracing import tracer as global_tracer
+
+            global_tracer.shutdown()
         except Exception:
             pass
 
