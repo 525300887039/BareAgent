@@ -762,15 +762,18 @@ class OpenAIProvider(BaseLLMProvider):
 
         merged_text = response.text or "".join(streamed_text_parts)
         merged_tool_calls = list(response.tool_calls)
-        if not merged_tool_calls and streamed_tool_calls:
-            merged_tool_calls = [
+        existing_tool_call_ids = {tool_call.id for tool_call in merged_tool_calls}
+        for tool_call in streamed_tool_calls:
+            if tool_call.id in existing_tool_call_ids:
+                continue
+            merged_tool_calls.append(
                 ToolCall(
                     id=tool_call.id,
                     name=tool_call.name,
                     input=dict(tool_call.input),
                 )
-                for tool_call in streamed_tool_calls
-            ]
+            )
+            existing_tool_call_ids.add(tool_call.id)
 
         merged_content_blocks = [dict(block) for block in response.content_blocks]
         has_text_block = any(block.get("type") == "text" for block in merged_content_blocks)

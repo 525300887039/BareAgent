@@ -345,6 +345,17 @@ def test_tool_search_placeholder_returns_empty_list() -> None:
     assert tool_search("todo", max_results=3) == []
 
 
+def test_get_tools_returns_schema_copies() -> None:
+    first = get_tools()
+    read_schema = next(schema for schema in first if schema["name"] == "read_file")
+    read_schema["parameters"]["properties"].clear()
+
+    second = get_tools()
+    fresh_read_schema = next(schema for schema in second if schema["name"] == "read_file")
+
+    assert "file_path" in fresh_read_schema["parameters"]["properties"]
+
+
 def test_glob_simple_pattern_recurses_into_subdirectories(tmp_path: Path) -> None:
     """Bug #13: *.py should find files in nested subdirectories."""
     (tmp_path / "top.py").write_text("top\n", encoding="utf-8")

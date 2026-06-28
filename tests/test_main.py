@@ -413,6 +413,37 @@ def test_load_config_debug_env_overrides(tmp_path: Path, monkeypatch) -> None:
     )
 
 
+def test_parse_retry_config_rejects_invalid_backoff_values() -> None:
+    retry = main_module._parse_retry_config(
+        {
+            "max_attempts": 0,
+            "base_delay_sec": -1,
+            "max_delay_sec": -2,
+            "multiplier": 0.5,
+        }
+    )
+    defaults = main_module.RetryConfig()
+
+    assert retry.max_attempts == defaults.max_attempts
+    assert retry.base_delay_sec == defaults.base_delay_sec
+    assert retry.max_delay_sec == defaults.max_delay_sec
+    assert retry.multiplier == defaults.multiplier
+
+
+def test_parse_retry_config_rejects_max_delay_below_base_delay() -> None:
+    retry = main_module._parse_retry_config(
+        {
+            "base_delay_sec": 5,
+            "max_delay_sec": 1,
+            "multiplier": 1,
+        }
+    )
+
+    assert retry.base_delay_sec == 5
+    assert retry.max_delay_sec == main_module.RetryConfig().max_delay_sec
+    assert retry.multiplier == 1
+
+
 def test_load_config_rejects_unknown_subagent_default_type(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(

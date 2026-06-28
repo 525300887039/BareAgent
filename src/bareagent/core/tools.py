@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import threading
 from collections.abc import Callable
 from functools import partial
@@ -743,7 +744,7 @@ def get_tools(
         schemas.extend(REPO_MAP_TOOL_SCHEMAS)
     if mcp_manager is not None:
         schemas.extend(build_mcp_tool_schemas(mcp_manager))
-    return schemas
+    return copy.deepcopy(schemas)
 
 
 def get_handlers(

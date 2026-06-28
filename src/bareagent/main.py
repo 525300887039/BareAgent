@@ -672,6 +672,14 @@ def _parse_retry_config(retry_raw: dict) -> RetryConfig:
         jitter = bool(retry_raw.get("jitter", defaults.jitter))
     except (TypeError, ValueError):
         jitter = defaults.jitter
+    if max_attempts < 1:
+        max_attempts = defaults.max_attempts
+    if base_delay_sec < 0:
+        base_delay_sec = defaults.base_delay_sec
+    if max_delay_sec < 0 or max_delay_sec < base_delay_sec:
+        max_delay_sec = defaults.max_delay_sec
+    if multiplier < 1:
+        multiplier = defaults.multiplier
     return RetryConfig(
         enabled=enabled,
         max_attempts=max_attempts,

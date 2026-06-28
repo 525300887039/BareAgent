@@ -646,6 +646,55 @@ def test_openai_create_stream_via_responses_preserves_streamed_tool_calls_when_c
     }
 
 
+def test_openai_responses_stream_merge_appends_stream_only_tool_calls() -> None:
+    provider = OpenAIProvider(api_key="test", model="gpt-test", wire_api="responses")
+    final_response = LLMResponse(
+        text="Checking now.",
+        tool_calls=[ToolCall(id="call_1", name="grep", input={"pattern": "TODO"})],
+        stop_reason="tool_calls",
+        input_tokens=0,
+        output_tokens=0,
+        content_blocks=[
+            {"type": "text", "text": "Checking now."},
+            {
+                "type": "tool_use",
+                "id": "call_1",
+                "name": "grep",
+                "input": {"pattern": "TODO"},
+            },
+        ],
+    )
+
+    merged = provider._merge_streamed_responses_result(
+        final_response,
+        streamed_text_parts=[],
+        streamed_tool_calls=[
+            ToolCall(id="call_1", name="grep", input={"pattern": "TODO"}),
+            ToolCall(id="call_2", name="read_file", input={"file_path": "README.md"}),
+        ],
+    )
+
+    assert merged.tool_calls == [
+        ToolCall(id="call_1", name="grep", input={"pattern": "TODO"}),
+        ToolCall(id="call_2", name="read_file", input={"file_path": "README.md"}),
+    ]
+    assert merged.to_message()["content"] == [
+        {"type": "text", "text": "Checking now."},
+        {
+            "type": "tool_use",
+            "id": "call_1",
+            "name": "grep",
+            "input": {"pattern": "TODO"},
+        },
+        {
+            "type": "tool_use",
+            "id": "call_2",
+            "name": "read_file",
+            "input": {"file_path": "README.md"},
+        },
+    ]
+
+
 def test_factory_builds_anthropic_provider_with_thinking(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
