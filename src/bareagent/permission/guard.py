@@ -19,6 +19,15 @@ class PermissionMode(Enum):
 
 
 _SHELLS = "bash|sh|zsh|dash|ksh|fish"
+_SHELL_COMMAND_TOOLS = {"bash", "background_run"}
+_ALWAYS_MUTATING_TOOLS = {
+    "edit_file",
+    "write_file",
+    "semantic_rename",
+    "task_create",
+    "task_update",
+}
+_MEMORY_READ_COMMANDS = {"view"}
 
 _MCP_TOOL_PREFIX = "mcp__"
 # Preview limits for MCP ask prompts. MCP args are JSON, not shell text, and
@@ -43,8 +52,6 @@ class PermissionGuard:
         "task_list",
         "task_get",
         "team_list",
-        "web_fetch",
-        "web_search",
         # code_search is read-only semantic retrieval (like grep): it embeds and
         # ranks files but never mutates anything, so prompting would be noise.
         "code_search",
@@ -117,6 +124,8 @@ class PermissionGuard:
             return False
         normalized_tool = tool_name.strip().lower()
         rule_subject = permission_rule_subject(normalized_tool, tool_input)
+        if _is_mutating_tool(normalized_tool, tool_input):
+            return True
         # MCP tools carry JSON args (not shell text), so DANGEROUS_PATTERNS
         # are not applicable. Branch early on mode but still honour the
         # generic allow/deny prefix rules (handled below via rule_subject).
@@ -145,7 +154,7 @@ class PermissionGuard:
             return True
         if self.mode == PermissionMode.PLAN:
             return normalized_tool not in self.SAFE_TOOLS
-        if normalized_tool == "bash":
+        if normalized_tool in _SHELL_COMMAND_TOOLS:
             cmd = rule_subject or ""
             if self._match_rules(self.deny_rules, normalized_tool, cmd):
                 return True
@@ -166,21 +175,14 @@ class PermissionGuard:
             rule_subject,
         ):
             return True
-        if normalized_tool in self.SAFE_TOOLS:
-            return False
-        if normalized_tool in {"edit_file", "task_create", "task_update"}:
-            return False
         if rule_subject and self._match_rules(
             self.allow_rules,
             normalized_tool,
             rule_subject,
         ):
             return False
-        if normalized_tool in {"write_file", "semantic_rename"}:
-            # Write tools: confirm in DEFAULT, auto-approve in AUTO. PLAN was
-            # already rejected above (not in SAFE_TOOLS), BYPASS short-circuited
-            # at the top.
-            return self.mode == PermissionMode.DEFAULT
+        if normalized_tool in self.SAFE_TOOLS:
+            return False
         return True
 
     def is_dangerous(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
@@ -195,7 +197,7 @@ class PermissionGuard:
         normalized_tool = tool_name.strip().lower()
         if _is_mcp_tool(normalized_tool):
             return False
-        if normalized_tool == "bash":
+        if normalized_tool in _SHELL_COMMAND_TOOLS:
             cmd = str(tool_input.get("command", ""))
             return any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS)
         return False
@@ -301,9 +303,18 @@ def _parse_prefix_rule(rule: str) -> tuple[str, str] | None:
     return tool_name, prefix
 
 
+def _is_mutating_tool(tool_name: str, tool_input: dict[str, Any]) -> bool:
+    if tool_name in _ALWAYS_MUTATING_TOOLS:
+        return True
+    if tool_name != "memory":
+        return False
+    command = str(tool_input.get("command", "")).strip().lower()
+    return command not in _MEMORY_READ_COMMANDS
+
+
 def permission_rule_subject(tool_name: str, tool_input: dict[str, Any]) -> str | None:
     normalized_tool = tool_name.strip().lower()
-    if normalized_tool == "bash":
+    if normalized_tool in _SHELL_COMMAND_TOOLS:
         command = str(tool_input.get("command", "")).strip()
         return command or None
 

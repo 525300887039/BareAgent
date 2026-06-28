@@ -90,6 +90,8 @@ def test_permission_guard_default_mode_for_safe_and_dangerous_tools() -> None:
     assert guard.requires_confirm("load_skill", {"skill_name": "git"}) is False
     assert guard.requires_confirm("bash", {"command": "rm -rf build"}) is True
     assert guard.requires_confirm("bash", {"command": "git status"}) is False
+    assert guard.requires_confirm("web_fetch", {"url": "https://example.com"}) is True
+    assert guard.requires_confirm("web_search", {"query": "python"}) is True
 
 
 def test_permission_guard_default_mode_honors_allow_and_deny_rules() -> None:
@@ -118,8 +120,16 @@ def test_permission_guard_plan_mode_blocks_write_operations(
     call = ToolCall(id="toolu_1", name="write_file", input={"file_path": "out.txt", "content": "x"})
 
     assert guard.requires_confirm("write_file", {"file_path": "out.txt", "content": "x"}) is True
+    assert (
+        guard.requires_confirm(
+            "edit_file", {"file_path": "out.txt", "old_text": "x", "new_text": "y"}
+        )
+        is True
+    )
     assert guard.requires_confirm("task_create", {"title": "plan only"}) is True
     assert guard.requires_confirm("task_update", {"task_id": "abc12345", "status": "done"}) is True
+    assert guard.requires_confirm("web_fetch", {"url": "https://example.com"}) is True
+    assert guard.requires_confirm("web_search", {"query": "python"}) is True
     assert (
         guard.requires_confirm("team_send", {"to_agent": "reviewer", "content": "write code"})
         is True
@@ -145,7 +155,7 @@ def test_permission_rules_prefix_matching() -> None:
     assert guard.requires_confirm("bash", {"command": "npm publish"}) is True
 
 
-def test_permission_guard_write_file_honors_allow_rules() -> None:
+def test_permission_guard_write_file_confirm_required_despite_allow_rules() -> None:
     guard = PermissionGuard(PermissionMode.DEFAULT)
     guard.allow_rules = ["write_file(prefix:notes/today.txt*)"]
 
@@ -154,7 +164,7 @@ def test_permission_guard_write_file_honors_allow_rules() -> None:
             "write_file",
             {"file_path": "notes/today.txt", "content": "hello"},
         )
-        is False
+        is True
     )
     assert (
         guard.requires_confirm(
@@ -169,6 +179,42 @@ def test_permission_guard_requires_confirmation_for_unknown_non_safe_tools() -> 
     guard = PermissionGuard(PermissionMode.DEFAULT)
 
     assert guard.requires_confirm("subagent", {"task": "inspect repo"}) is True
+
+
+def test_permission_guard_mutating_tools_require_confirmation_in_auto() -> None:
+    guard = PermissionGuard(PermissionMode.AUTO)
+
+    assert guard.requires_confirm("write_file", {"file_path": "x", "content": "y"}) is True
+    assert (
+        guard.requires_confirm(
+            "edit_file",
+            {"file_path": "x", "old_text": "a", "new_text": "b"},
+        )
+        is True
+    )
+    assert guard.requires_confirm("task_create", {"title": "new task"}) is True
+    assert guard.requires_confirm("task_update", {"task_id": "abc", "status": "done"}) is True
+    assert guard.requires_confirm("memory", {"command": "create", "path": "a.md"}) is True
+    assert guard.requires_confirm("memory", {"command": "view", "path": "a.md"}) is False
+
+
+def test_permission_guard_fail_closed_mutating_tools_prompt_for_denial() -> None:
+    guard = PermissionGuard(PermissionMode.AUTO, fail_closed=True)
+
+    assert guard.requires_confirm("read_file", {"file_path": "x"}) is False
+    assert guard.requires_confirm("edit_file", {"file_path": "x"}) is True
+    assert guard.requires_confirm("memory", {"command": "str_replace", "path": "a.md"}) is True
+
+
+def test_permission_guard_background_run_uses_command_subject_and_danger_checks() -> None:
+    guard = PermissionGuard(PermissionMode.DEFAULT)
+    guard.allow_rules = ["background_run(prefix:git status*)"]
+    guard.deny_rules = ["background_run(prefix:npm publish*)"]
+
+    assert guard.requires_confirm("background_run", {"command": "git status"}) is False
+    assert guard.requires_confirm("background_run", {"command": "npm publish"}) is True
+    assert guard.requires_confirm("background_run", {"command": "rm -rf build"}) is True
+    assert guard.is_dangerous("background_run", {"command": "bash -c 'rm -rf build'"}) is True
 
 
 def test_subagent_schema_exposes_agent_type_and_background_flag() -> None:

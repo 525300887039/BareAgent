@@ -39,6 +39,16 @@ def test_create_writes_file_under_root(tmp_path):
     assert "note.md" in result
 
 
+def test_create_refuses_to_overwrite_existing_file(tmp_path):
+    mm = _manager(tmp_path)
+    mm.create("note.md", "original")
+
+    with pytest.raises(ValueError, match="already exists"):
+        mm.create("note.md", "replacement")
+
+    assert (mm.root / "note.md").read_text(encoding="utf-8") == "original"
+
+
 def test_view_directory_lists_entries(tmp_path):
     mm = _manager(tmp_path)
     mm.create("MEMORY.md", "index")

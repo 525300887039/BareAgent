@@ -1,7 +1,7 @@
 """Permission semantics for the ``semantic_rename`` write tool.
 
 ``semantic_rename`` mutates files across the workspace, so it must behave like
-``write_file``: confirm in DEFAULT, auto-approve in AUTO, reject in PLAN, and
+``write_file``: confirm in DEFAULT/AUTO, reject in PLAN, and
 pass through BYPASS. It is deliberately NOT in ``SAFE_TOOLS``.
 """
 
@@ -21,9 +21,9 @@ def test_semantic_rename_default_requires_confirm() -> None:
     assert guard.requires_confirm("semantic_rename", _INPUT) is True
 
 
-def test_semantic_rename_auto_passes() -> None:
+def test_semantic_rename_auto_requires_confirm() -> None:
     guard = PermissionGuard(mode=PermissionMode.AUTO)
-    assert guard.requires_confirm("semantic_rename", _INPUT) is False
+    assert guard.requires_confirm("semantic_rename", _INPUT) is True
 
 
 def test_semantic_rename_plan_rejects() -> None:

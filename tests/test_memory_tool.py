@@ -49,6 +49,17 @@ def test_run_memory_str_replace_non_unique_returns_error(tmp_path):
     assert "not unique" in out
 
 
+def test_run_memory_create_existing_file_returns_error(tmp_path):
+    mm = MemoryManager(tmp_path / "m")
+    mm.create("f.md", "original")
+
+    out = run_memory(manager=mm, command="create", path="f.md", file_text="replacement")
+
+    assert out.startswith("Error:")
+    assert "already exists" in out
+    assert mm.view("f.md") == "1\toriginal"
+
+
 # -- get_handlers / get_tools wiring -------------------------------------
 
 

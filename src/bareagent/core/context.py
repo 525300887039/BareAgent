@@ -14,7 +14,7 @@ BASE_SYSTEM_PROMPT = "You are BareAgent, a terminal-based coding assistant."
 PLAN_MODE_DIRECTIVE = (
     "You are in PLAN mode. Investigate and design only -- do NOT modify files, "
     "run state-changing commands, or perform other side effects. Use the "
-    "read-only tools (read_file, glob, grep, web_fetch, web_search, load_skill) "
+    "read-only local tools (read_file, glob, grep, load_skill) "
     "to research the task thoroughly.\n"
     "When your implementation plan is ready, call the exit_plan_mode tool with "
     "the full plan as markdown to present it for approval. That tool is the only "

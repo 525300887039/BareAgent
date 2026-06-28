@@ -242,6 +242,8 @@ class MemoryManager:
         if resolved == self._root:
             raise ValueError("cannot create over the memory root")
         with self._lock:
+            if resolved.exists():
+                raise ValueError(f"memory path already exists: {self._relative(resolved)}")
             atomic_write_text(resolved, file_text)
         return f"Created {self._relative(resolved)} ({len(file_text)} chars)"
 
