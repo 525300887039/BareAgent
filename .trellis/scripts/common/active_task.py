@@ -43,6 +43,9 @@ _KNOWN_PLATFORMS = {
     "kiro",
     "copilot",
     "pi",
+    "trae",
+    "zcode",
+    "reasonix",
 }
 
 _ENV_SESSION_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -57,6 +60,9 @@ _ENV_SESSION_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("kiro", ("KIRO_SESSION_ID",)),
     ("copilot", ("COPILOT_SESSION_ID", "COPILOT_SESSIONID")),
     ("pi", ("PI_SESSION_ID", "PI_SESSIONID")),
+    ("trae", ("TRAE_SESSION_ID",)),
+    ("zcode", ("ZCODE_SESSION_ID", "ZCODE_SESSIONID")),
+    ("reasonix", ("REASONIX_SESSION_ID", "REASONIX_SESSIONID")),
 )
 _ENV_CONVERSATION_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("cursor", ("CURSOR_CONVERSATION_ID", "CURSOR_CONVERSATIONID")),
@@ -69,6 +75,8 @@ _ENV_TRANSCRIPT_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("droid", ("FACTORY_TRANSCRIPT_PATH", "DROID_TRANSCRIPT_PATH")),
     ("qoder", ("QODER_TRANSCRIPT_PATH",)),
     ("codebuddy", ("CODEBUDDY_TRANSCRIPT_PATH",)),
+    ("zcode", ("ZCODE_TRANSCRIPT_PATH",)),
+    ("reasonix", ("REASONIX_TRANSCRIPT_PATH",)),
 )
 _ENV_PLATFORM_ALIASES = {
     "claude-code": "claude",

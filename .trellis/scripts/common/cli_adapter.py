@@ -1,7 +1,7 @@
 """
 CLI Adapter for Multi-Platform Support.
 
-Abstracts differences between Claude Code, OpenCode, Cursor, iFlow, Codex, Kilo, Kiro Code, Gemini CLI, Antigravity, Devin, Qoder, CodeBuddy, GitHub Copilot, Factory Droid, and Pi Agent interfaces.
+Abstracts differences between Claude Code, OpenCode, Cursor, iFlow, Codex, Kilo, Kiro Code, Gemini CLI, Antigravity, Devin, Qoder, CodeBuddy, GitHub Copilot, Factory Droid, Pi Agent, Trae, ZCode, and Reasonix interfaces.
 
 Supported platforms:
 - claude: Claude Code (default)
@@ -19,6 +19,9 @@ Supported platforms:
 - copilot: GitHub Copilot (VS Code)
 - droid: Factory Droid (commands-based)
 - pi: Pi Agent (extension-backed)
+- trae: Trae IDE (IDE-only, hooks-based)
+- zcode: ZCode (IDE-only, pull-based)
+- reasonix: Reasonix (IDE-only, pull-based)
 
 Usage:
     from common.cli_adapter import CLIAdapter
@@ -53,6 +56,9 @@ Platform = Literal[
     "copilot",
     "droid",
     "pi",
+    "trae",
+    "zcode",
+    "reasonix",
 ]
 
 
@@ -97,7 +103,7 @@ class CLIAdapter:
         """Get platform-specific config directory name.
 
         Returns:
-            Directory name ('.claude', '.opencode', '.cursor', '.iflow', '.codex', '.kilocode', '.kiro', '.gemini', '.agent', '.devin', '.qoder', '.codebuddy', '.github/copilot', '.factory', or '.pi')
+            Directory name ('.claude', '.opencode', '.cursor', '.iflow', '.codex', '.kilocode', '.kiro', '.gemini', '.agent', '.devin', '.qoder', '.codebuddy', '.github/copilot', '.factory', '.pi', '.trae', '.zcode', or '.reasonix')
         """
         if self.platform == "opencode":
             return ".opencode"
@@ -127,6 +133,12 @@ class CLIAdapter:
             return ".factory"
         elif self.platform == "pi":
             return ".pi"
+        elif self.platform == "trae":
+            return ".trae"
+        elif self.platform == "zcode":
+            return ".zcode"
+        elif self.platform == "reasonix":
+            return ".reasonix"
         else:
             return ".claude"
 
@@ -137,7 +149,7 @@ class CLIAdapter:
             project_root: Project root directory
 
         Returns:
-            Path to config directory (.claude, .opencode, .cursor, .iflow, .codex, .kilocode, .kiro, .gemini, .agent, .devin, .qoder, .codebuddy, .github/copilot, .factory, or .pi)
+            Path to config directory (.claude, .opencode, .cursor, .iflow, .codex, .kilocode, .kiro, .gemini, .agent, .devin, .qoder, .codebuddy, .github/copilot, .factory, .pi, .trae, .zcode, or .reasonix)
         """
         return project_root / self.config_dir_name
 
@@ -305,6 +317,12 @@ class CLIAdapter:
             return {}
         elif self.platform == "pi":
             return {}
+        elif self.platform == "trae":
+            return {}
+        elif self.platform == "zcode":
+            return {}
+        elif self.platform == "reasonix":
+            return {}
         else:
             return {"CLAUDE_NON_INTERACTIVE": "1"}
 
@@ -390,6 +408,18 @@ class CLIAdapter:
             )
         elif self.platform == "pi":
             cmd = ["pi", "-p", prompt]
+        elif self.platform == "trae":
+            raise ValueError(
+                "Trae is IDE-only; CLI agent run is not supported."
+            )
+        elif self.platform == "zcode":
+            raise ValueError(
+                "ZCode is IDE-only; CLI agent run is not supported."
+            )
+        elif self.platform == "reasonix":
+            raise ValueError(
+                "Reasonix is IDE-only; CLI agent run is not supported."
+            )
 
         else:  # claude
             cmd = ["claude", "-p"]
@@ -456,6 +486,18 @@ class CLIAdapter:
             )
         elif self.platform == "pi":
             return ["pi", "-c", session_id]
+        elif self.platform == "trae":
+            raise ValueError(
+                "Trae is IDE-only; CLI resume is not supported."
+            )
+        elif self.platform == "zcode":
+            raise ValueError(
+                "ZCode is IDE-only; CLI resume is not supported."
+            )
+        elif self.platform == "reasonix":
+            raise ValueError(
+                "Reasonix is IDE-only; CLI resume is not supported."
+            )
         else:
             return ["claude", "--resume", session_id]
 
@@ -530,6 +572,12 @@ class CLIAdapter:
             return "droid"
         elif self.platform == "pi":
             return "pi"
+        elif self.platform == "trae":
+            return "trae"
+        elif self.platform == "zcode":
+            return "zcode"
+        elif self.platform == "reasonix":
+            return "reasonix"
         else:
             return "claude"
 
@@ -594,7 +642,7 @@ def get_cli_adapter(platform: str = "claude") -> CLIAdapter:
     """Get CLI adapter for the specified platform.
 
     Args:
-        platform: Platform name ('claude', 'opencode', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', or 'pi')
+        platform: Platform name ('claude', 'opencode', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', 'trae', 'zcode', or 'reasonix')
 
     Returns:
         CLIAdapter instance
@@ -625,9 +673,12 @@ def get_cli_adapter(platform: str = "claude") -> CLIAdapter:
         "copilot",
         "droid",
         "pi",
+        "trae",
+        "zcode",
+        "reasonix",
     ):
         raise ValueError(
-            f"Unsupported platform: {platform} (must be 'claude', 'opencode', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', or 'pi')"
+            f"Unsupported platform: {platform} (must be 'claude', 'opencode', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', 'trae', 'zcode', or 'reasonix')"
         )
 
     return CLIAdapter(platform=platform)  # type: ignore
@@ -650,6 +701,9 @@ _ALL_PLATFORM_CONFIG_DIRS = (
     ".github/copilot",
     ".factory",
     ".pi",
+    ".trae",
+    ".zcode",
+    ".reasonix",
 )
 """Platform-specific config directory names used by detect_platform exclusion
 checks. `.agents/skills/` is NOT listed here: it is a shared cross-platform
@@ -675,22 +729,27 @@ def detect_platform(project_root: Path) -> Platform:
     2. .opencode directory exists → opencode
     3. .iflow directory exists → iflow
     4. .cursor directory exists (without .claude) → cursor
-    5. .codex exists and no other platform dirs → codex
-    6. .kilocode directory exists → kilo
-    7. .kiro/skills exists and no other platform dirs → kiro
-    8. .gemini directory exists → gemini
+    5. .gemini directory exists → gemini
+    6. .codex exists and no other platform dirs → codex
+    7. .kilocode directory exists → kilo
+    8. .kiro/skills exists and no other platform dirs → kiro
     9. .agent/workflows exists and no other platform dirs → antigravity
     10. .devin/workflows (or legacy .windsurf/workflows) exists and no other platform dirs → devin
     11. .codebuddy directory exists → codebuddy
     12. .qoder directory exists → qoder
-    13. .pi directory exists → pi
-    14. Default → claude
+    13. .github/copilot directory exists → copilot
+    14. .factory directory exists → droid
+    15. .pi directory exists → pi
+    16. .trae directory exists → trae
+    17. .zcode directory exists → zcode
+    18. .reasonix directory exists → reasonix
+    19. Default → claude
 
     Args:
         project_root: Project root directory
 
     Returns:
-        Detected platform ('claude', 'opencode', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', or default 'claude')
+        Detected platform ('claude', 'opencode', 'cursor', 'iflow', 'codex', 'kilo', 'kiro', 'gemini', 'antigravity', 'devin', 'qoder', 'codebuddy', 'copilot', 'droid', 'pi', 'trae', 'zcode', 'reasonix', or default 'claude')
     """
     import os
 
@@ -715,6 +774,9 @@ def detect_platform(project_root: Path) -> Platform:
         "copilot",
         "droid",
         "pi",
+        "trae",
+        "zcode",
+        "reasonix",
     ):
         return env_platform  # type: ignore
 
@@ -790,6 +852,18 @@ def detect_platform(project_root: Path) -> Platform:
     # Check for .pi directory (Pi Agent-specific)
     if (project_root / ".pi").is_dir():
         return "pi"
+
+    # Check for .trae directory (Trae IDE-specific)
+    if (project_root / ".trae").is_dir():
+        return "trae"
+
+    # Check for .zcode directory (ZCode-specific)
+    if (project_root / ".zcode").is_dir():
+        return "zcode"
+
+    # Check for .reasonix directory (Reasonix-specific)
+    if (project_root / ".reasonix").is_dir():
+        return "reasonix"
 
     # Fallback: checkout only has the Codex shared-skills layer
     # (.agents/skills/trellis-* dirs) and no explicit platform config dir.
