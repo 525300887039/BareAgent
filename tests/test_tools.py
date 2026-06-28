@@ -456,6 +456,29 @@ def test_code_search_handler_returns_formatted_hits(tmp_path: Path) -> None:
     assert "def authenticate" in result
 
 
+def test_code_search_handler_normalizes_scoped_path(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "auth.py").write_text(
+        "def authenticate(user):\n    return user\n", encoding="utf-8"
+    )
+    index = _make_code_index(tmp_path)
+    handlers = get_handlers(tmp_path, code_index=index)
+
+    dot_result = handlers["code_search"](
+        query="how to authenticate a user",
+        k=5,
+        path="./src",
+    )
+    parent_result = handlers["code_search"](
+        query="how to authenticate a user",
+        k=5,
+        path="src/../src",
+    )
+
+    assert "src/auth.py:1-2" in dot_result
+    assert "src/auth.py:1-2" in parent_result
+
+
 def test_code_search_handler_absent_without_index(tmp_path: Path) -> None:
     handlers = get_handlers(tmp_path)
     assert "code_search" not in handlers

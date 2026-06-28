@@ -790,9 +790,8 @@ def get_handlers(
         "web_search": run_web_search,
     }
 
-    # Feed the recency tracker (main loop only) so repo_map can auto-bias toward
-    # recently touched files. Wrapping happens here, never on subagent handlers
-    # (they pass recency_tracker=None), so worktree rebind never sees a wrapper.
+    # Feed the recency tracker when the caller supplies one, so repo_map can
+    # auto-bias toward recently touched files.
     if recency_tracker is not None:
         for _name in ("read_file", "write_file", "edit_file"):
             handlers[_name] = _with_recency(handlers[_name], recency_tracker, workspace)

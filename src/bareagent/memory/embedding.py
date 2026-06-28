@@ -174,10 +174,13 @@ class EmbeddingCache:
     def put(self, rel: str, content_hash: str, vector: list[float]) -> None:
         self._entries[rel] = (content_hash, vector)
 
-    def prune(self, live: set[str]) -> None:
+    def prune(self, live: set[str]) -> int:
+        removed = 0
         for rel in list(self._entries):
             if rel not in live:
                 del self._entries[rel]
+                removed += 1
+        return removed
 
     def save(self) -> None:
         payload = {

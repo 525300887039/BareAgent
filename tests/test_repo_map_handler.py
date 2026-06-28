@@ -65,6 +65,15 @@ def test_handler_rejects_path_outside_workspace(tmp_path: Path):
     assert not index.calls  # never reached the index
 
 
+def test_handler_normalizes_scoped_path(tmp_path: Path):
+    index = _StubIndex()
+
+    run_repo_map(path="./src", index=index, workspace=tmp_path)
+    run_repo_map(path="src/../src", index=index, workspace=tmp_path)
+
+    assert [call["path"] for call in index.calls] == ["src", "src"]
+
+
 def test_handler_passes_max_tokens(tmp_path: Path):
     index = _StubIndex()
     run_repo_map(max_tokens=256, index=index, workspace=tmp_path)

@@ -45,33 +45,28 @@ def run_code_search(
 
     # Scope to the requested subtree (sandboxed). A bad path degrades to a
     # friendly note rather than raising.
+    workspace_root = workspace.resolve(strict=False)
     requested = path.strip() if isinstance(path, str) else ""
+    scoped_path = "."
     if requested and requested not in (".", "./"):
         try:
-            safe_path(requested, workspace.resolve(strict=False))
+            scoped = safe_path(requested, workspace_root)
         except (PermissionError, ValueError):
             return f"Error: code_search path is outside the workspace: {requested}"
+        scoped_path = scoped.relative_to(workspace_root).as_posix() or "."
 
-    results = index.search(text, limit)
+    results = index.search(text, limit, path=scoped_path)
     if not results:
+        if scoped_path != ".":
+            return (
+                f"No semantically similar code found under '{requested}'. Try the "
+                "`grep` tool or widen the search path."
+            )
         return (
             "No semantically similar code found (the index may be empty or the "
             "embedding backend unavailable). Try the `grep` tool for an exact "
             "text/regex match instead."
         )
-
-    # Optional subtree filter applied post-search: the index covers the whole
-    # workspace, so narrow to the requested prefix here.
-    prefix = ""
-    if requested and requested not in (".", "./"):
-        prefix = requested.replace("\\", "/").strip("/")
-    if prefix:
-        results = [r for r in results if r.relpath == prefix or r.relpath.startswith(prefix + "/")]
-        if not results:
-            return (
-                f"No semantically similar code found under '{requested}'. Try the "
-                "`grep` tool or widen the search path."
-            )
 
     blocks: list[str] = []
     for hit in results:

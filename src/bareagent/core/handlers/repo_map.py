@@ -45,12 +45,15 @@ def run_repo_map(
     # explicit focus first; dedup while preserving order
     merged = list(dict.fromkeys([*explicit, *auto]))
 
+    workspace_root = workspace.resolve(strict=False)
     requested = path.strip() if isinstance(path, str) else "."
+    scoped_path = "."
     if requested and requested not in (".", "./"):
         try:
-            safe_path(requested, workspace.resolve(strict=False))
+            scoped = safe_path(requested, workspace_root)
         except (PermissionError, ValueError):
             return f"Error: repo_map path is outside the workspace: {requested}"
+        scoped_path = scoped.relative_to(workspace_root).as_posix() or "."
 
     budget: int | None = None
     if max_tokens is not None:
@@ -61,7 +64,7 @@ def run_repo_map(
         if budget is not None and budget <= 0:
             budget = None
 
-    out = index.generate(path=requested or ".", focus=merged, max_tokens=budget)
+    out = index.generate(path=scoped_path, focus=merged, max_tokens=budget)
     if not out:
         return (
             "No repo map available: no supported source files found under the "

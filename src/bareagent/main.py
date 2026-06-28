@@ -2041,6 +2041,9 @@ def _build_handlers(
         message_bus=message_bus,
         spawned_agents=spawned_agents,
         agent_name=agent_name,
+        code_index=code_index,
+        repo_map_index=repo_map_index,
+        recency_tracker=recency_tracker,
     )
     return get_handlers(
         workspace_path,
@@ -2117,6 +2120,9 @@ def _make_team_handlers(
     message_bus: MessageBus,
     spawned_agents: dict[str, AutonomousAgent],
     agent_name: str,
+    code_index: CodeIndex | None = None,
+    repo_map_index: RepoMapIndex | None = None,
+    recency_tracker: FileRecencyTracker | None = None,
 ) -> dict[str, Callable[..., Any]]:
     provider_factory = _make_teammate_provider_factory(config)
 
@@ -2196,6 +2202,9 @@ def _make_team_handlers(
             spawned_agents=spawned_agents,
             agent_name=teammate_name,
             system_prompt_override=agent_instance.system_prompt,
+            code_index=code_index,
+            repo_map_index=repo_map_index,
+            recency_tracker=recency_tracker,
         )
         # Conversational memory across requests (task 06-08): inject a per-teammate
         # Compactor (its own provider, no transcript persistence) so the growing

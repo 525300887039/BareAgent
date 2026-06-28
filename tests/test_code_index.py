@@ -7,6 +7,7 @@ network or model dependency (mirroring tests/test_memory_recall.py).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from bareagent.memory.code_index import (
@@ -126,6 +127,22 @@ def test_search_respects_k(tmp_path: Path):
     assert len(results) == 2
 
 
+def test_scoped_search_prefilters_before_topk(tmp_path: Path):
+    (tmp_path / "aaa.py").write_text(
+        "def authenticate_outside():\n    return login()\n", encoding="utf-8"
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "zzz.py").write_text(
+        "def authenticate_inside():\n    return login()\n", encoding="utf-8"
+    )
+    embedder = _FakeEmbedder()
+    index = _index(tmp_path, embedder)
+
+    results = index.search("authenticate login", k=1, path="src")
+
+    assert [result.relpath for result in results] == ["src/zzz.py"]
+
+
 def test_search_none_embedder_returns_empty(tmp_path: Path):
     (tmp_path / "a.py").write_text("def authenticate():\n    pass\n", encoding="utf-8")
     index = _index(tmp_path, None)
@@ -190,10 +207,27 @@ def test_deleted_file_pruned_from_cache(tmp_path: Path):
     assert all(r.relpath != "b.py" for r in results)
 
     # And its cache entry is pruned: re-reading the cache file shows no b.py key.
-    import json
-
     cache_data = json.loads((tmp_path / ".code-index.json").read_text(encoding="utf-8"))
     assert all(not key.startswith("b.py#") for key in cache_data["entries"])
+
+
+def test_scoped_search_does_not_prune_unrelated_cached_entries(tmp_path: Path):
+    (tmp_path / "a.py").write_text("def authenticate():\n    return login()\n", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "b.py").write_text(
+        "def parse():\n    return tokenize()\n", encoding="utf-8"
+    )
+    embedder = _FakeEmbedder()
+    index = _index(tmp_path, embedder)
+    index.search("authenticate parse", k=5)
+
+    embedder.calls.clear()
+    index2 = _index(tmp_path, embedder)
+    index2.search("parse tokenize", k=5, path="src")
+
+    cache_data = json.loads((tmp_path / ".code-index.json").read_text(encoding="utf-8"))
+    assert any(key.startswith("a.py#") for key in cache_data["entries"])
+    assert any(key.startswith("src/b.py#") for key in cache_data["entries"])
 
 
 def test_identity_change_reembeds_everything(tmp_path: Path):
@@ -225,3 +259,16 @@ def test_oversized_and_binary_files_skipped(tmp_path: Path):
     results = index.search("authenticate login", k=10)
     assert any(r.relpath == "ok.py" for r in results)
     assert all(r.relpath not in ("big.py", "bin.dat") for r in results)
+
+
+def test_cache_file_is_not_indexed_as_source(tmp_path: Path):
+    (tmp_path / ".code-index.json").write_text(
+        "def authenticate_cache():\n    return login()\n", encoding="utf-8"
+    )
+    (tmp_path / "parse.py").write_text("def parse():\n    return tokenize()\n", encoding="utf-8")
+    embedder = _FakeEmbedder()
+    index = _index(tmp_path, embedder)
+
+    results = index.search("authenticate login", k=10)
+
+    assert all(result.relpath != ".code-index.json" for result in results)

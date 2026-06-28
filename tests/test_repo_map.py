@@ -316,3 +316,28 @@ def test_index_extractor_failure_is_fail_open(tmp_path: Path):
     index = RepoMapIndex(ws, extractor=_Boom(), cache_path=cache_path)
     # per-file extraction failure is swallowed -> empty map, no crash
     assert index.generate() == ""
+
+
+def test_index_extractor_failure_is_retried_next_call(tmp_path: Path):
+    ws, cache_path = _make_workspace(tmp_path)
+    _write(ws, "a.py")
+
+    class _Flaky:
+        identity = "flaky:v1"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def extract(self, relpath, source):
+            _ = source
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("transient parser error")
+            return FileTags(relpath, definitions=(_defn("recovered", start=1, end=1),))
+
+    extractor = _Flaky()
+    index = RepoMapIndex(ws, extractor=extractor, cache_path=cache_path)
+
+    assert index.generate() == ""
+    assert "recovered" in index.generate()
+    assert extractor.calls == 2

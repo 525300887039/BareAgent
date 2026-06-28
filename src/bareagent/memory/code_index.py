@@ -164,6 +164,8 @@ class CodeIndex:
             resolved = file_path.resolve(strict=False)
             if not resolved.is_relative_to(self._workspace):
                 continue
+            if resolved == self._cache_path.resolve(strict=False):
+                continue
             try:
                 if resolved.stat().st_size > self._max_file_bytes:
                     continue
@@ -185,10 +187,10 @@ class CodeIndex:
 
     # -- search -----------------------------------------------------------
 
-    def search(self, query: str, k: int = 8) -> list[CodeSearchResult]:
+    def search(self, query: str, k: int = 8, *, path: str = ".") -> list[CodeSearchResult]:
         """Return up to ``k`` code chunks most similar to ``query``.
 
-        Embeds (incrementally, via the cache) every chunk under the workspace,
+        Embeds (incrementally, via the cache) chunks under the requested path,
         embeds the query, and ranks by cosine similarity. ``score <= 0`` chunks
         are dropped (mirrors semantic recall). Returns ``[]`` when no embedder is
         configured, when nothing matches, or -- fail-open -- when embedding fails
@@ -199,7 +201,10 @@ class CodeIndex:
         if not query.strip():
             return []
         try:
-            return self._search(query, k)
+            search_root = self._resolve_search_root(path)
+            if search_root is None:
+                return []
+            return self._search(query, k, search_root)
         except Exception:
             logger.warning(
                 "Semantic code search failed; returning no results.",
@@ -207,10 +212,19 @@ class CodeIndex:
             )
             return []
 
-    def _search(self, query: str, k: int) -> list[CodeSearchResult]:
+    def _resolve_search_root(self, path: str) -> Path | None:
+        requested = path.strip() if isinstance(path, str) else "."
+        if requested in ("", ".", "./"):
+            return self._workspace
+        candidate = (self._workspace / requested).resolve(strict=False)
+        if not candidate.is_relative_to(self._workspace):
+            return None
+        return candidate
+
+    def _search(self, query: str, k: int, search_root: Path) -> list[CodeSearchResult]:
         """Embedding cosine ranking. Raises on embed failure (caller fails open)."""
         assert self._embedder is not None  # caller (search) guards the None case
-        chunks = self._collect_chunks(self._workspace)
+        chunks = self._collect_chunks(search_root)
         if not chunks:
             return []
         cache = EmbeddingCache(self._cache_path, self._embedder.identity)
@@ -235,8 +249,10 @@ class CodeIndex:
             for (key, digest), vector in zip(pending, vectors, strict=True):
                 cache.put(key, digest, vector)
         # Prune chunks for deleted files / shrunk tails before persisting.
-        cache.prune(live_keys)
-        if pending_texts:
+        pruned = 0
+        if search_root == self._workspace:
+            pruned = cache.prune(live_keys)
+        if pending_texts or pruned:
             cache.save()
 
         query_vector = self._embedder.embed([query])[0]

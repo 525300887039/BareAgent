@@ -5,20 +5,35 @@ import time
 import types
 from copy import deepcopy
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from bareagent.concurrency.background import BackgroundManager
+from bareagent.core.file_recency import FileRecencyTracker
+from bareagent.core.tools import get_tools
 from bareagent.main import (
     MAIN_AGENT_NAME,
+    ProviderConfig,
+    RepoMapConfig,
+    RetryConfig,
+    SubagentConfig,
     TeamConfig,
     _drain_team_mailbox,
     _make_team_handlers,
     _parse_team_config,
 )
+from bareagent.memory.code_index import CodeIndex
+from bareagent.memory.repo_map import FileTags, RepoMapIndex
 from bareagent.permission.guard import PermissionGuard, PermissionMode
 from bareagent.planning.tasks import TaskManager
-from bareagent.provider.base import BaseLLMProvider, LLMResponse, ToolCall
+from bareagent.provider.base import (
+    BaseLLMProvider,
+    CacheConfig,
+    LLMResponse,
+    ThinkingConfig,
+    ToolCall,
+)
 from bareagent.team.autonomous import AutonomousAgent
 from bareagent.team.mailbox import Message, MessageBus
 from bareagent.team.manager import TeammateManager
@@ -396,13 +411,26 @@ def _build_team_handlers(
     teammate_manager: TeammateManager,
     bg: _FakeBg,
     spawned: dict | None = None,
+    tools: list[dict[str, Any]] | None = None,
+    code_index: CodeIndex | None = None,
+    repo_map_index: RepoMapIndex | None = None,
+    recency_tracker: FileRecencyTracker | None = None,
     response_timeout: float = 0.3,
     runtime_id: str = "sess1",
     agent_name: str = MAIN_AGENT_NAME,
 ) -> dict:
     config = types.SimpleNamespace(
         team=TeamConfig(poll_interval=0.01, response_timeout=response_timeout),
-        provider=types.SimpleNamespace(name="anthropic", model="m"),
+        provider=ProviderConfig(
+            name="anthropic",
+            model="m",
+            api_key_env="ANTHROPIC_API_KEY",
+        ),
+        thinking=ThinkingConfig(),
+        cache=CacheConfig(),
+        subagent=SubagentConfig(max_depth=3, default_type="general-purpose"),
+        retry=RetryConfig(),
+        repo_map=RepoMapConfig(),
     )
     return _make_team_handlers(
         config=config,  # type: ignore[arg-type]
@@ -412,12 +440,15 @@ def _build_team_handlers(
         skill_loader=None,  # type: ignore[arg-type]  # only used by team_spawn
         permission=PermissionGuard(PermissionMode.DEFAULT),
         bg_manager=bg,  # type: ignore[arg-type]
-        tools=[],
+        tools=tools if tools is not None else [],
         runtime_id=runtime_id,
         teammate_manager=teammate_manager,
         message_bus=bus,
         spawned_agents=spawned if spawned is not None else {},
         agent_name=agent_name,
+        code_index=code_index,
+        repo_map_index=repo_map_index,
+        recency_tracker=recency_tracker,
     )
 
 
@@ -615,6 +646,62 @@ def test_team_list_reflects_real_liveness(tmp_path: Path) -> None:
 
     listed = {item["name"]: item["running"] for item in handlers["team_list"]()}
     assert listed == {"alive": True, "dead": False}
+
+
+def test_team_spawn_wires_visible_boot_gated_tool_handlers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeEmbedder:
+        identity = "fake:v1"
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            return [[1.0, 0.1] for _ in texts]
+
+    class _FakeExtractor:
+        identity = "fake:v1"
+
+        def extract(self, relpath: str, source: str) -> FileTags | None:
+            _ = relpath, source
+            return None
+
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    teammate_manager.register("reviewer", "reviewer", "You review.")
+    monkeypatch.setattr(
+        "bareagent.main.create_provider",
+        lambda _config: ReplayProvider(["ok"]),
+    )
+    code_index = CodeIndex(
+        tmp_path,
+        embedder=_FakeEmbedder(),
+        cache_path=tmp_path / ".code-index.json",
+    )
+    repo_map_index = RepoMapIndex(
+        tmp_path,
+        extractor=_FakeExtractor(),
+        cache_path=tmp_path / ".repo-map.json",
+    )
+    tools = get_tools(code_index=code_index, repo_map_index=repo_map_index)
+    spawned: dict[str, AutonomousAgent] = {}
+    handlers = _build_team_handlers(
+        tmp_path,
+        bus=bus,
+        teammate_manager=teammate_manager,
+        bg=_FakeBg(),
+        spawned=spawned,
+        tools=tools,
+        code_index=code_index,
+        repo_map_index=repo_map_index,
+    )
+
+    result = handlers["team_spawn"]("reviewer")
+
+    assert result.startswith("Spawned teammate reviewer")
+    agent = spawned["reviewer"]
+    visible_tool_names = {tool["name"] for tool in agent.tools}
+    assert {"code_search", "repo_map"} <= visible_tool_names
+    assert {"code_search", "repo_map"} <= set(agent.handlers)
 
 
 def test_drain_team_mailbox_skips_delivered_and_collects_sink(tmp_path: Path) -> None:

@@ -551,17 +551,18 @@ class RepoMapIndex:
             if cached is not None and cached.content_hash == digest:
                 tags = cached.tags
             else:
-                extracted = None
                 try:
                     extracted = self.extractor.extract(rel, content)
                 except Exception:
                     logger.debug("Tag extraction failed for %s", rel, exc_info=True)
-                    extracted = None
-                # Cache unsupported / failed files as empty so they are not
-                # re-parsed on every call; they simply contribute no tags.
-                tags = extracted if extracted is not None else FileTags(relpath=rel)
-                cache.put(rel, digest, tags)
-                changed = True
+                    tags = FileTags(relpath=rel)
+                else:
+                    # Cache unsupported files as empty so they are not re-parsed
+                    # on every call. Transient extractor exceptions are not
+                    # cached, so a later call can recover.
+                    tags = extracted if extracted is not None else FileTags(relpath=rel)
+                    cache.put(rel, digest, tags)
+                    changed = True
             if tags.definitions or tags.references:
                 files.append(tags)
         pruned = cache.prune(live)
