@@ -65,3 +65,7 @@
   `tests/test_lsp_workspace_edit.py`、`tests/test_file_read_multimodal.py`。
 - Fix #2 换算函数应纯函数化便于单测；emoji 测试用例如 "😀x = 1" 在 x 前放 astral 字符验证偏移。
 - 三处互不耦合，可独立实现与测试。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

@@ -52,3 +52,7 @@
 
 - 关键文件：`src/memory/persistent.py`（recall 内核 + 回退）、可能新增 `src/memory/embedding.py`（embedder 抽象 + 缓存 + 余弦）、`src/main.py`（`[memory]` 配置穿透）、`pyproject.toml`（视 backend 决定是否加 extra）。
 - fail-open 心智对齐 hooks/worktree/retry：语义是增强层，词法召回是兜底安全网。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

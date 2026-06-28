@@ -86,3 +86,7 @@ ROADMAP 2.3「简单但实用」。
   `src/main.py`(Config/CostConfig/wiring/`/cost`/重置)、`config.toml`(示例)、
   `tests/test_token_tracker.py`(新)、`tests/test_loop.py`(汇总)。
 - summary 文案对齐现有 `/mcp status`/`print_status` 风格。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

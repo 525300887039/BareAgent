@@ -99,3 +99,7 @@
   `.language_server.server.send.rename(params)`、`.language_server.open_file(relpath)`。
 - params 形态：`{textDocument:{uri}, position:{line,character}, newName}`，uri 用
   `coord.path_to_document_uri`。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

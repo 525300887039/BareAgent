@@ -70,3 +70,7 @@
 - `threading.Timer` 每次 fire 后新建下一个(自重排),cancel 即不再重排。
 - 时间戳:测试避免真实墙钟;`time.monotonic` 仅用于展示(若需),核心逻辑用 Timer 回调次数验证。
 - 权限:定时命令经 `run_bash` 但**不经 PermissionGuard 交互确认**(后台无人值守);属基础设施级,与 background_run 同档——需在 PRD/文档明示这一安全语义。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

@@ -55,3 +55,7 @@
 - 复用 `web_fetch.html_to_text` 清洗 snippet HTML（与 `_search_ddg_html` 一致）。
 - 关键文件：`src/core/handlers/web_search.py`、`tests/test_web_search.py`、必要时 `CLAUDE.md`。
 </content>
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

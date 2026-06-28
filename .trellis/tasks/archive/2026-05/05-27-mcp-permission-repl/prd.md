@@ -191,3 +191,7 @@
   - `logging-guidelines.md`：所有 REPL 反馈走 UIProtocol，capability 缺失 / unknown server 走 logger
   - `directory-structure.md`：所有改动落在 permission / planning / mcp/manager / main.py，无新模块
   - `quality-guidelines.md`：from __future__ + 类型注解 + ruff/pytest
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

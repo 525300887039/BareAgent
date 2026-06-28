@@ -89,3 +89,7 @@
 ## Research References
 
 - [`research/anthropic-prompt-caching-api.md`](research/anthropic-prompt-caching-api.md) — Anthropic prompt caching 当前 API（GA 无 beta header；`cache_control:{"type":"ephemeral"}`；system 须为 block 列表；最多 4 断点 + 20 block 回溯；Opus 4.5+ 最小前缀 4096 静默 no-op；usage `cache_creation_input_tokens`/`cache_read_input_tokens` 与 `input_tokens` 相加；写 1.25×/读 0.1×；流式从 `get_final_message().usage` 读）。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

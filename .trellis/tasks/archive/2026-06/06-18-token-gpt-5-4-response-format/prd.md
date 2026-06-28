@@ -61,3 +61,7 @@
 - 调研来源：本会话四个 research agent 简报（Claude Code 上下文管理、横向 code agent 对比、跨 provider 缓存最佳实践、Anthropic 官方最佳实践）。
 - 关键官方事实：Anthropic 断点上限 4、20-block 回溯、tools→system→messages 顺序、读 0.1×/5m 写 1.25×/1h 写 2×。
 - Roo Code anchor 模式：断点放最近 2 条 user 消息（倒二条按 user-turn 推进，长 agentic 爆发期间不动 → 稳定缓存前缀覆盖到上个 user turn）。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

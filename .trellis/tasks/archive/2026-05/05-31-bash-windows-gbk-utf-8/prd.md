@@ -51,3 +51,7 @@
 - 方案 A 实现：`["powershell", "-NoProfile", "-Command", "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; " + command]`。`[Console]::OutputEncoding` 控制 PS 5.1 在 stdout 被重定向时的写出编码，及其解码 native 命令 stdout 的方式——设为 UTF8 后与 `encoding="utf-8"` 对齐。
 - 潜在坑：`[Console]::OutputEncoding` setter 在无 console 时可能抛 IOException；subprocess 管道场景一般有 console，实现期本机实测确认（必要时 try 包裹）。
 - 关键文件：`src/core/handlers/bash.py`、`tests/test_tools.py`。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

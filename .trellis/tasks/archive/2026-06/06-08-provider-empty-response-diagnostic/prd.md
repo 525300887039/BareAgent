@@ -61,3 +61,7 @@
 - 关键文件：`src/core/loop.py`（检测 + 双通道诊断；可能新增 `import logging` + module logger）、（视 Q3）`src/main.py` + `config.toml`（可选开关）。
 - 参考既有 console 用法：`loop.py` 内 `console.print_error(msg)`（exceeded iterations）、`console.print_assistant`。
 - 严重度与 fail-open 心智对齐 hooks/worktree：诊断是便利层，绝不改变安全/控制流。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

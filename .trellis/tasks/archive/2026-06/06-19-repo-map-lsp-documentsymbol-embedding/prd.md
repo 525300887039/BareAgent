@@ -82,3 +82,7 @@
 - 复用文件：`src/bareagent/memory/embedding.py`（Embedder/Cache/cosine）、`src/bareagent/lsp/manager.py`（`request_document_symbols`）、`src/bareagent/core/tools.py`（`DEFERRED_TOOLS` 注册）。
 - 调研来源：本会话横向 code agent 简报（Aider repo map = tree-sitter + PageRank + `--map-tokens` 二分贴预算；Continue.dev repo map 受 Aider 启发；Cursor 语义+grep +12.5%）。
 - 前置：本任务进实现前需先把 `feat/cache-abstraction-layer` 合 main 再从 main 开新分支。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

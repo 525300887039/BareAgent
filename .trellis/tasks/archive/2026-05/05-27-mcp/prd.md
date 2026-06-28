@@ -194,3 +194,7 @@ src/mcp/
 - **Client-side server-callable capabilities**：sampling / elicitation / roots——client capability 声明为空
 - ~~HTTP legacy transport (2024-11-05)~~ → **已撤回**：v1 同时支持 legacy 2024-11-05 (GET stream + POST) 和 Streamable HTTP 2025-03-26 (单端点)，确保能连所有现存公网 server。HTTP transport 内部按 server 协商的协议版本分派
 - **Audio / embedded_resource / resource_link 的原生回传**：v1 降级为占位文本
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

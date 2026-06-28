@@ -76,3 +76,7 @@ CI 默认也是 `-m 'not manual'`,于是 = 零自动化覆盖;而它们恰恰在
 
 - 关键文件：`.github/workflows/ci.yml`、`tests/conftest.py`、`pyproject.toml [tool.pytest.ini_options] markers`。
 - 上一任务（06-20-ci-pre-push-main）：notify job + pre-push 闸已上线。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

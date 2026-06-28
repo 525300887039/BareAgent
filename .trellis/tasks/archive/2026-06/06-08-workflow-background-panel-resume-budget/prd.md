@@ -143,3 +143,7 @@
   `/loop` list/cancel/clear + `/reload`（命令登记三件套）。
 - 现状基线：`workflow` 同步阻塞、`on_progress=console.print_status` 主线程、节点 fail-closed
   `permission.clone(fail_closed=True)` + `run_subagent`、`inject_notifications` 截断 500 字。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

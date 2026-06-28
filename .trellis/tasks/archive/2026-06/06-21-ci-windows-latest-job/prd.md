@@ -61,3 +61,7 @@ CI 目前只在 ubuntu-latest 跑;而开发主力是 Windows。导致 main 一�
 
 - 关键文件：`.github/workflows/ci.yml`、`scripts/ci_notify.py`（若纳入 notify）、`tests/test_ci_visibility.py`（guard）。
 - 前序：06-20-ci-pre-push-main（notify + pre-push）、06-20-ci-manual-linux-job-socket-http（socket job + combine_conclusions）。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

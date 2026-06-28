@@ -126,3 +126,7 @@
   - `error-handling.md`：自定义异常、边界处校验
   - `state-persistence.md`：MCP 配置进 `MCPConfig` dataclass，不持久化（运行时状态）
   - `quality-guidelines.md`：Python 3.12+ 特性 + ruff + 类型注解全覆盖
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

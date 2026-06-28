@@ -74,3 +74,7 @@
 - 纯模块边界范式：`src/core/retry.py`、`src/planning/skill_gen.py`。
 - 配置范式：`[retry]`/`[skills]`/`[cache]` 的 dataclass + `_parse_*_config` 逐字段容错 + env 覆盖 + build。
 - provider 工厂：`src/provider/factory.py`（按 model 构造便宜评估 provider）。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

@@ -119,3 +119,7 @@
 - 仿形态：`src/core/goal.py`（纯逻辑 + 注入驱动）、`src/concurrency/scheduler.py`（线程安全并发）、`src/planning/subagent.py`（节点执行器）。
 - 隔离工具范式：若用 LLM 工具，考虑 `skill_create`/`goal_verdict` 的"不进全局集、只在特定上下文暴露、子代理拿不到"三件套。
 - 研究参考：Claude Code `Workflow` 工具语义（agent/parallel/pipeline/phase/log、并发上限 min(16, cores-2)、schema 结构化输出、worktree 隔离、resume 日志）——MVP 取其确定性 fan-out 内核，砍掉脚本运行时与 resume。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

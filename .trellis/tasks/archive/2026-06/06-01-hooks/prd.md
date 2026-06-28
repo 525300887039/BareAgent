@@ -95,3 +95,7 @@
   权限拒绝）。
 - 参考模型：Claude Code hooks（PreToolUse/PostToolUse、JSON stdin、exit 2 = block）—— 权威约定，
   字段名/语义对齐以便用户迁移。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

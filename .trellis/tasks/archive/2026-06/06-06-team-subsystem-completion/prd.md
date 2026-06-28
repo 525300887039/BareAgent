@@ -127,3 +127,7 @@
 
 - 关键文件：`src/team/{autonomous,mailbox,protocols,manager}.py`、`src/main.py`（team 接线 `_make_team_handlers`/`_team_spawn`/`_drain_team_mailbox`/`_broadcast_team_shutdown`）、`src/core/tools.py`（team_* schema/fallback）、`src/permission/guard.py`（`team_list` 入 SAFE_TOOLS）。
 - 范式参考：纯逻辑模块 + 注入回调可单测（`retry.py`/`goal.py`/`workflow.py`）；主循环专属工具隔离三件套（`exit_plan_mode`/`workflow`）；fail-closed 后台权限（`permission.clone(fail_closed=True)`）。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

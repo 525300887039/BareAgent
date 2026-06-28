@@ -216,3 +216,7 @@ provider.openai.py 序列化:
   - `error-handling.md`：image 块缺字段 → 降级为占位文本，不抛异常；handler 多模态错误路径仍返回 string
   - `quality-guidelines.md`：完整类型注解、ruff 全绿
   - `directory-structure.md`：仅 core/loop + mcp/registry + provider/{anthropic,openai} 改动
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

@@ -68,3 +68,7 @@
 - 镜像 `context.py:_run_git_command` 的 subprocess 范式(utf-8 / errors=replace / timeout)。
 - Windows:`git worktree` 与路径分隔符均由 git 处理;tempfile 给绝对路径即可。
 - 权限:worktree 的 git 命令不经 PermissionGuard(基础设施级,同 task.py)。子代理在 worktree 内的 bash/write 仍受其 `child_permission` 约束。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

@@ -77,3 +77,7 @@ UTF-8 纯文本。ROADMAP 1.3。
 - 复用参考：`src/mcp/registry.py:_image_block_or_placeholder`（图片块构造 + 白名单 + 超限降级）。
 - 图片块 console/tracer 输出：`stringify`/`print_tool_result` 对 list[dict] 会 json-dump，
   base64 可能刷屏 —— 实现时图片块附简短 text 描述，必要时在 console 侧避免打印 base64（镜像 MCP 现状）。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

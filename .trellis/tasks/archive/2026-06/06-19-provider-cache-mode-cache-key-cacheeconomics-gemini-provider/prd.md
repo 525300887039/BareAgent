@@ -76,3 +76,7 @@
 - 关键文件：`src/bareagent/provider/{base,factory,presets,openai}.py`、`src/bareagent/memory/token_tracker.py`、`src/bareagent/main.py`（config 穿透）、`src/bareagent/core/loop.py`（仅 cache_key 纳入时）。
 - 设计来源：06-18 会话「多 provider 缓存抽象层」追问的接口设计 + 本任务的代码核实。
 - 前置：06-18 三件套在 `feat/token-saving-trio` 分支尚未合 main；本任务进实现前需先合 main 再开新分支，或基于该分支续做。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

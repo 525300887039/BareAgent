@@ -105,3 +105,7 @@
 - **没有「装一个包白拿查询」的路**：`.scm` tag 查询谁都不在磁盘发。需 **vendor Aider 的 Apache-2.0 `*-tags.scm`**（python/javascript/rust/go/java/c/cpp/ruby/... 共 32 个，**但无 typescript**，只有 javascript）或试 TSL pack `get_tags_query(name)`（覆盖未文档化，运行时探测）。
 - **签名提取是我们自己的逻辑**：`.scm` 只给 `@definition.*` 节点；「只取声明/签名行、剥实现体」要在捕获之上自己写。
 - **推荐依赖集**：`repo-map = ["tree-sitter>=0.25", "tree-sitter-language-pack>=1.9"]`（仿现有 `[lsp]`/`[pdf]`/`[embeddings]` extra）+ vendor 小批 `.scm`（Apache-2.0 attribution）。不依赖 `grep-ast`（它不带查询、还多拉 `pathspec`，而我们已有 `iter_search_files`）。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

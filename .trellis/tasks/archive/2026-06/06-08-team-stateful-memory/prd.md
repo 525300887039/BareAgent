@@ -97,3 +97,7 @@
 - 注入范式参考 retry.py / goal.py / subagent_registry.py：纯逻辑 + 注入回调，主 wiring 在 main.py。
 
 ## Open Questions（详见 brainstorm Q&A，逐个拍板后落到 Decision）
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

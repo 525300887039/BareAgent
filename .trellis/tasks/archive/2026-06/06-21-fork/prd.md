@@ -44,3 +44,7 @@
 ## Out of Scope（明确不做）
 
 bookmarks、filter、树导出 HTML/gist、跨会话搜索、原地编辑历史消息、分支合并、fork 任意磁盘会话（先 resume 再 fork）、`/tree` 内联切换子命令。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

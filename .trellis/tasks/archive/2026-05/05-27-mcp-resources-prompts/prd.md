@@ -145,3 +145,7 @@
   - `logging-guidelines.md`：REPL 反馈走 `UIProtocol`，warn 走 logger
   - `directory-structure.md`：新增工具不在 `src/core/handlers/`，仍走 registry 注入
   - `quality-guidelines.md`：from __future__ import annotations + 类型注解 + ruff
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

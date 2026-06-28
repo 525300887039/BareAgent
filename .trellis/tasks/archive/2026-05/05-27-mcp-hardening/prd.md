@@ -217,3 +217,7 @@ signal.signal(signal.SIGTERM, lambda *_: sys.exit(130))
 ## Research References
 
 （无新 research；沿用父任务 `.trellis/tasks/05-27-mcp/research/` 4 份现成材料）
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

@@ -19,20 +19,20 @@
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `7b15cb5` | (see git log) |
-| `2e9e6e4` | (see git log) |
-| `1aa668c` | (see git log) |
-| `3fa5e52` | (see git log) |
+| `7b15cb5` | Chore：接入 trellis 工作流脚手架 |
+| `2e9e6e4` | Docs：CLAUDE.md 同步 tracing、debug、web 工具等模块说明 |
+| `1aa668c` | Docs：完成 trellis bootstrap，填充 backend spec |
+| `3fa5e52` | Docs：新增 ROADMAP，规划后续四阶段开发 |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -55,20 +55,20 @@
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `b9f64ff` | (see git log) |
-| `2c57281` | (see git log) |
-| `96fc962` | (see git log) |
-| `deb27bb` | (see git log) |
+| `b9f64ff` | Docs：MCP 客户端 brainstorm 完成，拆分 6 个 PR 子任务 |
+| `2c57281` | Docs：MCP 客户端 4 份外部研究 + PRD scope 精修 |
+| `96fc962` | Docs：PR1 mcp-transport 子任务 PRD + jsonl 上下文 |
+| `deb27bb` | Feat：MCP transport + protocol 脚手架（PR1） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -91,17 +91,17 @@ PR2 落地 BareAgent MCP 客户端 tools 链路：src/mcp/client.py (握手 + to
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `1c84fa8` | (see git log) |
+| `1c84fa8` | Feat：MCP Client + Manager + tools 注入（PR2） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -124,17 +124,17 @@ PR3 落地 MCP resources/prompts：MCPClient 解析 server_capabilities + 按 ca
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `6ea295e` | (see git log) |
+| `6ea295e` | Feat：MCP Resources + Prompts 支持（PR3） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -157,17 +157,17 @@ PR4 落地 MCP 权限治理三件套：PermissionGuard MCP 工具四模式分支
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `ba7d0f5` | (see git log) |
+| `ba7d0f5` | Feat：MCP 权限 + 子代理隔离 + REPL 命令（PR4） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -190,17 +190,17 @@ PR5 落地 MCP image 端到端通路：_tool_result 双签名（str | list[dict]
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `b8da7b7` | (see git log) |
+| `b8da7b7` | Feat：MCP 多模态结果回传 + provider 适配（PR5） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -223,17 +223,17 @@ PR5 落地 MCP image 端到端通路：_tool_result 双签名（str | list[dict]
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `ebb1f3c` | (see git log) |
+| `ebb1f3c` | Feat：MCP 生命周期硬化 + E2E + 文档（PR6 / 收尾） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -256,17 +256,17 @@ LSP 客户端集成 2-PR 大任务的 child A。新建 src/lsp/ 6 文件骨架 (
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `3b427aa` | (see git log) |
+| `3b427aa` | Feat：LSP 客户端骨架 + 4 工具 + agent_types 集成（PR1/2） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -289,17 +289,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `776b7f5` | (see git log) |
+| `776b7f5` | Feat：LSP 集成 + UX + E2E + 文档（PR2/2 / 收尾） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -322,17 +322,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `b568073` | (see git log) |
+| `b568073` | chore: 工程化护栏修复（健康体检收尾 T1–T4） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -355,17 +355,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `9216b78` | (see git log) |
+| `9216b78` | Feat: 持久化记忆系统（文件式 agent 记忆 + 召回层） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -388,18 +388,18 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `55da9c8` | (see git log) |
-| `7fd0e85` | (see git log) |
+| `55da9c8` | Feat: 交互式初始化向导 bareagent init（多 provider 配置） |
+| `7fd0e85` | Docs: spec 增补——只格式化改动文件，勿 ruff format 全树 |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -422,18 +422,18 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `49b8a8e` | (see git log) |
-| `1ab14d6` | (see git log) |
+| `49b8a8e` | Feat: web_search 默认改用 Bing HTML 抓取（免 key 免费） |
+| `1ab14d6` | chore(task): plan 05-31-web-search-bing-html-key |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -456,18 +456,18 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `64f535a` | (see git log) |
-| `35e85c1` | (see git log) |
+| `64f535a` | Fix: bash 工具修复 Windows 中文输出乱码（PowerShell GBK→UTF-8 对齐） |
+| `35e85c1` | chore(task): plan 05-31-bash-windows-gbk-utf-8 |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -490,17 +490,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `bf700ed` | (see git log) |
+| `bf700ed` | Feat: 语义重命名工具 semantic_rename（基于 LSP textDocument/rename） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -523,17 +523,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `e6f9589` | (see git log) |
+| `e6f9589` | Feat: Token 用量追踪与成本展示（/cost 命令） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -556,17 +556,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `291a12b` | (see git log) |
+| `291a12b` | Feat: 本地多模态文件读取（图片/PDF/notebook） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -589,17 +589,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `f79716f` | (see git log) |
+| `f79716f` | Feat: Hooks 系统（PreToolUse/PostToolUse 工具调用钩子） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -622,17 +622,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `1c4a04b` | (see git log) |
+| `1c4a04b` | Fix: 代码审查三处正确性修复（WorkspaceEdit 双形态/UTF-16 偏移/PDF 页范围越界） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -655,17 +655,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `bd49e2d` | (see git log) |
+| `bd49e2d` | Feat: 子代理 Git Worktree 隔离（isolation="worktree"） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -688,17 +688,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `7970881` | (see git log) |
+| `7970881` | Feat: Cron 定时任务调度与 /loop 命令 |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -721,17 +721,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `2046332` | (see git log) |
+| `2046332` | Feat: LLM 调用重试策略（指数退避 + 可重试分类） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -754,17 +754,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `953daad` | (see git log) |
+| `953daad` | Feat: 配置热重载（/reload + 被动 mtime 监听） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -787,17 +787,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `1e8e477` | (see git log) |
+| `1e8e477` | Feat: 对话导入导出（/export markdown+json + /import） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -820,18 +820,18 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `cbfcc66` | (see git log) |
-| `79a9638` | (see git log) |
+| `cbfcc66` | Feat: Anthropic prompt caching 断点注入 + [cache] 配置 |
+| `79a9638` | Feat: 跨 provider 缓存用量归一化 + /cost 计价 |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -854,18 +854,18 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `140e0f2` | (see git log) |
-| `f60686d` | (see git log) |
+| `140e0f2` | Feat: 经验式技能生成（自动起草 skill + 草稿区 + 用户提升） |
+| `f60686d` | Test: 经验式技能生成测试 + CLAUDE.md 架构段 |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -888,18 +888,18 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `d631ea6` | (see git log) |
-| `2cc9265` | (see git log) |
+| `d631ea6` | Feat: skill 自进化（识别已有 skill 并同名取代改进版） |
+| `2cc9265` | Test: skill 自进化测试 + CLAUDE.md 自进化段 |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -922,17 +922,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `f4e13ae` | (see git log) |
+| `f4e13ae` | Feat: plan 模式工作流（exit_plan_mode 呈递审批 + 转执行） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -955,17 +955,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `5d13562` | (see git log) |
+| `5d13562` | Feat: /goal 完成条件循环（独立评估器驱动 + max_turns 边界） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -988,17 +988,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `fd179ff` | (see git log) |
+| `fd179ff` | Feat: Workflow 确定性编排（LLM 临场声明式 DAG + 并行 fan-out + 失败语义跳下游） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1021,17 +1021,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `e0e3c00` | (see git log) |
+| `e0e3c00` | Feat: 完善 team/AutonomousAgent 子系统（回路闭合 + 异常隔离 + team_shutdown + 活性检测 + wait_for_message 提速） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1054,17 +1054,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `279e20b` | (see git log) |
+| `279e20b` | Feat: 子代理 SendMessage 续跑（subagent_send 主循环专属工具 + 会话级可续跑注册表） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1087,17 +1087,17 @@ LSP 客户端集成 2-PR 大任务的收尾。src/lsp/diagnostics.py 新建（Di
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `8dcfbe8` | (see git log) |
+| `8dcfbe8` | Feat: team 队友有状态记忆（跨 request 对话续跑 + per-teammate Compactor） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1120,17 +1120,17 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `a980bcd` | (see git log) |
+| `a980bcd` | Feat: provider 空响应诊断（completed 但 text+tool 皆空时非致命 warn） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1153,17 +1153,17 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `d7dccc8` | (see git log) |
+| `d7dccc8` | Feat: team 收口——team_register 动态建队友 + PLAN_APPROVAL 发送侧接线 |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1186,17 +1186,17 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `7799a0d` | (see git log) |
+| `7799a0d` | Feat: 语义/向量记忆召回（可插拔 embedding backend + 词法回退） |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1219,17 +1219,17 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `f5aba62` | (see git log) |
+| `f5aba62` | Feat: workflow 后台执行 + /workflows 面板 + resume + token budget |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1252,18 +1252,18 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `113bc16` | (see git log) |
-| `c2b7de3` | (see git log) |
+| `113bc16` | Feat: 打包为 PyPI 包 bareagent-cli + tag 触发 Trusted Publishing 自动发布 |
+| `c2b7de3` | chore: 同步 uv.lock 到 bareagent-cli 分发名(动态版本 + 展开 all-tracing) |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1286,17 +1286,17 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `2a93ece` | (see git log) |
+| `2a93ece` | Docs: 同步文档到 src-layout 路径 + 补 PyPI(bareagent-cli)安装方式 |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1319,19 +1319,19 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `49cd034` | (see git log) |
-| `f6d27e6` | (see git log) |
-| `38d7ff0` | (see git log) |
+| `49cd034` | feat(cache): GPT-5 cache-read multiplier + anchor breakpoint |
+| `f6d27e6` | feat(grep): add output_mode (content|files_with_matches|count) |
+| `38d7ff0` | docs: sync CLAUDE.md for token-saving trio |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1354,18 +1354,18 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `4590e7c` | (see git log) |
-| `97c02f6` | (see git log) |
+| `4590e7c` | feat(provider): multi-provider cache abstraction (CacheEconomics + cache_mode + Gemini) |
+| `97c02f6` | docs: sync CLAUDE.md for provider cache abstraction |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1388,19 +1388,19 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `826d25a` | (see git log) |
-| `92534f0` | (see git log) |
-| `078528f` | (see git log) |
+| `826d25a` | feat(code-search): semantic code index module (line-window chunks + embedding top-K) |
+| `92534f0` | feat(code-search): code_search tool with boot-gated registration |
+| `078528f` | docs: sync CLAUDE.md for semantic code search |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1423,21 +1423,21 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `328413a` | (see git log) |
-| `e1430cb` | (see git log) |
-| `108df47` | (see git log) |
-| `b2fa3d8` | (see git log) |
-| `6b38bf9` | (see git log) |
+| `328413a` | Feat(repo-map): 纯核心模块（引用图 + 幂迭代 PageRank + 签名渲染 + 预算二分 + 缓存） |
+| `e1430cb` | Feat(repo-map): tree-sitter 抽取层 + 自带 .scm 查询（py/js/rust/go/java） |
+| `108df47` | Feat(repo-map): repo_map 工具接线 + 自动会话偏置 + boot 门控 + 配置 |
+| `b2fa3d8` | Chore(repo-map): 加 [repo-map] optional extra + config.toml [repo_map] 示例 |
+| `6b38bf9` | Docs(repo-map): CLAUDE.md 同步 Repo Map 结构全景架构小节 |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1460,18 +1460,18 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `e09ace3` | (see git log) |
-| `c4846c2` | (see git log) |
+| `e09ace3` | Chore(ci): pre-push 本地闸 + main 变红自动开/关 issue 通知 |
+| `c4846c2` | Docs(ci): CLAUDE.md 同步 CI 可见性（pre-push 闸 + main 变红通知）小节 |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1494,18 +1494,18 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `9b5dc99` | (see git log) |
-| `f5118a9` | (see git log) |
+| `9b5dc99` | Chore(ci): 加 socket job 跑 localhost-socket 测试（捡回零覆盖）+ 纳入 main 变红通知 |
+| `f5118a9` | Docs(ci): CLAUDE.md CI 可见性小节同步 socket job + combine_conclusions |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1528,18 +1528,18 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `e5eedaf` | (see git log) |
-| `e8ed899` | (see git log) |
+| `e5eedaf` | Chore(ci): test job matrix 化覆盖 windows-latest（开发主力平台） |
+| `e8ed899` | Docs(ci): CLAUDE.md CI 可见性小节同步 windows-latest matrix |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1558,23 +1558,23 @@ agent loop 在模型正常停止却既无文本又无工具调用时，此前静
 
 ### Summary
 
-pyproject 早配了 [tool.pyright] 却从未在 CI/push 执行。探查得 10 errors/7 warnings（warnings 全是未装可选依赖的 reportMissingImports，不致红）。10 个 error 全部行为保持的真修复（零 ignore/零放松级别）：main.py 内联 isinstance narrowing、code_index/persistent 各加 embedder assert、repo_map assert personalization、repo_map_extract Node.text or b""。接线：dev extra exact pin pyright==1.1.409、ci.yml test job 加 Linux-gated「Type check (pyright)」step（阻塞，并入 needs.test.result→notify 已覆盖）、ci-check.sh 加 uv run pyright（4 步）、test_ci_visibility.py 加 3 条 guard。CLAUDE.md CI 可见性补 (5) pyright 段。论证 CI error 集 ⊆ 本机集（CI 只装 .[dev]）。PR #5 全绿（ubuntu/windows/socket）ff-merge main，main CI success、notify NOOP 无误开 issue。
+pyproject 早配了 [tool.pyright] 却从未在 CI/push 执行。探查得 10 errors/7 warnings（warnings 全是未装可选依赖的 reportMissingImports，不致红）。10 个 error 全部行为保持的真修复（零 ignore/零放松级别）：main.py 内联 isinstance narrowing、code_index/persistent 各加 embedder assert、repo_map assert personalization、repo_map_extract Node.text or b""。接线：dev extra exact pin pyright==1.1.409、ci.yml test job 加 Linux-gated「Type check (pyright)」step（阻塞，并入 needs.test.result→notify 已覆盖）、ci-check.sh 加 uv run pyright（4 步）、test_ci_visibility.py 加 3 条 guard。CLAUDE.md CI 可见性补 (5) pyright 段。论证 CI error 集 ⊆ 本机集（CI 只装 .[dev]）。PR #5 全绿（ubuntu/windows/socket）ff-merge main，main CI success、notify NOOP，确认未误开 issue。
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `ddd6ad5` | (see git log) |
-| `51652a7` | (see git log) |
-| `f621859` | (see git log) |
+| `ddd6ad5` | Refactor: 消除 src/bareagent 的 10 个 pyright error（行为保持的类型 narrowing） |
+| `51652a7` | Chore(ci): pyright 类型检查接入 CI + 本地闸（阻塞门） |
+| `f621859` | Docs: CLAUDE.md CI 可见性小节同步 pyright 类型检查门 |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1597,18 +1597,18 @@ pyproject 早配了 [tool.pyright] 却从未在 CI/push 执行。探查得 10 er
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `eb05c9f` | (see git log) |
-| `3618287` | (see git log) |
+| `eb05c9f` | Chore(ci): pyright 类型门收紧 basic -> standard |
+| `3618287` | Docs: CLAUDE.md CI 可见性小节同步 pyright standard 收紧 |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 
@@ -1631,18 +1631,18 @@ pyproject 早配了 [tool.pyright] 却从未在 CI/push 执行。探查得 10 er
 
 ### Main Changes
 
-(Add details)
+See the Summary above; the original detailed bullet list was not captured in this historical journal entry.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `0e373dd` | (see git log) |
-| `07100a1` | (see git log) |
+| `0e373dd` | Feat: 会话 fork 与树状分支（/fork + /tree） |
+| `07100a1` | Docs: 同步会话 fork/树状分支到 CLAUDE.md + 持久化 spec |
 
 ### Testing
 
-- [OK] (Add test results)
+- [INFO] Historical validation command was not captured in the original journal entry.
 
 ### Status
 

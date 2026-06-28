@@ -75,3 +75,7 @@
 - 关键文件：`src/planning/subagent_registry.py`(新)、`src/planning/subagent.py`、`src/core/handlers/subagent_send.py`(新)、`src/core/tools.py`（get_handlers）、`src/planning/agent_types.py`（MAIN_LOOP_ONLY_TOOLS）、`src/main.py`（SubagentConfig + registry 宿主 + loop_tools + 安装点 + 会话切换 clear）、`src/permission/guard.py`（确认 subagent_send 不入 SAFE_TOOLS）、`config.toml [subagent]`。
 - 对标：Claude Code `SendMessage`（用 agent ID 续跑此前 spawn 的子代理、上下文原样保留；新 `Agent`/`subagent` 调用则全新开始）。
 - 范式参照：`_install_workflow_handler`/`_install_plan_handler`（主循环专属工具安装）、`spawned_agents`（session-scope 状态生命周期）、`retry.py`/`goal.py`/`workflow.py`（纯模块 + 注入回调可单测）。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

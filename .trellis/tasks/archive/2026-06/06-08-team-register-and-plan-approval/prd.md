@@ -53,3 +53,7 @@
 
 - 关键文件：`src/core/tools.py`（2 个 schema + DEFERRED + fallback）、`src/main.py`（`_make_team_handlers` 加 2 handler + `_handle_team_command` slash + usage）、复用 `src/team/manager.py`（register）、`src/team/protocols.py`（PLAN_APPROVAL，不改）。
 - 复用范式：PLAN_APPROVAL 发送侧复刻 `_team_send` 阻塞骨架（not-running 预判 / wait_response / mark_delivered 去重）。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

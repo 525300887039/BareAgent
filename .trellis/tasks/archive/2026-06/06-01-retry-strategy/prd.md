@@ -74,3 +74,7 @@
 
 - 关键文件：`src/core/retry.py`(新)、`src/core/loop.py`(`_invoke_provider` + `agent_loop` 参数)、`src/provider/{anthropic,openai}.py`(`max_retries=0`)、`src/main.py`(`RetryConfig` + 解析 + 注入两处调用点)、`src/planning/subagent.py`(可选透传)、`config.toml`、`tests/test_retry.py`(新)。
 - `time.sleep` 可被 Ctrl+C 中断；驱动只重试 `Exception` 子类，`BaseException` 透传。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

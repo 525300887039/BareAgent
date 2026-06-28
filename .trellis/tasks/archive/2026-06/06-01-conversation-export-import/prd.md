@@ -65,3 +65,7 @@
 - 关键文件：`src/memory/conversation_io.py`(新)、`src/main.py`（`_dispatch_export_command`/`_dispatch_import_command` + 命令登记 + dispatch）、`CLAUDE.md`、`tests/test_conversation_io.py`(新)。
 - /import 镜像 /resume 机制；/export markdown 复用 `_replay_stdio_transcript` 的遍历结构（抽到纯函数）。
 - /export/import 是 REPL 用户主动命令，不经 PermissionGuard（同 /loop 档，基础设施级）；显式路径按用户输入。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.

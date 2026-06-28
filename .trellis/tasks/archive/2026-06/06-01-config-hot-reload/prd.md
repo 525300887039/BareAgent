@@ -68,3 +68,7 @@
 
 - 关键文件：`src/main.py`（`_dispatch_reload_command` + `_diff_config_for_reload` + `ReloadReport` + mtime 检查 + `_SLASH_COMMANDS`/`_HELP_TEXT` + dispatch 分支）、`config.toml`、`CLAUDE.md`、`tests/test_config_reload.py`(新)。
 - reload 复用 `load_config(config.path)`（重读 toml+local+env）。Config 子段可原地 mutate。
+
+## Archive reconciliation
+
+- 2026-06-28: This task is archived with `task.json.status = "completed"`, but some historical acceptance checkboxes remain unchecked. This reconciliation leaves those boxes unchanged because no per-criterion validation evidence was reconstructed during the archive audit; consult the session journal and commits for available evidence.
