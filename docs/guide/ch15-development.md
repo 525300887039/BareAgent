@@ -61,10 +61,10 @@
 
 | 位置 | 作用 |
 |------|------|
-| `skills/` | 内置技能目录，按 `skills/*/SKILL.md` 组织 |
+| `src/bareagent/skills/` | 内置技能目录，按 `skills/*/SKILL.md` 组织 |
 | `tests/` | pytest 测试 |
 | `docs/` | VitePress 文档源文件 |
-| `config.toml` | 默认配置 |
+| `src/bareagent/config.toml` | 包内置默认配置 |
 
 ## 15.2 开发环境搭建
 
@@ -112,10 +112,12 @@ python -m bareagent.main
 
 ### 技能与配置会随分发一起打包
 
-当前打包配置已经显式包含：
+当前 wheel 打包配置把 `src/bareagent` 作为包目录，因此包内的：
 
 - `skills/`
 - `config.toml`
+
+会随 wheel 一起分发；sdist 通过 `include = ["src", ...]` 带上同一棵源码树。
 
 所以在修改默认技能或默认配置时，要把它们视为发布产物的一部分，而不只是本地辅助文件。
 
@@ -138,19 +140,19 @@ python -m bareagent.main
 ### 常用命令
 
 ```bash
-pytest
+uv run pytest
 ```
 
 运行单个文件：
 
 ```bash
-pytest tests/test_loop.py
+uv run pytest tests/test_loop.py
 ```
 
 按测试名关键字筛选：
 
 ```bash
-pytest tests/test_loop.py -k "test_name"
+uv run pytest tests/test_loop.py -k "test_name"
 ```
 
 ### 关于 `*_manual.py`
@@ -179,19 +181,19 @@ pytest tests/test_loop.py -k "test_name"
 ### 检查
 
 ```bash
-ruff check src tests
+uv run ruff check src tests
 ```
 
 ### 自动修复
 
 ```bash
-ruff check --fix src tests
+uv run ruff check --fix src tests
 ```
 
 ### 格式化
 
 ```bash
-ruff format src tests
+uv run ruff format src tests
 ```
 
 因为 `ruff format` 会直接改文件，所以在处理较大改动前后都值得看一眼 `git diff`，确认没有引入无关 churn。
@@ -246,13 +248,9 @@ BareAgent 现在的扩展面不算多，但都比较明确。
 
 - 在 `src/bareagent/provider/` 下新增 provider 实现
 - 让它继承 `BaseLLMProvider`
-- 在 `src/bareagent/provider/factory.py` 的 `create_provider()` 里注册分支
+- 在 `src/bareagent/provider/presets.py` 增加 `ProviderPreset`，由 `create_provider()` 按 preset 路由
 
-如果你希望它像内置 provider 一样有默认 API key 环境变量，还需要同步更新 `src/bareagent/main.py` 里的：
-
-```python
-DEFAULT_API_KEY_ENV_BY_PROVIDER
-```
+如果你希望它像内置 provider 一样有默认 API key 环境变量，请把 `default_api_key_env` 写进同一个 preset；`main.py` 会通过 preset 读取默认值。
 
 否则 CLI 层不会知道该默认读取哪个环境变量名。
 
@@ -290,11 +288,13 @@ src/bareagent/planning/agent_types.py
 
 ### 新增技能
 
-技能扩展是最轻的一类。当前只需要：
+技能扩展是最轻的一类。新增随包分发的内置技能时，当前只需要：
 
 ```text
-skills/<name>/SKILL.md
+src/bareagent/skills/<name>/SKILL.md
 ```
+
+本机私有技能可以放在外部目录，并通过 `BAREAGENT_SKILLS_DIR` 指向该目录。
 
 然后保证：
 

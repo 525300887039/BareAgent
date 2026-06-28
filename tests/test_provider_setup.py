@@ -167,9 +167,9 @@ def test_wizard_creates_local_file_when_absent(tmp_path: Path) -> None:
 
 def test_wizard_custom_third_party_branch(tmp_path: Path) -> None:
     config_path = _make_base_config(tmp_path)
-    # Channel 6 = custom; route name default (openai); base_url; model; key.
+    # Channel 7 = custom; route name default (openai); base_url; model; key.
     answers = [
-        "6",
+        "7",
         "",
         "https://custom.example/v1",
         "custom-model",
@@ -194,8 +194,8 @@ def test_wizard_custom_third_party_branch(tmp_path: Path) -> None:
 def test_wizard_custom_branch_requires_base_url(tmp_path: Path) -> None:
     config_path = _make_base_config(tmp_path)
     output: list[str] = []
-    # Channel 6 = custom; route name default; empty base_url -> abort.
-    answers = ["6", "", ""]
+    # Channel 7 = custom; route name default; empty base_url -> abort.
+    answers = ["7", "", ""]
 
     written = run_setup_wizard(
         config_path=config_path,
@@ -230,6 +230,27 @@ def test_wizard_env_branch_writes_api_key_env(tmp_path: Path) -> None:
     config = load_config(config_path)
     assert config.provider.api_key is None
     assert config.provider.api_key_env == "DASHSCOPE_API_KEY"
+
+
+def test_wizard_gemini_env_branch_writes_preset_api_key_env(tmp_path: Path) -> None:
+    config_path = _make_base_config(tmp_path)
+    # Channel 6 = Gemini; model 1 = gemini-2.5-pro; base_url default;
+    # key storage 2 = env var; env name <enter> = preset default.
+    answers = ["6", "1", "", "2", ""]
+
+    written = run_setup_wizard(
+        config_path=config_path,
+        input_fn=_scripted_input(answers),
+        output_fn=lambda _msg: None,
+    )
+
+    assert written is True
+    local_text = _local_config_path(config_path).read_text(encoding="utf-8")
+    assert 'name = "gemini"' in local_text
+    assert 'api_key_env = "GEMINI_API_KEY"' in local_text
+    config = load_config(config_path)
+    assert config.provider.name == "gemini"
+    assert config.provider.api_key_env == "GEMINI_API_KEY"
 
 
 # --- Cancellation / invalid input handling ---

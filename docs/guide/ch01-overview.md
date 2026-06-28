@@ -20,12 +20,12 @@ BareAgent 是一个纯 Python 终端代码智能体。它在终端环境中为�
 
 | 特性 | 说明 |
 |------|------|
-| **可插拔 LLM 提供商** | 支持 Anthropic、OpenAI 等提供商，统一接口，流式与非流式输出，可通过配置切换 |
+| **可插拔 LLM 提供商** | 支持 Anthropic、OpenAI、DeepSeek、Qwen、GLM、Gemini 等提供商，统一接口，流式与非流式输出，可通过配置切换 |
 | **内置工具系统** | 开箱即用的 bash、文件读写编辑、glob、grep 等基础工具，以及按需延迟加载的 todo、task、subagent、技能等高级工具 |
 | **细粒度权限控制** | 四种权限模式（DEFAULT / AUTO / PLAN / BYPASS），内置危险命令模式检测（rm -rf、force push、DROP TABLE 等），支持 allow/deny 规则 |
 | **子智能体委派** | 4 种内置智能体类型（general-purpose / explore / plan / code-review），递归深度控制，权限隔离，后台异步执行 |
 | **多智能体协调** | 基于 JSONL 的消息总线，协议状态机（PLAN_APPROVAL / SHUTDOWN），守护进程式自治智能体 |
-| **可扩展技能系统** | 从 `skills/*/SKILL.md` 自动发现技能，通过 `load_skill` 工具按需加载，内置 code-review、git、test 技能 |
+| **可扩展技能系统** | 从包内置 `skills/*/SKILL.md` 自动发现技能，通过 `load_skill` 工具按需加载，内置 code-review、git、test 技能 |
 | **消息压缩** | 微压缩截断旧工具结果 + LLM 摘要生成，基于 50k token 阈值自动触发，支撑超长对话 |
 | **会话管理** | 会话转录持久化，支持列出历史会话（`/sessions`）和恢复（`/resume`） |
 

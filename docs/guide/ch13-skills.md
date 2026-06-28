@@ -2,7 +2,7 @@
 
 BareAgent 的技能系统不是“安装后自动执行一段代码”的插件框架，而是一套非常轻量的文本能力加载机制：
 
-- 先扫描 `skills/*/SKILL.md`
+- 先扫描包内置 `skills/*/SKILL.md`，或 `BAREAGENT_SKILLS_DIR` 指向的自定义目录
 - 把技能清单摘要放进系统提示
 - 需要细节时，再通过 `load_skill` 把某个 `SKILL.md` 的全文读进上下文
 
@@ -20,21 +20,16 @@ BareAgent 的技能系统不是“安装后自动执行一段代码”的插件�
 `resolve_skills_dir()` 的查找顺序是：
 
 1. 如果设置了 `BAREAGENT_SKILLS_DIR`，优先用它
-2. 否则尝试项目内的候选目录
+2. 否则使用包内置技能目录
 3. 返回第一个存在的目录
 
-当前内置候选是相对于 `src/bareagent/planning/skills.py` 的两个位置：
-
-- `.../skills`
-- `.../src/skills`
-
-在当前仓库布局下，最终命中的通常是项目根目录下的：
+未设置环境变量时，默认目录通过 `importlib.resources` 定位到随包分发的 `bareagent/skills`。在源码仓库布局下，对应路径是：
 
 ```text
-skills/
+src/bareagent/skills/
 ```
 
-如果这些候选都不存在，`resolve_skills_dir()` 仍会返回第一个候选路径作为默认位置，只是该目录此时可能还没有内容。
+这个解析方式同时适用于 editable install 和 wheel 安装；只要技能目录随包存在，就不依赖当前工作目录。
 
 ### 扫描规则
 
@@ -47,7 +42,7 @@ skills/
 也就是说，一个技能最基本的约定是：
 
 ```text
-skills/<skill-name>/SKILL.md
+<skills-dir>/<skill-name>/SKILL.md
 ```
 
 当前实现不会：
@@ -149,9 +144,9 @@ Available skills (load the full SKILL.md only when you need the details):
 
 | 技能 | 目录 | 描述摘要 |
 |------|------|------|
-| `code-review` | `skills/code-review/` | Use this skill when you need a practical review checklist for correctness, safety, performance, and maintainability. |
-| `git` | `skills/git/` | Use this skill when you need to prepare commits, choose a branch name, or check whether a change is ready to land. |
-| `test` | `skills/test/` | Use this skill when writing or reviewing tests for agent loops, tool handlers, prompt assembly, or filesystem behavior. |
+| `code-review` | `src/bareagent/skills/code-review/` | Use this skill when you need a practical review checklist for correctness, safety, performance, and maintainability. |
+| `git` | `src/bareagent/skills/git/` | Use this skill when you need to prepare commits, choose a branch name, or check whether a change is ready to land. |
+| `test` | `src/bareagent/skills/test/` | Use this skill when writing or reviewing tests for agent loops, tool handlers, prompt assembly, or filesystem behavior. |
 
 它们都只是 Markdown 指南，不包含可执行代码。
 
@@ -171,12 +166,9 @@ Available skills (load the full SKILL.md only when you need the details):
 
 ### 发布时包含技能目录
 
-`pyproject.toml` 已显式把 `skills/` 加入：
+`pyproject.toml` 的 wheel 配置把 `src/bareagent` 作为包目录，`config.toml` 与 `skills/**` 都位于这个包目录内，会作为包数据随 wheel 一起分发；sdist 通过 `include = ["src", ...]` 带上同一棵源码树。
 
-- wheel 的 `force-include`
-- sdist 的 `include`
-
-因此技能目录不只是本地开发资源，也是分发包的一部分。
+因此内置技能目录不只是本地开发资源，也是分发包的一部分。
 
 ## 13.4 自定义技能编写指南
 
@@ -184,13 +176,15 @@ BareAgent 当前对自定义技能的要求非常少，这也是它容易扩展�
 
 ### 最小结构
 
-新增一个技能至少需要：
+如果你是在源码仓库里新增一个随 BareAgent 分发的内置技能，至少需要：
 
 ```text
-skills/
+src/bareagent/skills/
   my-skill/
     SKILL.md
 ```
+
+如果你只想在本机使用自定义技能，则把同样的目录结构放进某个外部目录，并用 `BAREAGENT_SKILLS_DIR` 指向它。
 
 其中目录名就是将来传给 `load_skill(skill_name=...)` 的名字。
 
@@ -235,7 +229,7 @@ BareAgent 现在不会自动做这些事：
 
 BareAgent 的技能系统可以概括为：
 
-1. 用 `scan()` 自动发现 `skills/*/SKILL.md`
+1. 用 `scan()` 自动发现包内置或自定义目录下的 `*/SKILL.md`
 2. 用 `get_skill_list_prompt()` 把技能摘要注入系统提示
 3. 用 `load_skill` 在需要时读取某个技能全文
 4. 用最少约定支持自定义扩展

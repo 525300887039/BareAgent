@@ -12,7 +12,7 @@ BareAgent 按以下顺序决定主配置文件路径：
 
 1. `--config <path>`
 2. 环境变量 `BAREAGENT_CONFIG`
-3. 项目自带的 `config.toml`
+3. 包内置的 `config.toml`
 
 这一步只决定“基础配置文件”的位置。
 
@@ -62,7 +62,7 @@ BareAgent 按以下顺序决定主配置文件路径：
 bareagent init
 ```
 
-向导提供 6 类渠道：
+向导提供 7 类渠道：
 
 | 序号 | 渠道 | 路由 | 默认 base_url |
 |------|------|------|---------------|
@@ -71,9 +71,10 @@ bareagent init
 | 3 | Claude (Anthropic) | `anthropic` 原生 | 默认 |
 | 4 | Qwen (DashScope) | `openai` 兼容 | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
 | 5 | GLM (Zhipu/BigModel) | `openai` 兼容 | `https://open.bigmodel.cn/api/paas/v4` |
-| 6 | 第三方 OpenAI 兼容 | `openai` 兼容 | 自定义输入 |
+| 6 | Gemini (Google) | `openai` 兼容 | `https://generativelanguage.googleapis.com/v1beta/openai/` |
+| 7 | 第三方 OpenAI 兼容 | `openai` 兼容 | 自定义输入 |
 
-前 5 类带默认 base_url、默认 Key 环境变量名和候选模型；模型可以输入编号选用候选，也可以直接输入自定义名称，base_url 直接回车采用默认。第 6 类需要你自行填写路由名（默认 `openai`）、`base_url`、模型与 Key。
+前 6 类带默认 base_url、默认 Key 环境变量名和候选模型；模型可以输入编号选用候选，也可以直接输入自定义名称，base_url 直接回车采用默认。第 7 类需要你自行填写路由名（默认 `openai`）、`base_url`、模型与 Key。
 
 **API Key 落盘方式**有两个分支：
 
@@ -92,10 +93,10 @@ bareagent init
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `name` | `string` | 提供商名称，支持 `openai`、`anthropic`、`deepseek`、`qwen`、`glm` |
+| `name` | `string` | 提供商名称，支持 `openai`、`anthropic`、`deepseek`、`qwen`、`glm`、`gemini` |
 | `model` | `string` | 具体模型名，原样传给 provider |
 | `api_key` | `string?` | 明文 API Key；设置后优先于 `api_key_env`（通常由 `bareagent init` 写入 `config.local.toml`） |
-| `api_key_env` | `string` | 存放 API Key 的环境变量名（`api_key` 未设置时回退到此） |
+| `api_key_env` | `string` | 存放 API Key 的环境变量名；兼容旧行为，也可直接填 `sk-` 开头的明文 Key（推荐新配置用 `api_key`） |
 | `base_url` | `string?` | OpenAI 兼容接口的基础地址，未设置时为 `None` |
 | `wire_api` | `string?` | OpenAI 兼容接口的传输协议选择，例如 `responses` |
 
@@ -128,18 +129,18 @@ base_url = "https://right.codes/codex/v1"
 wire_api = "responses"
 ```
 
-实现细节上，三个 provider 的行为略有差异：
+实现细节上，provider preset 的行为略有差异：
 
 - `anthropic` 会构造 `AnthropicProvider`，并消费 `[thinking]` 配置
 - `openai` 会构造 `OpenAIProvider`；若未设置 `wire_api`，默认走 `chat_completions`
-- `deepseek` 也走 `OpenAIProvider`，但如果未显式设置 `base_url`，会自动使用 `https://api.deepseek.com`
+- `deepseek`、`qwen`、`glm`、`gemini` 也走 `OpenAIProvider`，但如果未显式设置 `base_url`，会自动使用各自 preset 的兼容端点
 
 关于默认值，需要区分两层含义：
 
-- 当前仓库自带的 `config.toml` 示例值是 `openai` + `gpt-4.1`
+- 包内置的 `config.toml` 示例值是 `openai` + `gpt-4.1`
 - 如果你的配置文件根本没有 `[provider]`，源码兜底默认值是 `anthropic` + `claude-sonnet-4-20250514`
 
-Key 的解析顺序是：先看明文 `api_key`，有就直接用；否则回退到 `api_key_env`——若该值以 `sk-` 开头则当作明文 Key，否则当作环境变量名去运行环境里取。`api_key_env` 这一支只存“环境变量名”，真正的 Key 仍必须出现在运行环境中；若两者都缺失或环境变量不存在，`create_provider()` 会直接报错。`bareagent init`（见 3.1.5）会帮你把 `api_key` 或 `api_key_env` 写进 `config.local.toml`。
+Key 的解析顺序是：先看明文 `api_key`，有就直接用；否则回退到 `api_key_env`——若该值以 `sk-` 开头则作为兼容旧配置的明文 Key 使用，否则当作环境变量名去运行环境里取。新配置建议把明文 Key 放在 `api_key`，把环境变量名放在 `api_key_env`。若两者都缺失或环境变量不存在，`create_provider()` 会直接报错。`bareagent init`（见 3.1.5）会帮你把 `api_key` 或 `api_key_env` 写进 `config.local.toml`。
 
 ### 3.2.2 `[permission]`
 
@@ -287,11 +288,11 @@ pretty = true
 
 | 变量名 | 说明 | 默认/备注 |
 |--------|------|-----------|
-| `BAREAGENT_CONFIG` | 指定主配置文件路径 | 未设置时使用项目自带 `config.toml` |
+| `BAREAGENT_CONFIG` | 指定主配置文件路径 | 未设置时使用包内置 `config.toml` |
 | `BAREAGENT_PROVIDER` | 覆盖 provider 名称 | 未设置时取配置文件值 |
 | `BAREAGENT_MODEL` | 覆盖模型名 | 未设置时取配置文件值 |
 | `BAREAGENT_API_KEY` | 覆盖明文 API Key（优先于 `api_key_env`） | 未设置时取配置文件 `api_key` 值 |
-| `BAREAGENT_API_KEY_ENV` | 覆盖 API Key 环境变量名 | 未设置时取配置文件值或 provider 默认值 |
+| `BAREAGENT_API_KEY_ENV` | 覆盖 API Key 环境变量名；兼容 `sk-` 明文 Key | 未设置时取配置文件值或 provider 默认值 |
 | `BAREAGENT_BASE_URL` | 覆盖兼容接口基础地址 | 主要用于 OpenAI 兼容接口 |
 | `BAREAGENT_WIRE_API` | 覆盖 OpenAI 兼容接口协议 | 例如 `responses` |
 | `BAREAGENT_PERMISSION_MODE` | 覆盖权限模式 | 允许值：`default`、`auto`、`plan`、`bypass` |
@@ -306,12 +307,16 @@ pretty = true
 | `BAREAGENT_DEBUG_LOG_DIR` | 覆盖调试日志目录 | 字符串路径 |
 | `BAREAGENT_DEBUG_VIEWER_PORT` | 覆盖 Web Viewer 端口 | 解析为整数 |
 | `BAREAGENT_DEBUG_PRETTY` | 覆盖 JSON 格式化 | 接受布尔字面量 |
+| `BAREAGENT_TEAM_MEMORY_ENABLED` | 覆盖队友是否跨 request 保留上下文 | 接受布尔字面量，需重启 |
 
 另外，provider 自身的 API Key 通常放在下列环境变量中：
 
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
 - `DEEPSEEK_API_KEY`
+- `DASHSCOPE_API_KEY`
+- `ZHIPUAI_API_KEY`
+- `GEMINI_API_KEY`
 
 这些变量不以 `BAREAGENT_` 开头，因为它们并不是 BareAgent 的配置项，而是具体 provider 客户端在初始化时读取的密钥来源。
 

@@ -10,6 +10,7 @@ Two kinds of checks:
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -189,3 +190,14 @@ def test_pyright_standard_mode() -> None:
     # `basic`, which would stop enforcing the stricter override / optional checks.
     pyproject = _read("pyproject.toml")
     assert 'typeCheckingMode = "standard"' in pyproject
+
+
+def test_sdist_includes_repo_layout_files_used_by_tests() -> None:
+    # tests/test_ci_visibility.py is shipped in the sdist; it reads these
+    # repo-layout files, so the sdist must ship them too.
+    pyproject = tomllib.loads(_read("pyproject.toml"))
+    include = set(pyproject["tool"]["hatch"]["build"]["targets"]["sdist"]["include"])
+    assert "scripts" in include
+    assert ".github/workflows/ci.yml" in include
+    assert ".githooks/pre-push" in include
+    assert "pyproject.toml" in include

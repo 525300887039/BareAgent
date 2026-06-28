@@ -1,5 +1,5 @@
 # Tip: run `bareagent init` for an interactive provider setup wizard that writes
-# config.local.toml for you (DeepSeek / OpenAI / Anthropic / Qwen / GLM / custom).
+# config.local.toml for you (DeepSeek / OpenAI / Anthropic / Qwen / GLM / Gemini / custom).
 #
 # 配置热重载（ROADMAP 4.3）：改完本文件 / config.local.toml 后，REPL 内 `/reload`
 # 可热重载 `[ui] theme` 与 `[permission] mode/allow/deny`（改完即生效，无需重启）；

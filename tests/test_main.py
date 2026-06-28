@@ -84,6 +84,39 @@ def test_load_config_uses_matching_default_api_key_env_for_provider_override(
     assert config.provider.wire_api is None
 
 
+def test_load_config_uses_preset_default_api_key_env_for_gemini_override(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[provider]",
+                'name = "anthropic"',
+                'model = "claude-sonnet-4-20250514"',
+                'api_key_env = "ANTHROPIC_API_KEY"',
+                "",
+                "[permission]",
+                'mode = "default"',
+                "",
+                "[ui]",
+                "stream = true",
+                'theme = "dark"',
+                "",
+                "[thinking]",
+                'mode = "adaptive"',
+                "budget_tokens = 10000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path, provider_override="gemini")
+
+    assert config.provider.name == "gemini"
+    assert config.provider.api_key_env == "GEMINI_API_KEY"
+
+
 def test_load_config_reads_provider_wire_api(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(
@@ -548,6 +581,42 @@ def test_make_teammate_provider_factory_inherits_custom_api_key_env(
 
     assert provider == "provider"
     assert captured["config"].provider.api_key_env == "MY_OPENAI_KEY"  # type: ignore[index, union-attr]
+
+
+def test_make_teammate_provider_factory_uses_preset_key_env_for_provider_override(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_create_provider(config):
+        captured["config"] = config
+        return "provider"
+
+    monkeypatch.setattr("bareagent.main.create_provider", _fake_create_provider)
+    config = Config(
+        provider=ProviderConfig(
+            name="openai",
+            model="gpt-5-codex-mini",
+            api_key_env="MY_OPENAI_KEY",
+        ),
+        permission=PermissionConfig(mode="default", allow=[], deny=[]),
+        ui=UIConfig(stream=False, theme="dark"),
+        subagent=SubagentConfig(max_depth=3, default_type="general-purpose"),
+        thinking=ThinkingConfig(),
+        path=Path("config.toml"),
+        debug=DebugConfig(),
+        tracing=TracingConfig(),
+        mcp=MCPConfig(),
+        lsp=LSPConfig(),
+    )
+
+    factory = main_module._make_teammate_provider_factory(config)
+    provider = factory({"name": "gemini", "model": "gemini-2.5-pro"})
+
+    assert provider == "provider"
+    provider_config = captured["config"].provider  # type: ignore[index, union-attr]
+    assert provider_config.name == "gemini"
+    assert provider_config.api_key_env == "GEMINI_API_KEY"
 
 
 def test_generate_session_id_avoids_saved_and_reserved_collisions(

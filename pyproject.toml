@@ -87,6 +87,10 @@ packages = ["src/bareagent"]
 include = [
     "src",
     "tests",
+    "scripts",
+    ".github/workflows/ci.yml",
+    ".githooks/pre-push",
+    "pyproject.toml",
     "README.md",
     "LICENSE",
 ]

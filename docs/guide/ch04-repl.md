@@ -24,8 +24,20 @@ BareAgent 在读取到以 `/` 开头的输入后，会优先把它当作本地�
 | `/mode` | 交互式选择权限模式 | 在下一次输入中输入 `1` 到 `4` 选择模式 |
 | `/sessions` | 列出历史会话 | 只显示 session id 列表 |
 | `/resume [session_id]` | 恢复历史会话 | 省略参数时恢复最近一次会话 |
+| `/fork [N]` | 从历史 turn 分叉新会话 | 无参数列出分叉点，`N` 从列表选择 |
+| `/tree` | 显示会话分支树 | 标注当前节点和 fork 来源 |
+| `/export` / `/import` | 导出或导入会话 | markdown/json 导出，json/jsonl 导入 |
+| `/cost` | 显示 token 与成本估算 | 有缓存活动时显示 cache mode |
+| `/goal ...` | 自动驱动直到目标满足 | `/goal [--max-turns N] <condition>` |
+| `/loop ...` | 定时执行 shell 命令 | `list`、`cancel <id>`、`clear` |
+| `/workflows ...` | 查看 workflow 运行 | `list`、`<run-id>`、`clear` |
 | `/log` | 调试日志查看器 | 支持 `status`、`serve`、`open`、`<seq>` |
-| `/team ...` | 管理多智能体队友 | 支持 `list`、`spawn`、`send` |
+| `/team ...` | 管理多智能体队友 | 支持 `list`、`spawn`、`send`、`shutdown`、`register`、`review` |
+| `/mcp ...` / `/mcp:...` | 管理 MCP 或调用 MCP prompt | `status`、`list`、`reload <name>`；prompt 形如 `/mcp:server:prompt` |
+| `/lsp ...` | 管理 LSP 服务 | `status`、`list`、`reload <language>` |
+| `/reload` | 重载配置 | theme/permission 热应用，其余报告需重启 |
+| `/remember` / `/forget` | 维护持久记忆 | 通过 LLM 调用 memory 工具落盘或删除 |
+| `/skill ...` | 管理生成技能 | `list`、`keep <name>`、`discard <name>` |
 
 ### `/clear` 与 `/new`
 
@@ -79,12 +91,15 @@ BareAgent 在读取到以 `/` 开头的输入后，会优先把它当作本地�
 
 ### `/team`
 
-`/team` 是多智能体管理入口，当前支持三个子命令：
+`/team` 是多智能体管理入口，当前支持这些子命令：
 
 ```text
 /team list
 /team spawn <name>
 /team send <name> <message>
+/team shutdown <name>
+/team register <name> <role> <system_prompt>
+/team review <name> <plan>
 ```
 
 它们分别对应：
@@ -92,6 +107,9 @@ BareAgent 在读取到以 `/` 开头的输入后，会优先把它当作本地�
 - 列出已注册队友及其运行状态
 - 启动一个已注册的自治队友
 - 向某个队友邮箱发送消息
+- 向队友广播关闭信号
+- 注册一个新的 teammate 定义
+- 请求队友审阅计划
 
 更完整的消息总线、协议状态机和自治循环见 [多智能体协调](./ch10-team.md)。
 
@@ -100,7 +118,7 @@ BareAgent 在读取到以 `/` 开头的输入后，会优先把它当作本地�
 当 REPL 运行在真正的 TTY 环境中时，BareAgent 会启用 `prompt_toolkit` 的补全器：
 
 - 只有输入以 `/` 开头时，才会触发斜杠命令补全
-- 当前补全集合包含 `/help`、`/exit`、`/clear`、`/new`、`/compact`、权限模式命令、`/mode`、`/sessions`、`/resume` 和 `/team`
+- 当前补全集合来自 `main.py` 的 `_SLASH_COMMANDS`，包含 `/help`、会话命令、权限模式命令、`/team`、`/mcp`、`/lsp`、`/goal`、`/loop`、`/workflows`、`/reload`、`/remember`、`/forget`、`/skill` 等入口
 
 如果运行环境不是 TTY，REPL 会回退到普通 `input()`，这时没有命令补全和快捷键绑定。
 

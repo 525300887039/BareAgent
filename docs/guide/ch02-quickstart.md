@@ -15,6 +15,9 @@ BareAgent 当前在代码中内置支持以下提供商：
 - `openai`
 - `anthropic`
 - `deepseek`
+- `qwen`
+- `glm`
+- `gemini`
 
 本文的快速开始分两条路径：
 
@@ -69,11 +72,11 @@ BareAgent 的配置按以下顺序生效：
 2. `config.local.toml`
 3. 环境变量
 
-通常建议把公共默认值放在 `config.toml`，把本机私有配置写进 `config.local.toml`。当前仓库已经包含一份 `config.toml`，并且 `.gitignore` 已忽略 `config.local.toml`。
+通过 PyPI/`uv tool` 安装后，默认 `config.toml` 随包内置、只读；本机私有配置写进当前工作目录的 `config.local.toml`，`bareagent init` 会帮你生成。只有参与仓库开发时，才需要关心源码里的 `src/bareagent/config.toml` 默认模板。
 
 需要注意两个“默认值”：
 
-- 仓库自带的 `config.toml` 当前预设为 `openai` + `gpt-4.1`
+- 包内置的 `config.toml` 当前预设为 `openai` + `gpt-4.1`
 - 如果你换成自己的配置文件，且没有提供 provider 相关字段，源码中的兜底默认值是 `anthropic` + `claude-sonnet-4-20250514`
 
 ### 路径 A：使用官方 API
@@ -121,6 +124,9 @@ $env:ANTHROPIC_API_KEY="your-key-here"
 - `openai` -> `OPENAI_API_KEY`
 - `anthropic` -> `ANTHROPIC_API_KEY`
 - `deepseek` -> `DEEPSEEK_API_KEY`
+- `qwen` -> `DASHSCOPE_API_KEY`
+- `glm` -> `ZHIPUAI_API_KEY`
+- `gemini` -> `GEMINI_API_KEY`
 
 如果你是直接编辑配置文件切换 `provider.name`，请同时确认 `api_key_env` 也同步修改。
 

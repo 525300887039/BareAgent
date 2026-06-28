@@ -17,12 +17,12 @@
 
 | 特性 | 说明 |
 |------|------|
-| **多提供商支持** | Anthropic / OpenAI / DeepSeek，统一接口，流式与非流式输出自由切换 |
+| **多提供商支持** | Anthropic / OpenAI / DeepSeek / Qwen / GLM / Gemini，统一接口，流式与非流式输出自由切换 |
 | **内置工具** | bash、文件读写编辑、glob、grep 等开箱即用，延迟加载按需注册 |
 | **权限守卫** | 四种模式（DEFAULT / AUTO / PLAN / BYPASS），危险命令自动拦截 |
 | **多智能体协调** | 基于 JSONL 邮箱的消息总线，守护进程式自治智能体，请求-响应协议 |
 | **子智能体委派** | 隔离上下文、递归深度限制、类型化智能体（explore/plan/code-review）、后台异步执行 |
-| **技能系统** | 从 `skills/*/SKILL.md` 自动发现，按需加载（code-review、git、test） |
+| **技能系统** | 从包内置 `skills/*/SKILL.md` 自动发现，按需加载（code-review、git、test） |
 | **任务管理** | 持久化任务 + 会话级 TODO，支持依赖追踪和优先级 |
 | **消息压缩** | 微压缩 + LLM 摘要，基于 token 阈值（50k）触发，支撑超长对话 |
 | **会话管理** | 会话转录持久化，支持列出历史会话和恢复上下文 |
@@ -83,7 +83,7 @@ $env:OPENAI_API_KEY="your-key-here"
 #### 配置文件
 
 默认配置随包内置（只读），本地覆盖写入**当前工作目录**的 `config.local.toml`（已 git-ignore；
-`bareagent init` 会帮你生成）。也可用 `--config <path>` / `BAREAGENT_CONFIG` 指定其他配置文件：
+`bareagent init` 会帮你生成）。源码仓库里的 `src/bareagent/config.toml` 只是开发模板，普通安装用户不需要编辑它。也可用 `--config <path>` / `BAREAGENT_CONFIG` 指定其他配置文件：
 
 ```toml
 [provider]
@@ -120,7 +120,7 @@ default_type = "general-purpose"
 | `BAREAGENT_PROVIDER` | 提供商名称 | `openai` |
 | `BAREAGENT_MODEL` | 模型名称 | `gpt-4.1` |
 | `BAREAGENT_API_KEY` | 明文 API 密钥（优先于 `api_key_env`） | — |
-| `BAREAGENT_API_KEY_ENV` | API 密钥环境变量名 | 按提供商自动设置 |
+| `BAREAGENT_API_KEY_ENV` | API 密钥环境变量名；兼容 `sk-` 明文 Key（新配置推荐用 `api_key`） | 按提供商自动设置 |
 | `BAREAGENT_BASE_URL` | 自定义 API 基础 URL | — |
 | `BAREAGENT_PERMISSION_MODE` | 权限模式 | `default` |
 | `BAREAGENT_UI_STREAM` | 是否流式输出 | `true` |
@@ -130,6 +130,7 @@ default_type = "general-purpose"
 | `BAREAGENT_SKILLS_DIR` | 技能目录路径 | 自动发现 |
 | `BAREAGENT_SUBAGENT_MAX_DEPTH` | 子智能体最大递归深度 | `3` |
 | `BAREAGENT_SUBAGENT_DEFAULT_TYPE` | 子智能体默认类型 | `general-purpose` |
+| `BAREAGENT_TEAM_MEMORY_ENABLED` | 队友是否跨 request 保留上下文 | `true` |
 
 ### 运行
 
@@ -149,7 +150,7 @@ bareagent --config ~/my_config.toml
 
 | 参数 | 说明 |
 |------|------|
-| `--provider` | 覆盖配置文件中的 LLM 提供商（anthropic / openai / deepseek） |
+| `--provider` | 覆盖配置文件中的 LLM 提供商（anthropic / openai / deepseek / qwen / glm / gemini） |
 | `--model` | 覆盖配置文件中的模型名称 |
 | `--config` | 指定 TOML 配置文件路径（默认 `config.toml`，支持 `~` 扩展） |
 
@@ -171,7 +172,16 @@ bareagent --config ~/my_config.toml
 | `/mode` | 交互式权限模式选择菜单 |
 | `/sessions` | 列出已保存的历史会话 |
 | `/resume [id]` | 恢复上一个会话（可选指定会话 ID） |
-| `/team` | 管理团队智能体（子命令：`list`、`spawn <name>`、`send <name> <msg>`） |
+| `/fork` | 从历史 turn 分叉新会话（无参数列出可分叉点） |
+| `/tree` | 显示会话分支树 |
+| `/export` / `/import` | 导出或导入会话文件 |
+| `/cost` | 显示本会话 token 与成本估算 |
+| `/goal` | 自动驱动直到满足目标条件 |
+| `/loop` / `/workflows` | 管理定时命令与 workflow 运行 |
+| `/reload` | 重载配置（theme/permission 热应用，其余需重启） |
+| `/remember` / `/forget` | 维护持久记忆 |
+| `/skill` | 管理生成技能草稿 |
+| `/team` | 管理团队智能体（`list`、`spawn`、`send`、`shutdown`、`register`、`review`） |
 
 **快捷键：**
 
@@ -188,7 +198,7 @@ bareagent --config ~/my_config.toml
 | 模式 | 行为 | 适用场景 |
 |------|------|---------|
 | **DEFAULT** | 写操作需用户确认，安全工具自动批准 | 日常使用（默认） |
-| **AUTO** | 安全命令（ls、cat、git status、pytest 等）自动通过，仅拦截危险命令 | 信任环境下的高效开发 |
+| **AUTO** | 安全命令（ls、cat、git status、uv run pytest 等）自动通过，仅拦截危险命令 | 信任环境下的高效开发 |
 | **PLAN** | 只允许只读工具，所有写操作被阻止 | 代码审查、方案设计 |
 | **BYPASS** | 所有操作自动批准，无任何确认 | 完全信任的自动化场景 |
 
@@ -231,6 +241,7 @@ src/bareagent/
 │   ├── tasks.py           #   持久化任务管理
 │   ├── todo.py            #   会话级 TODO
 │   └── skills.py          #   技能发现与加载
+├── skills/                # 内置技能模块
 ├── team/                  # 多智能体协调
 │   ├── mailbox.py         #   JSONL 消息总线
 │   ├── autonomous.py      #   自治智能体守护进程
@@ -242,7 +253,6 @@ src/bareagent/
 └── ui/                    # 终端 UI（rich + 流式）
     ├── console.py         #   AgentConsole
     └── stream.py          #   StreamPrinter
-skills/                    # 可扩展技能模块
 tests/                     # pytest 测试
 ```
 
@@ -266,19 +276,19 @@ npm run docs:dev
 
 ```bash
 # 测试
-pytest                             # 全部测试
-pytest tests/test_loop.py          # 单个文件
-pytest tests/test_loop.py -k "test_name"  # 单个测试
+uv run pytest                             # 全部测试
+uv run pytest tests/test_loop.py          # 单个文件
+uv run pytest tests/test_loop.py -k "test_name"  # 单个测试
 
 # 代码检查与格式化
-ruff check src tests               # 检查
-ruff check --fix src tests          # 自动修复
-ruff format src tests               # 格式化
+uv run ruff check src tests               # 检查
+uv run ruff check --fix src tests          # 自动修复
+uv run ruff format src tests               # 格式化
 ```
 
 ### 本地 CI 闸（pre-push hook）
 
-仓库自带一个 push 前的本地检查闸，跑的就是 CI 同款命令（`uv run ruff check src tests` + `uv run pytest`），
+仓库自带一个 push 前的本地检查闸，跑的就是 CI 同款命令（ruff check、format check、pyright、pytest 全部经 `uv run`），
 在代码推上去变红之前先在本地拦下来。**用 `uv run` 而非 `python -m pytest`**——后者会把当前目录前插到
 `sys.path`，掩盖只有 CI 裸 `uv run pytest` 才暴露的导入差异。
 

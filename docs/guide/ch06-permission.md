@@ -93,7 +93,7 @@ BareAgent 的权限系统由 `src/bareagent/permission/guard.py` 中的 `Permiss
 |----------|----------|
 | 基础查看命令 | `ls`、`cat`、`head`、`tail`、`wc`、`echo`、`pwd`、`date`、`which`、`type` |
 | Git 只读命令 | `git status`、`git log`、`git diff`、`git branch`、`git show` |
-| 常见检查命令 | `pytest`、`python -m pytest`、`ruff`、`mypy` |
+| 常见检查命令 | `uv run pytest`、`uv run ruff`、`uv run pyright` |
 | Node 检查命令 | `npm test`、`npm run lint`、`npm run test` |
 
 判断顺序不是“只要在 AUTO 就全都自动放行”，而是：
@@ -104,7 +104,7 @@ BareAgent 的权限系统由 `src/bareagent/permission/guard.py` 中的 `Permiss
 4. 再看自动安全模式
 5. 最后才根据当前权限模式兜底
 
-因此在 `DEFAULT` 下，`git status` 也可以无需确认；在 `AUTO` 下，`pytest tests/test_loop.py` 也会自动放行。
+因此在 `DEFAULT` 下，`git status` 也可以无需确认；在 `AUTO` 下，`uv run pytest tests/test_loop.py` 也会自动放行。
 
 ## 6.4 危险命令检测
 
@@ -148,7 +148,7 @@ tool_name(prefix:command-prefix*)
 [permission]
 allow = [
   "bash(prefix:git status*)",
-  "Bash(prefix:pytest tests/*)"
+  "Bash(prefix:uv run pytest tests/*)"
 ]
 deny = [
   "bash(prefix:npm publish*)"

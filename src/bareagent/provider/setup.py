@@ -27,9 +27,9 @@ from bareagent.provider.presets import PROVIDER_PRESETS, ProviderPreset
 InputFn = Callable[[str], str]
 OutputFn = Callable[[str], None]
 
-# Ordered list of channels shown in the menu. The first five are presets; the
-# sixth is the custom OpenAI-compatible branch.
-_MENU_PRESET_IDS = ("deepseek", "openai", "anthropic", "qwen", "glm")
+# Ordered list of channels shown in the menu. Presets come first; the final menu
+# item is the custom OpenAI-compatible branch.
+_MENU_PRESET_IDS = ("deepseek", "openai", "anthropic", "qwen", "glm", "gemini")
 _CUSTOM_CHOICE_LABEL = "Third-party OpenAI-compatible (custom base_url)"
 
 # Field order used when rendering the [provider] table so the written file is

@@ -139,6 +139,7 @@ from bareagent.provider.base import (
     ThinkingConfig,
 )
 from bareagent.provider.factory import _resolve_api_key, create_provider
+from bareagent.provider.presets import resolve_preset
 from bareagent.provider.setup import run_setup_wizard
 from bareagent.team.autonomous import AutonomousAgent
 from bareagent.team.mailbox import Message, MessageBus
@@ -151,11 +152,6 @@ _log = logging.getLogger(__name__)
 VALID_PERMISSION_MODES = {m.value for m in PermissionMode}
 VALID_SUBAGENT_TYPES = set(BUILTIN_AGENT_TYPES)
 MAIN_AGENT_NAME = "main"
-DEFAULT_API_KEY_ENV_BY_PROVIDER = {
-    "anthropic": "ANTHROPIC_API_KEY",
-    "openai": "OPENAI_API_KEY",
-    "deepseek": "DEEPSEEK_API_KEY",
-}
 _SESSION_ID_TIMESTAMP_FORMAT = "%Y%m%d-%H%M%S-%f"
 
 
@@ -579,7 +575,10 @@ def _validate_mode(name: str, value: str, allowed: AbstractSet[str]) -> str:
 
 
 def _default_api_key_env(provider_name: str) -> str:
-    return DEFAULT_API_KEY_ENV_BY_PROVIDER.get(provider_name.lower(), "ANTHROPIC_API_KEY")
+    preset = resolve_preset(provider_name)
+    if preset is not None:
+        return preset.default_api_key_env
+    return "ANTHROPIC_API_KEY"
 
 
 def resolve_config_path(config_path: Path | None) -> Path:

@@ -266,6 +266,9 @@ task_manager.update(task.id, status="in_progress", expected_status="pending")
 /team list
 /team spawn <name>
 /team send <name> <message>
+/team shutdown <name>
+/team register <name> <role> <system_prompt>
+/team review <name> <plan>
 ```
 
 ### `/team list`
@@ -312,6 +315,18 @@ Teammate <name> is already running.
 Sent message <message_id> to code-reviewer
 ```
 
+### `/team shutdown <name>`
+
+`/team shutdown <name>` 会通过消息总线给目标 teammate 发送 `SHUTDOWN` 广播。队友收到后设置关闭标记，并在自己的后台循环中退出。
+
+### `/team register <name> <role> <system_prompt>`
+
+`/team register` 会把新的 teammate 定义写入 `.team.json`，后续可用 `/team spawn <name>` 启动。`name` 必须兼容 mailbox 文件名规则（字母、数字、下划线和短横线），`role` 与 `system_prompt` 不能为空。
+
+### `/team review <name> <plan>`
+
+`/team review` 走 `PLAN_APPROVAL` 协议，请目标 teammate 审阅计划并返回裁决文本。它复用与 `team_send` 相同的请求-响应等待机制，但会在协议层标记为计划审批。
+
 ### 主 REPL 如何接收队友响应
 
 主循环每轮会调用 `_drain_team_mailbox()` 读取 `main` 邮箱中的新消息，并把它们打印成状态行，例如：
@@ -330,6 +345,8 @@ BareAgent 当前的多智能体系统已经足够支持：
 - 启动长期运行的队友
 - 通过邮箱发起请求和接收响应
 - 广播关闭
+- 注册新的 teammate 定义
+- 请求 teammate 做计划审阅
 - 让队友顺手认领 `TaskManager` 中的 ready task
 
 但它还不是一个复杂的编排平台。当前没有：

@@ -214,22 +214,27 @@ provider 的统一入口是 `src/bareagent/provider/factory.py` 中的 `create_p
 | `anthropic` | `AnthropicProvider` |
 | `openai` | `OpenAIProvider` |
 | `deepseek` | `OpenAIProvider` |
+| `qwen` | `OpenAIProvider` |
+| `glm` | `OpenAIProvider` |
+| `gemini` | `OpenAIProvider` |
 
 ### API Key 读取
 
 `create_provider()` 不直接接收 API Key 文本，而是：
 
-1. 读取 `config.provider.api_key_env`
-2. 去环境变量中找真正的密钥
-3. 若缺失则直接报错
+1. 优先读取 `config.provider.api_key`，有值就按明文 Key 使用
+2. 否则读取 `config.provider.api_key_env`
+3. 若 `api_key_env` 以 `sk-` 开头，按兼容旧配置的明文 Key 使用
+4. 否则把 `api_key_env` 当作环境变量名去运行环境里找真正的密钥
+5. 若缺失则直接报错
 
-因此配置文件里存的是“变量名”，不是“变量值”。
+新配置推荐把明文 Key 放在 `api_key`，把环境变量名放在 `api_key_env`。
 
-### DeepSeek 的处理方式
+### OpenAI 兼容 preset 的处理方式
 
-`deepseek` 当前并没有单独的 provider 类，而是直接复用 `OpenAIProvider`：
+`deepseek`、`qwen`、`glm`、`gemini` 当前没有单独的 provider 类，而是直接复用 `OpenAIProvider`：
 
-- `base_url` 未设置时默认使用 `https://api.deepseek.com`
+- `base_url` 未设置时默认使用 provider preset 里的兼容端点
 - 其余消息和工具转换逻辑与 OpenAI 兼容路径相同
 
 ## 7.5 LLMResponse 统一响应结构
