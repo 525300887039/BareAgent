@@ -19,6 +19,14 @@ from typing import Any
 EXPORT_VERSION = 1
 _DEFAULT_MAX_TOOL_CHARS = 2000
 _TOOL_INPUT_PREVIEW_CHARS = 200
+_VALID_ROLES = {"system", "user", "assistant"}
+_VALID_BLOCK_TYPES = {
+    "text",
+    "thinking",
+    "tool_use",
+    "tool_result",
+    "image",
+}
 _TRUNCATION_MARKER = "… (truncated)"
 
 
@@ -182,6 +190,38 @@ def to_export_json(
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
+def _validate_content(index: int, role: str, message: dict[str, Any]) -> None:
+    if "content" not in message:
+        raise ValueError(f"message at index {index} is missing a 'content' key")
+    content = message["content"]
+    if role == "system":
+        if not isinstance(content, str):
+            raise ValueError(f"system message at index {index} must have string content")
+        return
+    if isinstance(content, str):
+        return
+    if not isinstance(content, list):
+        raise ValueError(f"message at index {index} content must be a string or block list")
+    for block_index, block in enumerate(content):
+        if not isinstance(block, dict):
+            raise ValueError(f"content block {index}.{block_index} is not an object")
+        block_type = block.get("type")
+        if not isinstance(block_type, str) or block_type not in _VALID_BLOCK_TYPES:
+            raise ValueError(f"content block {index}.{block_index} has invalid type")
+        if block_type == "tool_use":
+            if not isinstance(block.get("id"), str) or not block["id"]:
+                raise ValueError(f"tool_use block {index}.{block_index} is missing id")
+            if not isinstance(block.get("name"), str) or not block["name"]:
+                raise ValueError(f"tool_use block {index}.{block_index} is missing name")
+            if not isinstance(block.get("input"), dict):
+                raise ValueError(f"tool_use block {index}.{block_index} input must be an object")
+        if block_type == "tool_result":
+            if not isinstance(block.get("tool_use_id"), str) or not block["tool_use_id"]:
+                raise ValueError(f"tool_result block {index}.{block_index} is missing tool_use_id")
+            if "content" not in block:
+                raise ValueError(f"tool_result block {index}.{block_index} is missing content")
+
+
 def _validate_messages(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         raise ValueError("conversation must be a list of messages")
@@ -190,6 +230,10 @@ def _validate_messages(value: Any) -> list[dict[str, Any]]:
             raise ValueError(f"message at index {index} is not an object")
         if "role" not in item:
             raise ValueError(f"message at index {index} is missing a 'role' key")
+        role = item["role"]
+        if not isinstance(role, str) or role not in _VALID_ROLES:
+            raise ValueError(f"message at index {index} has invalid role: {role!r}")
+        _validate_content(index, role, item)
     return value
 
 
@@ -201,9 +245,10 @@ def parse_import(text: str) -> list[dict[str, Any]]:
     directly. If whole-document JSON parsing fails, fall back to JSONL
     (one JSON object per non-blank line).
 
-    Validation: the result must be a list where every element is a dict
-    containing a ``role`` key; otherwise :class:`ValueError` is raised with a
-    human-readable reason. No other rewriting is performed (faithful load).
+    Validation: the result must be a list of provider-safe messages: role is
+    one of system/user/assistant, content is present, system content is text, and
+    list content is made of recognized typed blocks. No other rewriting is
+    performed (faithful load).
     """
     try:
         document = json.loads(text)

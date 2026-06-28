@@ -10,6 +10,7 @@ from bareagent.lsp.coord import (
     document_uri_to_path,
     line_col_0_to_1,
     line_col_1_to_0,
+    line_col_1_to_0_utf16,
     path_to_document_uri,
     to_repo_relative,
 )
@@ -26,6 +27,11 @@ def test_line_col_clamps_invalid() -> None:
     # 0 / negative inputs clamp to 0 in 0-based form.
     assert line_col_1_to_0(0, 0) == (0, 0)
     assert line_col_1_to_0(-3, -3) == (0, 0)
+
+
+def test_line_col_utf16_counts_surrogate_pairs() -> None:
+    assert line_col_1_to_0_utf16("\U0001f600foo\n", 1, 2) == (0, 2)
+    assert line_col_1_to_0_utf16("abc\n\U0001f600foo\n", 2, 4) == (1, 4)
 
 
 def test_path_to_document_uri_round_trip(tmp_path) -> None:

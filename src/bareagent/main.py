@@ -1126,9 +1126,7 @@ def load_config(
 
     hooks_raw = raw_config.get("hooks", [])
     try:
-        hooks_config = parse_hooks_config(
-            {"hooks": hooks_raw} if isinstance(hooks_raw, list) else {}
-        )
+        hooks_config = parse_hooks_config({"hooks": hooks_raw})
     except HookConfigError as exc:
         print(f"Warning: invalid [[hooks]] config, hooks disabled ({exc})")
         hooks_config = HooksConfig()
@@ -1424,16 +1422,16 @@ def _refresh_memory_recall(
 ) -> None:
     """Drop the stale recall block and inject one for the latest user turn.
 
-    Mirrors :func:`_refresh_nag_reminder`: a single ``<memory-recall>`` system
-    message lives just after the most recent genuine user message, refreshed on
-    every agent-loop iteration so ``/remember``, ``/forget`` and ordinary turns
-    all pick up the latest lexically-relevant memories.
+    Mirrors :func:`_refresh_nag_reminder`: a single ``<memory-recall>`` user-side
+    context message lives just after the most recent genuine user message,
+    refreshed on every agent-loop iteration so ``/remember``, ``/forget`` and
+    ordinary turns all pick up the latest lexically-relevant memories.
     """
     messages[:] = [
         message
         for message in messages
         if not (
-            message.get("role") == "system"
+            message.get("role") in {"system", "user"}
             and isinstance(message.get("content"), str)
             and str(message["content"]).startswith(_MEMORY_RECALL_PREFIX)
         )
@@ -1458,7 +1456,7 @@ def _refresh_memory_recall(
     if not section:
         return
 
-    messages.insert(insert_index + 1, {"role": "system", "content": section})
+    messages.insert(insert_index + 1, {"role": "user", "content": section})
 
 
 def _refresh_plan_directive(
@@ -2685,6 +2683,32 @@ def _drain_workflow_results(
         sink.append(f'<workflow-result run="{run.run_id}">\n{body}\n</workflow-result>')
 
 
+def _prepend_pending_context(
+    text: str,
+    pending_team_messages: list[str],
+    pending_workflow_messages: list[str],
+) -> tuple[str, int, int]:
+    pending_context = pending_team_messages + pending_workflow_messages
+    if not pending_context:
+        return text, 0, 0
+    prepended = "\n".join(pending_context)
+    return (
+        f"{prepended}\n\n{text}" if text else prepended,
+        len(pending_team_messages),
+        len(pending_workflow_messages),
+    )
+
+
+def _consume_pending_context(
+    pending_team_messages: list[str],
+    pending_workflow_messages: list[str],
+    team_count: int,
+    workflow_count: int,
+) -> None:
+    del pending_team_messages[:team_count]
+    del pending_workflow_messages[:workflow_count]
+
+
 def _broadcast_team_shutdown(message_bus: MessageBus) -> None:
     ProtocolFSM(message_bus, MAIN_AGENT_NAME).broadcast(
         Protocol.SHUTDOWN,
@@ -3506,6 +3530,8 @@ def _run_goal_evaluator(
     except KeyboardInterrupt:
         raise
     except Exception as exc:  # noqa: BLE001 - evaluator failure must not break the loop
+        if sink:
+            return sink[-1]
         console.print_error(f"Goal evaluator failed: {type(exc).__name__}: {exc}")
         return Verdict(met=False, reason="evaluator error", malformed=True)
     if not sink:
@@ -4485,12 +4511,11 @@ def _run_stdio_session(
             # background-workflow summaries onto this user turn so the LLM sees
             # them (without injecting standalone user messages that would break
             # role alternation).
-            pending_context = pending_team_messages + pending_workflow_messages
-            if pending_context:
-                prepended = "\n".join(pending_context)
-                pending_team_messages.clear()
-                pending_workflow_messages.clear()
-                text = f"{prepended}\n\n{text}" if text else prepended
+            text, consumed_team_count, consumed_workflow_count = _prepend_pending_context(
+                text,
+                pending_team_messages,
+                pending_workflow_messages,
+            )
 
             messages.append({"role": "user", "content": text})
             snapshot_len = len(messages) - 1
@@ -4512,6 +4537,12 @@ def _run_stdio_session(
                     skill_gen=skill_generator,
                 )
                 _save_transcript_snapshot(transcript_mgr, messages, compact_fn)
+                _consume_pending_context(
+                    pending_team_messages,
+                    pending_workflow_messages,
+                    consumed_team_count,
+                    consumed_workflow_count,
+                )
                 # Experiential skill generation: when this turn pushed the
                 # cumulative activity past both thresholds, reflect on the
                 # session and draft a reusable skill (isolated extra LLM call).

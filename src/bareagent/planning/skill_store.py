@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -108,10 +109,19 @@ class SkillStore:
         if not (src / _SKILL_FILE).exists():
             raise SkillStoreError(f"no pending draft named {slug!r}")
         dest = self.root / slug
+        backup: Path | None = None
         if dest.exists():
-            shutil.rmtree(dest, ignore_errors=True)
+            backup = self.root / f".{slug}.backup-{uuid.uuid4().hex}"
+            shutil.move(str(dest), str(backup))
         dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(src), str(dest))
+        try:
+            shutil.move(str(src), str(dest))
+        except BaseException:
+            if backup is not None and backup.exists() and not dest.exists():
+                shutil.move(str(backup), str(dest))
+            raise
+        if backup is not None:
+            shutil.rmtree(backup, ignore_errors=True)
         return f"Promoted skill '{slug}' — it is now loadable."
 
     def discard(self, name: str) -> str:

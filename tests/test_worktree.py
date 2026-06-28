@@ -255,12 +255,15 @@ def test_subagent_worktree_clean_is_removed(tmp_path, monkeypatch) -> None:
     assert not wt_path.exists()
 
 
-def test_subagent_worktree_fail_open_for_non_repo(tmp_path, monkeypatch) -> None:
-    # No git init → not a repo. Must fall back to no isolation with a footnote.
+def test_subagent_worktree_fails_closed_for_non_repo(tmp_path, monkeypatch) -> None:
+    # No git init: not a repo, so worktree isolation must not run in main workspace.
     monkeypatch.chdir(tmp_path)
+    called = False
 
     def _fake_agent_loop(**kwargs) -> str:
+        nonlocal called
         _ = kwargs
+        called = True
         return "ran anyway"
 
     monkeypatch.setattr("bareagent.planning.subagent.agent_loop", _fake_agent_loop)
@@ -277,15 +280,18 @@ def test_subagent_worktree_fail_open_for_non_repo(tmp_path, monkeypatch) -> None
         isolation="worktree",
     )
 
-    assert result.startswith("ran anyway")
-    assert "[worktree] skipped: not a git repository" in result
+    assert result.startswith("Error: worktree isolation requested")
+    assert called is False
 
 
-def test_subagent_worktree_fail_open_on_create_failure(tmp_path, monkeypatch) -> None:
+def test_subagent_worktree_fails_closed_on_create_failure(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
+    called = False
 
     def _fake_agent_loop(**kwargs) -> str:
+        nonlocal called
         _ = kwargs
+        called = True
         return "ran anyway"
 
     def _boom(_base):
@@ -304,5 +310,5 @@ def test_subagent_worktree_fail_open_on_create_failure(tmp_path, monkeypatch) ->
         isolation="worktree",
     )
 
-    assert result.startswith("ran anyway")
-    assert "[worktree] skipped: boom" in result
+    assert result == "Error: worktree isolation failed: boom"
+    assert called is False

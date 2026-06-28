@@ -33,6 +33,18 @@ def line_col_0_to_1(line: int, col: int) -> tuple[int, int]:
     return (line + 1, col + 1)
 
 
+def line_col_1_to_0_utf16(text: str, line: int, col: int) -> tuple[int, int]:
+    """Convert 1-based editor coordinates to 0-based LSP UTF-16 coordinates."""
+    line0 = max(line - 1, 0)
+    col0 = max(col - 1, 0)
+    lines = text.splitlines()
+    if line0 >= len(lines):
+        return line0, col0
+    prefix = lines[line0][:col0]
+    utf16_units = len(prefix.encode("utf-16-le")) // 2
+    return line0, utf16_units
+
+
 def path_to_document_uri(path: str) -> str:
     """Convert a filesystem path to a ``file://`` URI.
 

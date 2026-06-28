@@ -92,21 +92,29 @@ class Scheduler:
                     # Cancelled between Timer fire and lock acquisition.
                     return
                 job.run_count += 1
-                run_id = f"{job_id}-{job.run_count}"
                 command = job.command
                 # Re-arm the next fire while still holding the lock so the
                 # repeat schedule is self-perpetuating until cancelled.
                 self._arm(job)
             # Hand execution to the background pool outside the lock. A unique
-            # run_id per fire avoids BackgroundManager's same-task-id dedup
-            # ValueError; any submit failure is swallowed (surfaced via notify)
-            # so the schedule keeps running.
+            # job_id makes each scheduled command one-at-a-time: if the prior
+            # run is still active, BackgroundManager rejects this fire and we
+            # surface it as a skipped overlap instead of starting another copy.
             try:
-                self._notifier.submit(run_id, self._runner, command)
+                self._notifier.submit(job_id, self._runner, command)
+            except ValueError as exc:
+                try:
+                    self._notifier.notify(
+                        job_id,
+                        f"Skipped overlapping scheduled command: {exc}",
+                        status="skipped",
+                    )
+                except Exception:
+                    logger.exception("Scheduler notify failed for job %s", job_id)
             except Exception as exc:
                 try:
                     self._notifier.notify(
-                        run_id,
+                        job_id,
                         f"Failed to dispatch scheduled command: {type(exc).__name__}: {exc}",
                         status="failed",
                     )

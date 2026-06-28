@@ -327,6 +327,42 @@ def test_load_config_without_hooks_defaults_empty(tmp_path: Path) -> None:
     assert config.hooks.entries == []
 
 
+def test_load_config_warns_on_malformed_hooks_top_level(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                'hooks = "not an array"',
+                "",
+                "[provider]",
+                'name = "openai"',
+                'model = "gpt-5-codex-mini"',
+                'api_key_env = "OPENAI_API_KEY"',
+                "",
+                "[permission]",
+                'mode = "default"',
+                "",
+                "[ui]",
+                "stream = true",
+                'theme = "dark"',
+                "",
+                "[thinking]",
+                'mode = "adaptive"',
+                "budget_tokens = 10000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.hooks.entries == []
+    assert "invalid [[hooks]] config" in capsys.readouterr().out
+
+
 def test_load_config_reads_debug_settings(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(
@@ -1448,3 +1484,29 @@ def test_nag_reminder_skips_tool_result_messages() -> None:
     tool_result_msg = messages[assistant_idx + 1]
     assert tool_result_msg.get("role") == "user"
     assert is_tool_result_message(tool_result_msg)
+
+
+def test_prepend_pending_context_does_not_consume_buffers() -> None:
+    team = ["team reply"]
+    workflow = ["workflow result"]
+
+    text, team_count, workflow_count = main_module._prepend_pending_context(
+        "user prompt",
+        team,
+        workflow,
+    )
+
+    assert text == "team reply\nworkflow result\n\nuser prompt"
+    assert (team_count, workflow_count) == (1, 1)
+    assert team == ["team reply"]
+    assert workflow == ["workflow result"]
+
+
+def test_consume_pending_context_removes_only_consumed_prefix() -> None:
+    team = ["old team", "new team"]
+    workflow = ["old workflow", "new workflow"]
+
+    main_module._consume_pending_context(team, workflow, team_count=1, workflow_count=1)
+
+    assert team == ["new team"]
+    assert workflow == ["new workflow"]

@@ -62,8 +62,13 @@ def run_subagent_send(
             "session was reset (/new, /resume, /import, /clear)."
         )
 
+    snapshot = list(context.messages)
     context.messages.append({"role": "user", "content": message})
-    result = run_loop(context)
+    try:
+        result = run_loop(context)
+    except Exception:
+        context.messages[:] = snapshot
+        raise
     # Re-register on success to refresh FIFO position; if run_loop raised, we
     # never get here and the context keeps its prior position.
     registry.register(context)

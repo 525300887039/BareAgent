@@ -135,20 +135,21 @@ def test_fire_submits_command_increments_count_and_rearms() -> None:
 
         scheduler._fire(job.job_id)
 
-        # Submitted once with a unique run-scoped task id and the command.
+        # Submitted once with the stable job id and the command. The stable id
+        # makes BackgroundManager enforce one-at-a-time execution per schedule.
         assert len(notifier.submitted) == 1
         task_id, command = notifier.submitted[0]
-        assert task_id == f"{job.job_id}-1"
+        assert task_id == job.job_id
         assert command == "gh run list"
         # run_count incremented.
         assert job.run_count == 1
         # A fresh timer was armed (self-rescheduling repeat).
         assert scheduler._timers[job.job_id] is not first_timer
 
-        # Second fire keeps incrementing and uses a distinct run id.
+        # Second fire keeps incrementing but still targets the same job id.
         scheduler._fire(job.job_id)
         assert job.run_count == 2
-        assert notifier.submitted[1][0] == f"{job.job_id}-2"
+        assert notifier.submitted[1][0] == job.job_id
     finally:
         scheduler.cancel_all()
 
@@ -172,8 +173,9 @@ def test_fire_swallows_submit_failure_and_rearms() -> None:
         # Must not raise even though submit blows up.
         scheduler._fire(job.job_id)
         assert job.run_count == 1
-        # Failure surfaced via notify, and the job re-armed.
+        # Overlap surfaced as a skipped notification, and the job re-armed.
         assert len(notifier.notified) == 1
+        assert notifier.notified[0][2] == "skipped"
         assert job.job_id in scheduler._timers
     finally:
         scheduler.cancel_all()

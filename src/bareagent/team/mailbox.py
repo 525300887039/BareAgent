@@ -13,6 +13,10 @@ from bareagent.core.fileutil import generate_random_id, optional_string, utc_tim
 _VALID_AGENT_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
+def validate_agent_name(name: str) -> str:
+    return _validate_agent_name(name)
+
+
 def _validate_agent_name(name: str) -> str:
     normalized = name.strip()
     if not normalized:

@@ -11,9 +11,12 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from bareagent.core.handlers.skill import SKILL_CREATE_TOOL_SCHEMA, run_skill_create
 from bareagent.core.loop import agent_loop
 from bareagent.permission.guard import PermissionGuard
+from bareagent.planning import skill_store as skill_store_module
 from bareagent.planning.skill_gen import (
     SkillGenConfig,
     SkillGenerator,
@@ -132,6 +135,30 @@ def test_promote_moves_draft_to_live(tmp_path: Path):
     assert store.list_pending() == []
     assert store.list_live() == ["alpha"]
     assert (tmp_path / "skills" / "alpha" / "SKILL.md").exists()
+
+
+def test_promote_restores_live_skill_when_draft_move_fails(tmp_path: Path, monkeypatch):
+    store = SkillStore(tmp_path / "skills")
+    store.create_draft("alpha", "Use this when alpha.", "old body")
+    store.promote("alpha")
+    live_file = tmp_path / "skills" / "alpha" / "SKILL.md"
+    old_content = live_file.read_text(encoding="utf-8")
+    store.create_draft("alpha", "Use this when alpha v2.", "new body")
+    pending_dir = store.pending_root / "alpha"
+    real_move = skill_store_module.shutil.move
+
+    def _flaky_move(src, dst):
+        if Path(src) == pending_dir:
+            raise OSError("move failed")
+        return real_move(src, dst)
+
+    monkeypatch.setattr(skill_store_module.shutil, "move", _flaky_move)
+
+    with pytest.raises(OSError, match="move failed"):
+        store.promote("alpha")
+
+    assert live_file.read_text(encoding="utf-8") == old_content
+    assert (pending_dir / "SKILL.md").exists()
 
 
 def test_promote_missing_draft_raises(tmp_path: Path):

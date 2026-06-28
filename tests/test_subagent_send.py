@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from bareagent.core.handlers.subagent_send import (
     SUBAGENT_SEND_TOOL_SCHEMA,
     run_subagent_send,
@@ -148,6 +150,22 @@ def test_send_multi_turn_same_id_stays_resumable() -> None:
     # Both user turns landed on the same live conversation.
     assert {"role": "user", "content": "turn 1"} in ctx.messages
     assert {"role": "user", "content": "turn 2"} in ctx.messages
+
+
+def test_send_rolls_back_followup_when_resume_fails() -> None:
+    reg = SubagentRegistry()
+    original = [{"role": "user", "content": "first"}]
+    ctx = _ctx("sa-abc", messages=list(original))
+    reg.register(ctx)
+
+    def _boom(context: ResumableContext) -> str:
+        context.messages.append({"role": "assistant", "content": "partial"})
+        raise RuntimeError("resume failed")
+
+    with pytest.raises(RuntimeError, match="resume failed"):
+        run_subagent_send("sa-abc", "follow up", registry=reg, run_loop=_boom)
+
+    assert ctx.messages == original
 
 
 # --------------------------------------------------------------------------- #

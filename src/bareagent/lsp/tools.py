@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from bareagent.core.schema import tool_schema as _schema
 
-from .coord import line_col_0_to_1, line_col_1_to_0, to_repo_relative
+from .coord import line_col_0_to_1, line_col_1_to_0, line_col_1_to_0_utf16, to_repo_relative
 from .workspace_edit import apply_workspace_edit
 
 if TYPE_CHECKING:
@@ -355,7 +355,12 @@ def _make_semantic_rename_handler(
             return prelude
         _server, _relpath = prelude
         abs_path = file if os.path.isabs(file) else os.path.abspath(file)
-        line0, col0 = line_col_1_to_0(line, col)
+        try:
+            source = open(abs_path, encoding="utf-8").read()
+        except OSError:
+            line0, col0 = line_col_1_to_0(line, col)
+        else:
+            line0, col0 = line_col_1_to_0_utf16(source, line, col)
         try:
             workspace_edit = manager.request_rename(abs_path, line0, col0, new_name)
         except Exception as exc:

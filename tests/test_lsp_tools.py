@@ -414,6 +414,19 @@ def test_semantic_rename_applies_changes_form(fake_setup) -> None:
     assert "2 edits across 1 file" in out
 
 
+def test_semantic_rename_converts_request_column_to_utf16(fake_setup) -> None:
+    sample = fake_setup["sample"]
+    sample.write_text("\U0001f600foo = 1\n", encoding="utf-8")
+    fake_setup["manager"].rename_response = None
+
+    fake_setup["handlers"][SEMANTIC_RENAME_TOOL_NAME](
+        file=str(sample), line=1, col=2, new_name="bar"
+    )
+
+    _abs_path, line0, col0, _new_name = fake_setup["manager"].last_rename_args
+    assert (line0, col0) == (0, 2)
+
+
 def test_semantic_rename_none_edit_returns_error_and_no_write(fake_setup) -> None:
     sample = fake_setup["sample"]
     before = sample.read_text(encoding="utf-8")

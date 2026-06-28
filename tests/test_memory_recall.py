@@ -147,9 +147,7 @@ def _recall_messages(messages: list[dict]) -> list[dict]:
     return [
         m
         for m in messages
-        if m.get("role") == "system"
-        and isinstance(m.get("content"), str)
-        and m["content"].startswith("<memory-recall>")
+        if isinstance(m.get("content"), str) and m["content"].startswith("<memory-recall>")
     ]
 
 
@@ -163,6 +161,7 @@ def test_refresh_memory_recall_injects_after_user(tmp_path):
     _refresh_memory_recall(messages, mm, recall_k=5)
     recalls = _recall_messages(messages)
     assert len(recalls) == 1
+    assert recalls[0]["role"] == "user"
     # Inserted right after the user message.
     user_index = messages.index({"role": "user", "content": "how do I docker deploy?"})
     assert messages[user_index + 1] is recalls[0]
@@ -182,6 +181,7 @@ def test_refresh_memory_recall_replaces_stale_block(tmp_path):
     _refresh_memory_recall(messages, mm, recall_k=5)
     recalls = _recall_messages(messages)
     assert len(recalls) == 1
+    assert recalls[0]["role"] == "user"
     assert "b.md" in recalls[0]["content"]
     assert "a.md" not in recalls[0]["content"]
 
@@ -206,6 +206,7 @@ def test_refresh_memory_recall_removes_compaction_relocated_block(tmp_path):
     recalls = _recall_messages(messages)
     # Exactly one block, freshly placed after the latest user message — no carry-over.
     assert len(recalls) == 1
+    assert recalls[0]["role"] == "user"
     assert "stale" not in recalls[0]["content"]
     assert "a.md" in recalls[0]["content"]
     user_index = messages.index({"role": "user", "content": "docker deploy"})
@@ -287,12 +288,10 @@ def test_build_memory_embedder_fails_open_when_provider_has_no_api_key(tmp_path)
         provider=dataclasses.replace(base.provider, api_key_env="", api_key=""),
         memory=MemoryConfig(semantic_recall=True, embedding_backend="openai"),
     )
-    # No raise; the openai client with an empty key cannot embed, so it degrades.
     embedder = _build_memory_embedder(config, AgentConsole())
-    # Either the build itself returned None, or it produced a client that will
-    # fail at embed-time (recall catches that and falls back). The contract
-    # tested here is only that boot did not crash.
-    assert embedder is None or hasattr(embedder, "embed")
+    # No raise and no client with an empty key; semantic recall degrades before
+    # any embedding request is possible.
+    assert embedder is None
 
 
 # -- semantic recall (src/memory/embedding.py injected backend) ------------
@@ -373,12 +372,14 @@ def test_semantic_recall_caches_doc_embeddings(tmp_path):
 def test_semantic_recall_reembeds_on_content_change(tmp_path):
     embedder = _FakeEmbedder()
     mm = MemoryManager(tmp_path / "sem", embedder=embedder)
-    _write(mm, "a.md", "alpha", "部署 docker 容器")
+    original_description = "部署 docker 容器"
+    updated_description = "editor 主题 settings now"
+    _write(mm, "a.md", "alpha", original_description)
 
     mm.recall("ship release", k=5)
     # Change the memory's content -> its hash changes -> it must be re-embedded.
-    _write(mm, "a.md", "alpha", "editor 主题 settings now")
+    mm.str_replace("a.md", original_description, updated_description)
     embedder.calls.clear()
     mm.recall("ship release", k=5)
     embedded = [t for call in embedder.calls for t in call]
-    assert any("editor 主题 settings now" in t for t in embedded)
+    assert any(updated_description in t for t in embedded)

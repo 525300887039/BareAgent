@@ -90,6 +90,11 @@ def test_build_embedder_unknown_backend_returns_none():
     assert build_embedder("nonsense", "model") is None
 
 
+def test_build_embedder_openai_without_api_key_returns_none():
+    assert build_embedder("openai", "text-embedding-3-small", api_key="") is None
+    assert build_embedder("openai", "text-embedding-3-small", api_key=None) is None
+
+
 def test_build_embedder_local_without_fastembed_returns_none():
     # fastembed is an optional extra, absent in the dev env -> fail-open to None.
     assert build_embedder("local", "BAAI/bge-small-en-v1.5") is None

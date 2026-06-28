@@ -258,6 +258,32 @@ def test_run_goal_verdict_missing_met_records_malformed():
     assert sink[0].met is False
 
 
+def test_goal_evaluator_returns_recorded_verdict_when_loop_later_raises(monkeypatch):
+    from bareagent.main import _run_goal_evaluator
+
+    class _Console:
+        def print_error(self, message: str) -> None:
+            raise AssertionError(message)
+
+    def _fake_agent_loop(*, handlers, **_kwargs):
+        handlers["goal_verdict"](met=True, reason="done")
+        raise RuntimeError("raised after verdict")
+
+    monkeypatch.setattr("bareagent.main.agent_loop", _fake_agent_loop)
+
+    verdict = _run_goal_evaluator(
+        provider=object(),
+        messages=[],
+        condition="all done",
+        console=_Console(),
+        token_tracker=None,
+        permission=None,
+    )
+
+    assert verdict.met is True
+    assert verdict.reason == "done"
+
+
 def test_goal_verdict_schema_shape():
     assert GOAL_VERDICT_TOOL_SCHEMA["name"] == "goal_verdict"
     params = GOAL_VERDICT_TOOL_SCHEMA["parameters"]

@@ -178,6 +178,40 @@ def test_parse_import_rejects_missing_role():
         parse_import(json.dumps([{"content": "no role here"}]))
 
 
+def test_parse_import_rejects_invalid_role():
+    with pytest.raises(ValueError, match="invalid role"):
+        parse_import(json.dumps([{"role": "tool", "content": "bad"}]))
+
+
+def test_parse_import_rejects_missing_content():
+    with pytest.raises(ValueError, match="content"):
+        parse_import(json.dumps([{"role": "user"}]))
+
+
+def test_parse_import_rejects_system_block_content():
+    with pytest.raises(ValueError, match="system message"):
+        parse_import(json.dumps([{"role": "system", "content": [{"type": "text"}]}]))
+
+
+def test_parse_import_rejects_malformed_content_block():
+    with pytest.raises(ValueError, match="content block"):
+        parse_import(json.dumps([{"role": "assistant", "content": ["oops"]}]))
+
+
+def test_parse_import_rejects_malformed_tool_use_block():
+    with pytest.raises(ValueError, match="tool_use"):
+        parse_import(
+            json.dumps(
+                [
+                    {
+                        "role": "assistant",
+                        "content": [{"type": "tool_use", "id": "t", "name": "bash"}],
+                    }
+                ]
+            )
+        )
+
+
 def test_parse_import_rejects_bad_jsonl_line():
     bad = json.dumps({"role": "user", "content": "ok"}) + "\n{not json}"
     with pytest.raises(ValueError):

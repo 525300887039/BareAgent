@@ -216,20 +216,20 @@ def _run_subagent_sync(
 
     # Worktree isolation: rebind the six file-op handlers onto the worktree
     # path *before* the nested subagent closure is built, so a child spawned
-    # inside this worktree also writes into the worktree. fail-open: a non-git
-    # workspace or a failed worktree creation falls back to no isolation with a
-    # footnote (isolation is a convenience, PermissionGuard is the safety edge).
+    # inside this worktree also writes into the worktree. Fail closed: when the
+    # user explicitly requests worktree isolation, never fall back to mutating
+    # the main workspace.
     handle: WorktreeHandle | None = None
     footnote = ""
     if isolation == "worktree":
         base = os.getcwd()
         if not is_git_repo(base):
-            footnote = "\n\n[worktree] skipped: not a git repository (ran without isolation)."
+            return "Error: worktree isolation requested but the workspace is not a git repository."
         else:
             try:
                 handle = create_worktree(base)
             except WorktreeError as exc:
-                footnote = f"\n\n[worktree] skipped: {exc} (ran without isolation)."
+                return f"Error: worktree isolation failed: {exc}"
             else:
                 # Lazy import: ``bareagent.core.tools`` imports this module at top
                 # level, so importing it here breaks the cycle.

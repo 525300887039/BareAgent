@@ -99,6 +99,12 @@ def build_embedder(
         if normalized == "local":
             return LocalEmbedder(model or _LOCAL_DEFAULT_MODEL)
         if normalized == "openai":
+            if not (api_key or "").strip():
+                logger.warning(
+                    "OpenAI embedding backend unavailable: missing API key; "
+                    "semantic recall will fall back to lexical."
+                )
+                return None
             return OpenAIEmbedder(
                 model or _OPENAI_DEFAULT_MODEL, base_url=base_url, api_key=api_key
             )

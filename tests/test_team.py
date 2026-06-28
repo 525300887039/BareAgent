@@ -960,6 +960,30 @@ def test_team_register_empty_field_returns_error(tmp_path: Path) -> None:
     assert teammate_manager.list() == []
 
 
+def test_team_register_rejects_mailbox_incompatible_name(tmp_path: Path) -> None:
+    bus = MessageBus(tmp_path / ".mailbox")
+    teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")
+    handlers = _build_team_handlers(
+        tmp_path, bus=bus, teammate_manager=teammate_manager, bg=_FakeBg()
+    )
+
+    result = handlers["team_register"]("../reviewer", "role", "prompt")
+
+    assert result.startswith("Error:")
+    assert teammate_manager.list() == []
+
+
+def test_teammate_manager_load_rejects_invalid_name(tmp_path: Path) -> None:
+    config_file = tmp_path / ".team.json"
+    config_file.write_text(
+        '{"teammates":{"bad/name":{"name":"bad/name","role":"r","system_prompt":"p"}}}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Invalid agent name"):
+        TeammateManager(config_file)
+
+
 def test_team_register_with_provider_model_override(tmp_path: Path) -> None:
     bus = MessageBus(tmp_path / ".mailbox")
     teammate_manager = TeammateManager.create_empty(tmp_path / ".team.json")

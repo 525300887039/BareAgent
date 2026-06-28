@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from bareagent.core.fileutil import atomic_write_json
+from bareagent.team.mailbox import validate_agent_name
 
 
 @dataclass(slots=True)
@@ -55,11 +56,9 @@ class TeammateManager:
         provider_config: dict[str, Any] | None = None,
     ) -> Teammate:
         with self._lock:
-            normalized_name = name.strip()
+            normalized_name = validate_agent_name(name)
             normalized_role = role.strip()
             normalized_prompt = system_prompt.strip()
-            if not normalized_name:
-                raise ValueError("name must not be empty")
             if not normalized_role:
                 raise ValueError("role must not be empty")
             if not normalized_prompt:
@@ -133,13 +132,11 @@ class TeammateManager:
             if not isinstance(provider_config, dict):
                 raise ValueError(f"Teammate provider_config must be an object: {teammate_name}")
             teammate = Teammate(
-                name=str(raw_teammate.get("name", teammate_name)).strip(),
+                name=validate_agent_name(str(raw_teammate.get("name", teammate_name))),
                 role=str(raw_teammate.get("role", "")).strip(),
                 system_prompt=str(raw_teammate.get("system_prompt", "")).strip(),
                 provider_config=dict(provider_config),
             )
-            if not teammate.name:
-                raise ValueError(f"Teammate name must not be empty: {teammate_name}")
             if not teammate.role:
                 raise ValueError(f"Teammate role must not be empty: {teammate_name}")
             if not teammate.system_prompt:
