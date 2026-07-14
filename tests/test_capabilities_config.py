@@ -37,3 +37,26 @@ def test_env_unparseable_leaves_config_value(monkeypatch):
     monkeypatch.setenv("BAREAGENT_MODEL_IMAGE_IN", "banana")
     assert _parse_capabilities_config({"image_in": True}).image_in is True
     assert _parse_capabilities_config({}).image_in is None
+
+
+def test_absent_pdf_in_is_none_auto():
+    assert _parse_capabilities_config({}).pdf_in is None
+
+
+def test_pdf_in_explicit_and_malformed():
+    assert _parse_capabilities_config({"pdf_in": True}).pdf_in is True
+    assert _parse_capabilities_config({"pdf_in": False}).pdf_in is False
+    assert _parse_capabilities_config({"pdf_in": "yes"}).pdf_in is None
+
+
+def test_pdf_in_env_overrides(monkeypatch):
+    monkeypatch.setenv("BAREAGENT_MODEL_PDF_IN", "true")
+    assert _parse_capabilities_config({"pdf_in": False}).pdf_in is True
+    monkeypatch.setenv("BAREAGENT_MODEL_PDF_IN", "off")
+    assert _parse_capabilities_config({"pdf_in": True}).pdf_in is False
+
+
+def test_pdf_and_image_independent(monkeypatch):
+    cfg = _parse_capabilities_config({"image_in": True})
+    assert cfg.image_in is True
+    assert cfg.pdf_in is None

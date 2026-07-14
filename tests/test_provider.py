@@ -757,6 +757,107 @@ def test_anthropic_convert_message_content_missing_id_and_name(monkeypatch) -> N
     assert result[0]["name"] == ""
 
 
+class _FakeAnthropicClient:
+    def __init__(self, **kwargs) -> None:
+        _ = kwargs
+        self.messages = SimpleNamespace()
+
+
+def _anthropic_provider(monkeypatch) -> AnthropicProvider:
+    monkeypatch.setattr("bareagent.provider.anthropic.anthropic.Anthropic", _FakeAnthropicClient)
+    return AnthropicProvider(api_key="x", model="claude-3-5-sonnet-20241022")
+
+
+def test_anthropic_lifts_document_out_of_tool_result(monkeypatch) -> None:
+    # A document block inside a tool_result must be lifted to the enclosing user
+    # turn (Anthropic rejects documents inside tool_result), leaving the
+    # tool_result with only its text.
+    provider = _anthropic_provider(monkeypatch)
+    content = [
+        {
+            "type": "tool_result",
+            "tool_use_id": "t1",
+            "content": [
+                {"type": "text", "text": "PDF doc.pdf (native document)"},
+                {
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": "Zm9v",
+                    },
+                },
+            ],
+        }
+    ]
+
+    result = provider._convert_message_content(content)
+
+    assert isinstance(result, list)
+    assert len(result) == 2
+    tool_result, document = result
+    assert tool_result["type"] == "tool_result"
+    assert tool_result["tool_use_id"] == "t1"
+    # Document is gone from the tool_result content, only text remains.
+    assert tool_result["content"] == [{"type": "text", "text": "PDF doc.pdf (native document)"}]
+    assert document == {
+        "type": "document",
+        "source": {"type": "base64", "media_type": "application/pdf", "data": "Zm9v"},
+    }
+
+
+def test_anthropic_tool_result_without_document_unchanged(monkeypatch) -> None:
+    provider = _anthropic_provider(monkeypatch)
+    content = [
+        {"type": "tool_result", "tool_use_id": "t1", "content": [{"type": "text", "text": "ok"}]}
+    ]
+
+    result = provider._convert_message_content(content)
+
+    assert len(result) == 1
+    assert result[0]["type"] == "tool_result"
+    assert result[0]["content"] == [{"type": "text", "text": "ok"}]
+
+
+def test_anthropic_malformed_document_not_lifted(monkeypatch) -> None:
+    # A document block missing base64 data is dropped, not lifted (fail-safe).
+    provider = _anthropic_provider(monkeypatch)
+    content = [
+        {
+            "type": "tool_result",
+            "tool_use_id": "t1",
+            "content": [
+                {"type": "text", "text": "text"},
+                {"type": "document", "source": {"type": "base64", "media_type": "application/pdf"}},
+            ],
+        }
+    ]
+
+    result = provider._convert_message_content(content)
+
+    assert len(result) == 1
+    assert result[0]["type"] == "tool_result"
+
+
+def test_anthropic_lifted_document_takes_cache_breakpoint(monkeypatch) -> None:
+    # A lifted document is the last block of the user turn; the moving cache
+    # breakpoint must attach to it (document is a cacheable block type).
+    provider = _anthropic_provider(monkeypatch)
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "document",
+                    "source": {"type": "base64", "media_type": "application/pdf", "data": "Zm9v"},
+                }
+            ],
+        }
+    ]
+    provider._apply_conversation_breakpoint(messages, {"type": "ephemeral"})
+    assert messages[0]["content"][-1]["cache_control"] == {"type": "ephemeral"}
+
+
 def test_factory_builds_deepseek_via_openai_provider(monkeypatch) -> None:
     captured: dict[str, object] = {}
 

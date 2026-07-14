@@ -42,6 +42,17 @@ KNOWN_IMAGE_INPUT_PREFIXES: tuple[str, ...] = (
     "deepseek-vl",
 )
 
+# Model-id prefixes that accept native base64 PDF *document* blocks. This is an
+# Anthropic-only feature (the document block shape is Anthropic-native and only
+# AnthropicProvider lifts it into the request), so the table is the Claude family
+# alone. OpenAI-compatible endpoints stay off -> read_file falls back to pypdf.
+KNOWN_PDF_INPUT_PREFIXES: tuple[str, ...] = (
+    "claude-3",
+    "claude-opus-4",
+    "claude-sonnet-4",
+    "claude-haiku-4",
+)
+
 # Future extension point: video_in / audio_in would each get their own prefix
 # table + resolver here. Not built until needed (YAGNI).
 
@@ -58,3 +69,17 @@ def supports_image_input(model: str, *, override: bool | None = None) -> bool:
         return override
     normalized = (model or "").strip().lower()
     return any(normalized.startswith(prefix) for prefix in KNOWN_IMAGE_INPUT_PREFIXES)
+
+
+def supports_pdf_input(model: str, *, override: bool | None = None) -> bool:
+    """Whether *model* accepts native base64 PDF document blocks.
+
+    Same precedence as :func:`supports_image_input`: an explicit ``override``
+    wins, else a prefix match against the Claude-only PDF table. Unknown models
+    default to ``False`` (fail-safe) so a document block is never sent to a
+    provider that would choke on it -- read_file falls back to pypdf text.
+    """
+    if override is not None:
+        return override
+    normalized = (model or "").strip().lower()
+    return any(normalized.startswith(prefix) for prefix in KNOWN_PDF_INPUT_PREFIXES)

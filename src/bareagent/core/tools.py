@@ -772,6 +772,10 @@ def get_handlers(
     recency_tracker: FileRecencyTracker | None = None,
     repo_map_recent_files: int = 5,
     image_input_enabled: bool = True,
+    # Fail-safe default: native PDF document blocks are Anthropic-only and only
+    # reach the provider via the lift, so any caller that doesn't explicitly gate
+    # on ``supports_pdf_input`` gets pypdf text (never a stray document block).
+    pdf_input_enabled: bool = False,
 ) -> dict[str, Callable[..., Any]]:
     # Hybrid auto-diagnostics hook: built once per ``get_handlers`` call so
     # edit_file / write_file share the same closure. ``None`` when LSP isn't
@@ -782,12 +786,17 @@ def get_handlers(
 
     handlers: dict[str, Callable[..., Any]] = {
         "bash": partial(run_bash, cwd=workspace),
-        "read_file": partial(run_read, workspace=workspace, image_enabled=image_input_enabled),
+        "read_file": partial(
+            run_read,
+            workspace=workspace,
+            image_enabled=image_input_enabled,
+            pdf_enabled=pdf_input_enabled,
+        ),
         "write_file": partial(run_write, workspace=workspace, diagnostics_hook=diagnostics_hook),
         "edit_file": partial(run_edit, workspace=workspace, diagnostics_hook=diagnostics_hook),
         "glob": partial(run_glob, workspace=workspace),
         "grep": partial(run_grep, workspace=workspace),
-        "web_fetch": run_web_fetch,
+        "web_fetch": partial(run_web_fetch, image_enabled=image_input_enabled),
         "web_search": run_web_search,
     }
 
@@ -899,12 +908,18 @@ def rebind_workspace_handlers(
     if diag_hook is None:
         diag_hook = _extract_diagnostics_hook(handlers.get("edit_file"))
 
-    # Preserve the vision gate across the rebind (worktree isolation must not
-    # silently re-enable image reads for a non-vision model).
+    # Preserve the vision / PDF gates across the rebind (worktree isolation must
+    # not silently re-enable image or native-PDF reads for a model that lacks them).
     image_enabled = _extract_partial_keyword(handlers.get("read_file"), "image_enabled", True)
+    pdf_enabled = _extract_partial_keyword(handlers.get("read_file"), "pdf_enabled", False)
 
     rebound["bash"] = partial(run_bash, cwd=new_workspace)
-    rebound["read_file"] = partial(run_read, workspace=new_workspace, image_enabled=image_enabled)
+    rebound["read_file"] = partial(
+        run_read,
+        workspace=new_workspace,
+        image_enabled=image_enabled,
+        pdf_enabled=pdf_enabled,
+    )
     rebound["write_file"] = partial(run_write, workspace=new_workspace, diagnostics_hook=diag_hook)
     rebound["edit_file"] = partial(run_edit, workspace=new_workspace, diagnostics_hook=diag_hook)
     rebound["glob"] = partial(run_glob, workspace=new_workspace)

@@ -291,6 +291,74 @@ def test_read_pdf_extracts_text(tmp_path):
     assert "--- Page 1 ---" not in single
 
 
+# --- PDF native document block dispatch ------------------------------------
+
+_PDF_BYTES = b"%PDF-1.4\nfake pdf body\n%%EOF"
+
+
+def test_pdf_default_stays_text_path(tmp_path):
+    # Default (pdf_enabled unset -> False) must keep the historical pypdf text
+    # behaviour; no native document block leaks in for a bare call.
+    pypdf = pytest.importorskip("pypdf")
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    with (tmp_path / "doc.pdf").open("wb") as fh:
+        writer.write(fh)
+
+    result = run_read(file_path="doc.pdf", workspace=tmp_path)
+    assert isinstance(result, str)
+    assert "--- Page 1 ---" in result
+
+
+def test_pdf_native_returns_document_block(tmp_path):
+    (tmp_path / "doc.pdf").write_bytes(_PDF_BYTES)
+
+    result = run_read(file_path="doc.pdf", workspace=tmp_path, pdf_enabled=True)
+
+    assert isinstance(result, list)
+    assert len(result) == 2
+    text_block, doc_block = result
+    assert text_block["type"] == "text"
+    assert "doc.pdf" in text_block["text"]
+    assert "native document" in text_block["text"]
+    assert doc_block["type"] == "document"
+    assert doc_block["source"] == {
+        "type": "base64",
+        "media_type": "application/pdf",
+        "data": base64.b64encode(_PDF_BYTES).decode("ascii"),
+    }
+
+
+def test_pdf_native_with_pages_forces_text_path(tmp_path):
+    # Explicit page selection always uses pypdf (native blocks can't page-select),
+    # even with pdf_enabled=True.
+    pypdf = pytest.importorskip("pypdf")
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    writer.add_blank_page(width=72, height=72)
+    with (tmp_path / "doc.pdf").open("wb") as fh:
+        writer.write(fh)
+
+    result = run_read(file_path="doc.pdf", pages="1", workspace=tmp_path, pdf_enabled=True)
+    assert isinstance(result, str)
+    assert "--- Page 1 ---" in result
+
+
+def test_pdf_over_size_limit_falls_back_to_text(tmp_path, monkeypatch):
+    pypdf = pytest.importorskip("pypdf")
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    with (tmp_path / "big.pdf").open("wb") as fh:
+        writer.write(fh)
+    monkeypatch.setattr(file_read, "_MAX_PDF_BYTES", 10)
+
+    result = run_read(file_path="big.pdf", workspace=tmp_path, pdf_enabled=True)
+
+    assert isinstance(result, str)
+    assert "over the" in result
+    assert "--- Page 1 ---" in result
+
+
 # --- text path regression --------------------------------------------------
 
 

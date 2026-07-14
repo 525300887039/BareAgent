@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from bareagent.provider.capabilities import supports_image_input
+from bareagent.provider.capabilities import supports_image_input, supports_pdf_input
 
 
 @pytest.mark.parametrize(
@@ -64,3 +64,37 @@ def test_override_false_forces_deny_even_for_known_vision() -> None:
 def test_override_none_falls_back_to_table() -> None:
     assert supports_image_input("gpt-4o", override=None) is True
     assert supports_image_input("deepseek-chat", override=None) is False
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "claude-3-5-sonnet-20241022",
+        "claude-opus-4-8",
+        "claude-sonnet-4-20250514",
+        "claude-haiku-4-5-20251001",
+        "CLAUDE-OPUS-4-8",  # case-insensitive
+    ],
+)
+def test_claude_models_allow_native_pdf(model: str) -> None:
+    assert supports_pdf_input(model) is True
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gpt-4o",  # vision-capable but not native PDF (Anthropic-only feature)
+        "gemini-2.5-pro",
+        "deepseek-chat",
+        "some-future-unknown-model",
+        "",
+    ],
+)
+def test_non_claude_models_denied_native_pdf(model: str) -> None:
+    assert supports_pdf_input(model) is False
+
+
+def test_pdf_override_forces_regardless_of_table() -> None:
+    assert supports_pdf_input("gpt-4o", override=True) is True
+    assert supports_pdf_input("claude-opus-4-8", override=False) is False
+    assert supports_pdf_input("gpt-4o", override=None) is False

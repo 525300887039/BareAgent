@@ -140,7 +140,7 @@ from bareagent.provider.base import (
     CacheConfig,
     ThinkingConfig,
 )
-from bareagent.provider.capabilities import supports_image_input
+from bareagent.provider.capabilities import supports_image_input, supports_pdf_input
 from bareagent.provider.factory import _resolve_api_key, create_provider
 from bareagent.provider.presets import resolve_preset
 from bareagent.provider.setup import run_setup_wizard
@@ -286,6 +286,10 @@ class CapabilitiesConfig:
     # force-deny image reads for the current model. Honors
     # ``BAREAGENT_MODEL_IMAGE_IN``. Baked into handlers at boot -> restart-required.
     image_in: bool | None = None
+    # ``pdf_in`` gates native base64 PDF document blocks (Anthropic-only). None =
+    # auto (Claude-family prefix table); True/False force. Honors
+    # ``BAREAGENT_MODEL_PDF_IN``. Deny -> read_file falls back to pypdf text.
+    pdf_in: bool | None = None
 
 
 @dataclass(slots=True)
@@ -965,28 +969,39 @@ def _parse_repo_map_config(raw: dict) -> RepoMapConfig:
     )
 
 
-def _parse_capabilities_config(raw: dict) -> CapabilitiesConfig:
-    """Parse the ``[capabilities]`` config section (defensive, never crashes boot).
+def _tristate_capability(raw: dict, key: str, env_var: str) -> bool | None:
+    """Resolve a tri-state capability override (config value, then env override).
 
-    ``image_in`` is a tri-state: absent/malformed -> None (auto, consult the
-    known-vision table in provider/capabilities.py); a bool forces allow/deny.
-    ``BAREAGENT_MODEL_IMAGE_IN`` (if set) overrides the config value; when the env
-    var is unset the config value (including None) is kept -- so this is _not_
-    ``_resolve_bool`` (which collapses to a plain bool).
+    absent/malformed -> None (auto); a bool forces allow/deny. The env var (if
+    set) wins; an unset or unparseable env value leaves the config value (incl.
+    None) untouched -- so this is _not_ ``_resolve_bool`` (which collapses to a
+    plain bool).
     """
-    file_value = raw.get("image_in")
-    image_in = file_value if isinstance(file_value, bool) else None
+    file_value = raw.get(key)
+    value = file_value if isinstance(file_value, bool) else None
 
-    env_raw = os.getenv("BAREAGENT_MODEL_IMAGE_IN")
+    env_raw = os.getenv(env_var)
     if env_raw is not None:
         normalized = env_raw.strip().lower()
         if normalized in {"1", "true", "yes", "on"}:
-            image_in = True
+            value = True
         elif normalized in {"0", "false", "no", "off"}:
-            image_in = False
-        # An unparseable env value leaves the config/auto value untouched.
+            value = False
+    return value
 
-    return CapabilitiesConfig(image_in=image_in)
+
+def _parse_capabilities_config(raw: dict) -> CapabilitiesConfig:
+    """Parse the ``[capabilities]`` config section (defensive, never crashes boot).
+
+    ``image_in`` / ``pdf_in`` are tri-states (see ``_tristate_capability``):
+    absent/malformed -> None (auto, consult the prefix tables in
+    provider/capabilities.py); a bool forces allow/deny. Honor
+    ``BAREAGENT_MODEL_IMAGE_IN`` / ``BAREAGENT_MODEL_PDF_IN``.
+    """
+    return CapabilitiesConfig(
+        image_in=_tristate_capability(raw, "image_in", "BAREAGENT_MODEL_IMAGE_IN"),
+        pdf_in=_tristate_capability(raw, "pdf_in", "BAREAGENT_MODEL_PDF_IN"),
+    )
 
 
 def _build_goal_provider(
@@ -2121,6 +2136,10 @@ def _build_handlers(
         image_input_enabled=supports_image_input(
             getattr(provider, "model", "") or "",
             override=config.capabilities.image_in,
+        ),
+        pdf_input_enabled=supports_pdf_input(
+            getattr(provider, "model", "") or "",
+            override=config.capabilities.pdf_in,
         ),
     )
 

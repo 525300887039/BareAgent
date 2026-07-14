@@ -2,13 +2,26 @@ from __future__ import annotations
 
 import html.parser
 import re
+from http.client import HTTPResponse
+from typing import Any
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+
+from bareagent.core.handlers.file_read import (
+    _IMAGE_DISABLED_ERROR,
+    _IMAGE_EXT_TO_MIME,
+    _MAX_IMAGE_BYTES,
+    build_image_blocks,
+)
 
 _DEFAULT_TIMEOUT = 15
 _DEFAULT_MAX_LENGTH = 10000
 _USER_AGENT = "BareAgent/1.0"
 _RE_WHITESPACE = re.compile(r"[ \t]+")
+
+# The image mime types web_fetch can turn into image blocks — the value set of
+# the local-file whitelist, so the two paths never drift.
+_ALLOWED_IMAGE_MIMES = frozenset(_IMAGE_EXT_TO_MIME.values())
 
 
 class _HTMLToText(html.parser.HTMLParser):
@@ -100,8 +113,17 @@ def run_web_fetch(
     url: str,
     max_length: int = _DEFAULT_MAX_LENGTH,
     timeout: int = _DEFAULT_TIMEOUT,
-) -> str:
-    """Fetch content from a URL, convert HTML to text, and truncate."""
+    *,
+    image_enabled: bool = True,
+) -> str | list[dict[str, Any]]:
+    """Fetch content from a URL.
+
+    - ``image/*`` Content-Type -> ``[text, image]`` blocks when the type is in
+      the supported whitelist (png/jpeg/gif/webp) and the model has vision;
+      otherwise a friendly Error. ``image_enabled`` defaults to True so existing
+      callers are byte-for-byte unchanged.
+    - Everything else -> HTML-to-text (or raw text), truncated.
+    """
     if not url.startswith(("http://", "https://")):
         return f"Error: URL must start with http:// or https:// (got: {url})"
 
@@ -109,8 +131,11 @@ def run_web_fetch(
     try:
         with urlopen(request, timeout=timeout) as resp:  # noqa: S310
             content_type = resp.headers.get("Content-Type", "")
-            charset = resp.headers.get_content_charset() or "utf-8"
+            mime = content_type.split(";", 1)[0].strip().lower()
+            if mime.startswith("image/"):
+                return _fetch_image(resp, mime, url, image_enabled)
 
+            charset = resp.headers.get_content_charset() or "utf-8"
             raw_bytes = resp.read(max_length * 4)
             body = raw_bytes.decode(charset, errors="replace")
     except (URLError, OSError, TimeoutError) as exc:
@@ -124,3 +149,28 @@ def run_web_fetch(
         text = body
 
     return _truncate(text, max_length)
+
+
+def _fetch_image(
+    resp: HTTPResponse,
+    mime: str,
+    url: str,
+    image_enabled: bool,
+) -> str | list[dict[str, Any]]:
+    """Turn an image response into ``[text, image]`` blocks, or a friendly Error."""
+    if mime not in _ALLOWED_IMAGE_MIMES:
+        return (
+            f"Error: unsupported image type {mime!r} at {url}. Supported: "
+            "png/jpeg/gif/webp. Download it and process it locally."
+        )
+    if not image_enabled:
+        return _IMAGE_DISABLED_ERROR
+    # Read one byte past the cap so an over-limit image is detected without
+    # buffering the whole payload.
+    raw = resp.read(_MAX_IMAGE_BYTES + 1)
+    if len(raw) > _MAX_IMAGE_BYTES:
+        return (
+            f"Error: image at {url} exceeds the {_MAX_IMAGE_BYTES} byte limit. "
+            "Download it and process it locally."
+        )
+    return build_image_blocks(raw, mime, url)

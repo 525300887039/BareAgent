@@ -266,14 +266,20 @@ class AnthropicProvider(BaseLLMProvider):
                 )
                 continue
             if block_type == "tool_result":
+                raw_content = block.get("content", "")
                 result_block: dict[str, Any] = {
                     "type": "tool_result",
                     "tool_use_id": block.get("tool_use_id", ""),
-                    "content": self._convert_tool_result_content(block.get("content", "")),
+                    "content": self._convert_tool_result_content(raw_content),
                 }
                 if block.get("is_error"):
                     result_block["is_error"] = True
                 converted_blocks.append(result_block)
+                # Lift any document blocks out of the tool_result into the
+                # enclosing user turn: Anthropic accepts document blocks in user
+                # content but not inside a tool_result. Mirror of openai's
+                # _lift_image_blocks (images can't sit in the tool role there).
+                converted_blocks.extend(self._extract_document_blocks(raw_content))
                 continue
             if block_type == "thinking" and block.get("signature"):
                 converted_blocks.append(
@@ -294,6 +300,34 @@ class AnthropicProvider(BaseLLMProvider):
                 continue
 
         return converted_blocks
+
+    @staticmethod
+    def _extract_document_blocks(content: Any) -> list[dict[str, Any]]:
+        """Pull well-formed base64 ``document`` blocks out of tool_result content.
+
+        Returned blocks are re-emitted as top-level user-turn content by the
+        caller. Malformed documents are dropped (not lifted) — the same fail-safe
+        the image path uses. Non-list content carries no documents.
+        """
+        if not isinstance(content, list):
+            return []
+        documents: list[dict[str, Any]] = []
+        for item in content:
+            if not isinstance(item, dict) or item.get("type") != "document":
+                continue
+            source = item.get("source")
+            if isinstance(source, dict) and source.get("type") == "base64" and source.get("data"):
+                documents.append(
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": source.get("media_type", "application/pdf"),
+                            "data": source.get("data", ""),
+                        },
+                    }
+                )
+        return documents
 
     def _convert_tool_result_content(self, content: Any) -> str | list[dict[str, Any]]:
         if isinstance(content, str):
@@ -328,6 +362,11 @@ class AnthropicProvider(BaseLLMProvider):
                         )
                         continue
                     blocks.append({"type": "text", "text": self._stringify_content(item)})
+                    continue
+                if item_type == "document":
+                    # Documents are lifted out of the tool_result into the user
+                    # turn (Anthropic rejects document blocks inside tool_result).
+                    # Drop here; _convert_message_content re-emits them.
                     continue
                 blocks.append({"type": "text", "text": self._stringify_content(item)})
             return blocks

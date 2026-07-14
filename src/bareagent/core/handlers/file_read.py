@@ -23,6 +23,11 @@ _IMAGE_EXT_TO_MIME: dict[str, str] = {
 # (D2: ask the user to downscale; we do not auto-resize — that needs Pillow).
 _MAX_IMAGE_BYTES = 5_242_880  # 5 MiB
 
+# Raw-file cap for native PDF document blocks. ponytail: derived from Anthropic's
+# 32 MB per-request limit and base64's ~1.33x inflation, with headroom for the
+# rest of the request; bump here if Anthropic raises the request cap.
+_MAX_PDF_BYTES = 20 * 1024 * 1024  # 20 MiB
+
 # Per-output and whole-document length caps for textual renderings (notebook
 # cell outputs, PDF text). Keeps a pathological file from flooding the context.
 _MAX_CELL_OUTPUT_CHARS = 2000
@@ -49,13 +54,15 @@ def run_read(
     pages: str | None = None,
     workspace: Path,
     image_enabled: bool = True,
+    pdf_enabled: bool = False,
 ) -> str | list[dict[str, Any]]:
     """Read a workspace file, dispatching by extension.
 
     - Images (.png/.jpg/.jpeg/.gif/.webp) -> ``[text, image]`` content blocks
       when ``image_enabled`` (the model has vision); otherwise a friendly Error.
-    - PDF (.pdf) -> extracted text (optional ``pages`` range); needs the
-      ``[pdf]`` extra (pypdf).
+    - PDF (.pdf) -> a native ``document`` block when ``pdf_enabled`` (the model
+      supports native PDF), ``pages`` is not given, and the file is under the
+      size cap; otherwise extracted text via the ``[pdf]`` extra (pypdf).
     - Notebook (.ipynb) -> text rendering of markdown/code cells + outputs.
     - Everything else -> the legacy UTF-8 text path with line numbers
       (``offset`` / ``limit`` slice).
@@ -73,7 +80,7 @@ def run_read(
             return _IMAGE_DISABLED_ERROR
         return _read_image(resolved, _IMAGE_EXT_TO_MIME[suffix])
     if suffix == ".pdf":
-        return _read_pdf(resolved, pages)
+        return _read_pdf_document(resolved, pages, pdf_enabled)
     if suffix == ".ipynb":
         return _read_notebook(resolved)
 
@@ -113,10 +120,19 @@ def _read_image(resolved: Path, mime: str) -> str | list[dict[str, Any]]:
             f"Error: image {resolved.name!r} is {size} bytes, exceeding the "
             f"{_MAX_IMAGE_BYTES} byte limit. Downscale or compress it before reading."
         )
+    return build_image_blocks(raw, mime, resolved.name)
+
+
+def build_image_blocks(raw: bytes, mime: str, label: str) -> list[dict[str, Any]]:
+    """Build ``[text, image]`` content blocks from raw image bytes.
+
+    Shared by the local file path (``_read_image``) and web_fetch, so the block
+    shape and base64 encoding stay single-source. The caller enforces the size
+    cap (``_MAX_IMAGE_BYTES``) — this helper just encodes.
+    """
     data = base64.b64encode(raw).decode("ascii")
-    description = f"Image {resolved.name} ({mime}, {size} bytes)"
     return [
-        {"type": "text", "text": description},
+        {"type": "text", "text": f"Image {label} ({mime}, {len(raw)} bytes)"},
         {
             "type": "image",
             "source": {
@@ -195,6 +211,55 @@ def _render_outputs(outputs: Any) -> str:
         if text:
             rendered.append(_truncate(text, _MAX_CELL_OUTPUT_CHARS))
     return "\n".join(rendered)
+
+
+def _read_pdf_document(
+    resolved: Path,
+    pages: str | None,
+    pdf_enabled: bool,
+) -> str | list[dict[str, Any]]:
+    """Dispatch a PDF read between the native document block and pypdf text.
+
+    - Explicit ``pages`` -> pypdf text (native blocks can't select pages).
+    - ``pdf_enabled`` + under the size cap -> native ``document`` block.
+    - No capability / over the cap -> pypdf text (over-cap adds a one-line note).
+    """
+    if pages is not None:
+        return _read_pdf(resolved, pages)
+    if not pdf_enabled:
+        return _read_pdf(resolved, None)
+    try:
+        size = resolved.stat().st_size
+    except OSError as exc:
+        return f"Error: cannot read PDF {resolved.name!r}: {exc}"
+    if size > _MAX_PDF_BYTES:
+        note = (
+            f"Note: PDF {resolved.name!r} is {size} bytes, over the {_MAX_PDF_BYTES} "
+            "byte native limit; extracted its text instead.\n\n"
+        )
+        text = _read_pdf(resolved, None)
+        return note + text if isinstance(text, str) else text
+    return _read_pdf_native(resolved)
+
+
+def _read_pdf_native(resolved: Path) -> str | list[dict[str, Any]]:
+    """Read a PDF as a base64 ``document`` block (Anthropic native PDF)."""
+    try:
+        raw = resolved.read_bytes()
+    except OSError as exc:
+        return f"Error: cannot read PDF {resolved.name!r}: {exc}"
+    data = base64.b64encode(raw).decode("ascii")
+    return [
+        {"type": "text", "text": f"PDF {resolved.name} ({len(raw)} bytes, native document)"},
+        {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": data,
+            },
+        },
+    ]
 
 
 def _read_pdf(resolved: Path, pages: str | None) -> str:
