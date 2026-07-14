@@ -182,14 +182,22 @@ bareagent --config ~/my_config.toml
 | `/remember` / `/forget` | 维护持久记忆 |
 | `/skill` | 管理生成技能草稿 |
 | `/team` | 管理团队智能体（`list`、`spawn`、`send`、`shutdown`、`register`、`review`） |
+| `/attach <path>` | 给下一条消息附带一张图片（模型经 read_file 查看） |
 
 **快捷键：**
 
 | 按键 | 功能 |
 |------|------|
 | `Shift+Tab` | 循环切换权限模式（DEFAULT → AUTO → PLAN → BYPASS） |
+| `Ctrl+V` | 粘贴剪贴板图片（需 `[clipboard]` extra；插入 `[image:...]` 占位符） |
 | `Ctrl+C` | 中断当前操作（按两次退出） |
 | `Ctrl+Z` | 立即退出 REPL |
+
+> **图片输入**：`/attach <path>` 或 `Ctrl+V` 粘贴的图片会落在 workspace 内的
+> `.bareagent_attachments/`（建议加进 `.gitignore`），提交时自动提示模型用 `read_file`
+> 查看。非 vision 模型读图会返回友好错误——换 vision 模型，或在 `[capabilities]`
+> 设 `image_in = true`（详见 `config.toml`）。剪贴板粘贴需装 `uv pip install -e ".[clipboard]"`；
+> 未装时 `/attach` 仍可用。
 
 ---
 

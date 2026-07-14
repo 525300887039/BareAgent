@@ -30,6 +30,16 @@ _MAX_DOCUMENT_CHARS = 200_000
 
 _TRUNCATED_MARKER = "... [truncated]"
 
+# Returned when the image path is reached but the active model has no vision
+# capability (see provider/capabilities.py). We refuse to emit the image block
+# rather than let it hit the provider API and error out.
+_IMAGE_DISABLED_ERROR = (
+    "Error: the current model has no image (vision) capability, so this image was "
+    "not sent to avoid an API error. Switch to a vision-capable model, or set "
+    "[capabilities] image_in = true (or env BAREAGENT_MODEL_IMAGE_IN=1) if this "
+    "model does support images."
+)
+
 
 def run_read(
     file_path: str,
@@ -38,10 +48,12 @@ def run_read(
     *,
     pages: str | None = None,
     workspace: Path,
+    image_enabled: bool = True,
 ) -> str | list[dict[str, Any]]:
     """Read a workspace file, dispatching by extension.
 
-    - Images (.png/.jpg/.jpeg/.gif/.webp) -> ``[text, image]`` content blocks.
+    - Images (.png/.jpg/.jpeg/.gif/.webp) -> ``[text, image]`` content blocks
+      when ``image_enabled`` (the model has vision); otherwise a friendly Error.
     - PDF (.pdf) -> extracted text (optional ``pages`` range); needs the
       ``[pdf]`` extra (pypdf).
     - Notebook (.ipynb) -> text rendering of markdown/code cells + outputs.
@@ -57,6 +69,8 @@ def run_read(
     suffix = resolved.suffix.lower()
 
     if suffix in _IMAGE_EXT_TO_MIME:
+        if not image_enabled:
+            return _IMAGE_DISABLED_ERROR
         return _read_image(resolved, _IMAGE_EXT_TO_MIME[suffix])
     if suffix == ".pdf":
         return _read_pdf(resolved, pages)

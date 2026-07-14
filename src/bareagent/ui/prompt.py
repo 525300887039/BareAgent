@@ -26,13 +26,14 @@ class AgentPrompt:
         history_file: Path,
         get_mode_label: Callable[[], str],
         cycle_mode: Callable[[], str] | None = None,
+        on_paste: Callable[[], str | None] | None = None,
     ) -> None:
         self._get_mode_label = get_mode_label
         self._cycle_mode = cycle_mode
         self._session = PromptSession(
             completer=WordCompleter(commands, sentence=True),
             history=self._build_history(history_file),
-            key_bindings=self._build_bindings(cycle_mode),
+            key_bindings=self._build_bindings(cycle_mode, on_paste),
             complete_while_typing=True,
             bottom_toolbar=self._toolbar,
         )
@@ -61,6 +62,7 @@ class AgentPrompt:
     @staticmethod
     def _build_bindings(
         cycle_mode: Callable[[], str] | None = None,
+        on_paste: Callable[[], str | None] | None = None,
     ) -> KeyBindings:
         bindings = KeyBindings()
 
@@ -74,5 +76,15 @@ class AgentPrompt:
                 return
             cycle_mode()
             event.app.invalidate()
+
+        @bindings.add("c-v")
+        def _paste_image(event) -> None:
+            # ponytail: Ctrl-V grabs a clipboard image; on no image (or no
+            # Pillow) it is a silent no-op, not a text-paste fallback.
+            if on_paste is None:
+                return
+            rel = on_paste()
+            if rel:
+                event.current_buffer.insert_text(f"[image:{rel}]")
 
         return bindings

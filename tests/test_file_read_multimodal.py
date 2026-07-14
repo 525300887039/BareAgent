@@ -66,6 +66,37 @@ def test_image_extension_mime_mapping(tmp_path, name, expected_mime):
     assert result[1]["source"]["media_type"] == expected_mime
 
 
+def test_image_disabled_returns_friendly_error(tmp_path):
+    # Non-vision model: refuse the image block, return an actionable Error
+    # instead of letting it hit the provider API.
+    (tmp_path / "pixel.png").write_bytes(_PNG_1X1)
+
+    result = run_read(file_path="pixel.png", workspace=tmp_path, image_enabled=False)
+
+    assert isinstance(result, str)
+    assert result.startswith("Error:")
+    assert "image_in" in result
+
+
+def test_image_enabled_true_still_returns_blocks(tmp_path):
+    # Explicit image_enabled=True matches the default behaviour (blocks).
+    (tmp_path / "pixel.png").write_bytes(_PNG_1X1)
+
+    result = run_read(file_path="pixel.png", workspace=tmp_path, image_enabled=True)
+
+    assert isinstance(result, list)
+    assert result[1]["type"] == "image"
+
+
+def test_text_path_unaffected_by_image_disabled(tmp_path):
+    # Gating only touches the image branch; text/pdf/notebook are unchanged.
+    (tmp_path / "f.txt").write_text("alpha\nbeta\n", encoding="utf-8")
+
+    result = run_read(file_path="f.txt", workspace=tmp_path, image_enabled=False)
+
+    assert result == "1: alpha\n2: beta"
+
+
 def test_image_over_size_limit_returns_error(tmp_path, monkeypatch):
     monkeypatch.setattr(file_read, "_MAX_IMAGE_BYTES", 10)
     (tmp_path / "big.png").write_bytes(_PNG_1X1)

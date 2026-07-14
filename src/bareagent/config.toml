@@ -340,3 +340,12 @@ max_tokens = 1024
 max_file_bytes = 1048576
 # 自动作为 PageRank focus 注入的「最近读/改文件」条数。
 recent_files = 5
+
+[capabilities]
+# 模型输入模态能力（task 07-14-multimodal）。vision 是「模型」属性（同一 OpenAI
+# provider 既服务 gpt-4o 也服务 deepseek-chat），故不套 provider ClassVar，用
+# provider/capabilities.py 的静态前缀表 + 此处覆盖。
+# image_in 三态：留空/注释掉 = auto（查已知 vision 前缀表，未知模型默认拒绝，
+# read_file 读图返友好 Error 而非撞 API）；true = 强制放行；false = 强制拒绝。
+# 走 env 覆盖 BAREAGENT_MODEL_IMAGE_IN（1/true/on 或 0/false/off），boot 固化 -> restart-required。
+# image_in = true

@@ -882,11 +882,13 @@ def test_build_stdio_read_fn_uses_agent_prompt_when_available(
             history_file: Path,
             get_mode_label,
             cycle_mode,
+            on_paste=None,
         ) -> None:
             captured["commands"] = commands
             captured["history_file"] = history_file
             captured["get_mode_label"] = get_mode_label
             captured["cycle_mode"] = cycle_mode
+            captured["on_paste"] = on_paste
 
         def read_input(self) -> str:
             get_mode_label = captured["get_mode_label"]

@@ -52,6 +52,7 @@ otel = [
 all-tracing = ["bareagent-cli[langfuse,otel]"]
 lsp = ["multilspy>=0.0.15"]
 pdf = ["pypdf>=4.0"]
+clipboard = ["Pillow>=10"]
 embeddings = ["fastembed>=0.8"]
 repo-map = [
     "tree-sitter>=0.25",

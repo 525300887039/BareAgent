@@ -771,6 +771,7 @@ def get_handlers(
     repo_map_index: RepoMapIndex | None = None,
     recency_tracker: FileRecencyTracker | None = None,
     repo_map_recent_files: int = 5,
+    image_input_enabled: bool = True,
 ) -> dict[str, Callable[..., Any]]:
     # Hybrid auto-diagnostics hook: built once per ``get_handlers`` call so
     # edit_file / write_file share the same closure. ``None`` when LSP isn't
@@ -781,7 +782,7 @@ def get_handlers(
 
     handlers: dict[str, Callable[..., Any]] = {
         "bash": partial(run_bash, cwd=workspace),
-        "read_file": partial(run_read, workspace=workspace),
+        "read_file": partial(run_read, workspace=workspace, image_enabled=image_input_enabled),
         "write_file": partial(run_write, workspace=workspace, diagnostics_hook=diagnostics_hook),
         "edit_file": partial(run_edit, workspace=workspace, diagnostics_hook=diagnostics_hook),
         "glob": partial(run_glob, workspace=workspace),
@@ -898,8 +899,12 @@ def rebind_workspace_handlers(
     if diag_hook is None:
         diag_hook = _extract_diagnostics_hook(handlers.get("edit_file"))
 
+    # Preserve the vision gate across the rebind (worktree isolation must not
+    # silently re-enable image reads for a non-vision model).
+    image_enabled = _extract_partial_keyword(handlers.get("read_file"), "image_enabled", True)
+
     rebound["bash"] = partial(run_bash, cwd=new_workspace)
-    rebound["read_file"] = partial(run_read, workspace=new_workspace)
+    rebound["read_file"] = partial(run_read, workspace=new_workspace, image_enabled=image_enabled)
     rebound["write_file"] = partial(run_write, workspace=new_workspace, diagnostics_hook=diag_hook)
     rebound["edit_file"] = partial(run_edit, workspace=new_workspace, diagnostics_hook=diag_hook)
     rebound["glob"] = partial(run_glob, workspace=new_workspace)
@@ -907,20 +912,25 @@ def rebind_workspace_handlers(
     return rebound
 
 
-def _extract_diagnostics_hook(handler: Any) -> Any:
-    """Read a ``diagnostics_hook`` keyword off a partial, or ``None``.
+def _extract_partial_keyword(handler: Any, key: str, default: Any = None) -> Any:
+    """Read a bound *key* keyword off a partial, following ``__wrapped__``.
 
-    Follows ``__wrapped__`` so a recency-wrapped handler (see _with_recency)
-    still yields the underlying partial's hook.
+    A recency-wrapped handler (see _with_recency) still yields the underlying
+    partial's keyword. Returns *default* when the keyword is not found.
     """
     seen = 0
     while handler is not None and seen < 8:
         keywords = getattr(handler, "keywords", None)
-        if isinstance(keywords, dict) and "diagnostics_hook" in keywords:
-            return keywords["diagnostics_hook"]
+        if isinstance(keywords, dict) and key in keywords:
+            return keywords[key]
         handler = getattr(handler, "__wrapped__", None)
         seen += 1
-    return None
+    return default
+
+
+def _extract_diagnostics_hook(handler: Any) -> Any:
+    """Read a ``diagnostics_hook`` keyword off a partial, or ``None``."""
+    return _extract_partial_keyword(handler, "diagnostics_hook")
 
 
 def tool_search(query: str, max_results: int = 5) -> list[dict[str, Any]]:

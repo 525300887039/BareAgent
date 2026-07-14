@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import itertools
 import json
 import logging
 import os
+import shutil
 import signal
 import sys
 import threading
 import time
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field, replace
@@ -138,6 +140,7 @@ from bareagent.provider.base import (
     CacheConfig,
     ThinkingConfig,
 )
+from bareagent.provider.capabilities import supports_image_input
 from bareagent.provider.factory import _resolve_api_key, create_provider
 from bareagent.provider.presets import resolve_preset
 from bareagent.provider.setup import run_setup_wizard
@@ -145,6 +148,12 @@ from bareagent.team.autonomous import AutonomousAgent
 from bareagent.team.mailbox import Message, MessageBus
 from bareagent.team.manager import TeammateManager
 from bareagent.team.protocols import Protocol, ProtocolFSM, decode_protocol_content
+from bareagent.ui.attachments import (
+    IMAGE_EXTS,
+    build_attachment_prefix,
+    extract_attachments,
+    grab_clipboard_image,
+)
 from bareagent.ui.console import AgentConsole
 
 _log = logging.getLogger(__name__)
@@ -269,6 +278,17 @@ class RepoMapConfig:
 
 
 @dataclass(slots=True)
+class CapabilitiesConfig:
+    # Model input-modality capability overrides (task 07-14-multimodal). Vision
+    # is a model property, so this is a static-table lookup (see
+    # provider/capabilities.py) with an override here. ``image_in`` = None means
+    # "auto" (consult the known-vision prefix table); True/False force-allow or
+    # force-deny image reads for the current model. Honors
+    # ``BAREAGENT_MODEL_IMAGE_IN``. Baked into handlers at boot -> restart-required.
+    image_in: bool | None = None
+
+
+@dataclass(slots=True)
 class CostConfig:
     # Per-model price overrides keyed by model id. Each entry is a
     # ``{"input": <usd-per-million>, "output": <usd-per-million>}`` dict that
@@ -381,6 +401,7 @@ class Config:
     team: TeamConfig = field(default_factory=TeamConfig)
     code_search: CodeSearchConfig = field(default_factory=CodeSearchConfig)
     repo_map: RepoMapConfig = field(default_factory=RepoMapConfig)
+    capabilities: CapabilitiesConfig = field(default_factory=CapabilitiesConfig)
 
 
 # Dotted config paths that ``/reload`` can hot-apply to live runtime objects.
@@ -944,6 +965,30 @@ def _parse_repo_map_config(raw: dict) -> RepoMapConfig:
     )
 
 
+def _parse_capabilities_config(raw: dict) -> CapabilitiesConfig:
+    """Parse the ``[capabilities]`` config section (defensive, never crashes boot).
+
+    ``image_in`` is a tri-state: absent/malformed -> None (auto, consult the
+    known-vision table in provider/capabilities.py); a bool forces allow/deny.
+    ``BAREAGENT_MODEL_IMAGE_IN`` (if set) overrides the config value; when the env
+    var is unset the config value (including None) is kept -- so this is _not_
+    ``_resolve_bool`` (which collapses to a plain bool).
+    """
+    file_value = raw.get("image_in")
+    image_in = file_value if isinstance(file_value, bool) else None
+
+    env_raw = os.getenv("BAREAGENT_MODEL_IMAGE_IN")
+    if env_raw is not None:
+        normalized = env_raw.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            image_in = True
+        elif normalized in {"0", "false", "no", "off"}:
+            image_in = False
+        # An unparseable env value leaves the config/auto value untouched.
+
+    return CapabilitiesConfig(image_in=image_in)
+
+
 def _build_goal_provider(
     config: Config,
     session_provider: BaseLLMProvider,
@@ -1161,6 +1206,11 @@ def load_config(
     repo_map_raw = raw_config.get("repo_map", {})
     repo_map_config = _parse_repo_map_config(repo_map_raw if isinstance(repo_map_raw, dict) else {})
 
+    capabilities_raw = raw_config.get("capabilities", {})
+    capabilities_config = _parse_capabilities_config(
+        capabilities_raw if isinstance(capabilities_raw, dict) else {}
+    )
+
     memory_raw = raw_config.get("memory", {})
     memory_config = MemoryConfig(
         enabled=_resolve_bool(
@@ -1211,6 +1261,7 @@ def load_config(
         team=team_config,
         code_search=code_search_config,
         repo_map=repo_map_config,
+        capabilities=capabilities_config,
     )
 
 
@@ -1568,6 +1619,7 @@ _SLASH_COMMANDS = [
     "/remember",
     "/forget",
     "/skill",
+    "/attach",
 ]
 _HELP_TEXT = (
     "Available commands:\n"
@@ -1602,7 +1654,9 @@ _HELP_TEXT = (
     "  /reload    Reload config.toml (theme + permission hot-apply; others need restart)\n"
     "  /remember  Save information to persistent memory (/remember <text>)\n"
     "  /forget    Remove information from persistent memory (/forget <text>)\n"
-    "  /skill     Manage generated skills (list | keep <name> | discard <name>)"
+    "  /skill     Manage generated skills (list | keep <name> | discard <name>)\n"
+    "  /attach    Attach an image to your next message (/attach <path>); "
+    "or paste one with Ctrl-V"
 )
 
 
@@ -2064,6 +2118,10 @@ def _build_handlers(
         repo_map_index=repo_map_index,
         recency_tracker=recency_tracker,
         repo_map_recent_files=config.repo_map.recent_files,
+        image_input_enabled=supports_image_input(
+            getattr(provider, "model", "") or "",
+            override=config.capabilities.image_in,
+        ),
     )
 
 
@@ -2727,12 +2785,94 @@ def _cycle_permission_mode(permission: PermissionGuard) -> PermissionMode:
     return next_mode
 
 
+# Terminal image attachments (task 07-14-multimodal) land here, inside the
+# workspace so read_file's safe_path can reach them by relative path.
+_ATTACHMENT_DIRNAME = ".bareagent_attachments"
+
+
+def _handle_attach_command(
+    arg: str,
+    *,
+    workspace_path: Path,
+    attachment_dir: Path,
+    counter: Iterator[int],
+) -> tuple[str | None, str]:
+    """Resolve ``/attach <path>`` to a workspace-relative image path.
+
+    Files already inside the workspace are referenced directly; files outside
+    are copied into ``attachment_dir`` (read_file confines reads to the
+    workspace). Returns ``(relpath | None, feedback)`` -- pure, no side effects
+    beyond the copy, so it is unit-testable.
+    """
+    path = arg.strip().strip('"').strip("'")
+    if not path:
+        return None, "Usage: /attach <path-to-image>"
+    src = Path(path).expanduser()
+    if not src.is_file():
+        return None, f"Error: file not found: {path}"
+    if src.suffix.lower() not in IMAGE_EXTS:
+        supported = ", ".join(sorted(IMAGE_EXTS))
+        return None, f"Error: unsupported image type (supported: {supported}): {path}"
+
+    ws_resolved = workspace_path.resolve()
+    src_resolved = src.resolve()
+    try:
+        rel = src_resolved.relative_to(ws_resolved).as_posix()
+        return rel, f"Attached {rel}; it will be sent with your next message."
+    except ValueError:
+        pass  # outside workspace -> copy it in
+
+    try:
+        attachment_dir.mkdir(parents=True, exist_ok=True)
+        dest = attachment_dir / f"attach-{next(counter)}-{src.name}"
+        shutil.copy(src, dest)
+    except OSError as exc:
+        return None, f"Error: could not copy attachment: {exc}"
+    rel = dest.resolve().relative_to(ws_resolved).as_posix()
+    return rel, f"Attached {rel}; it will be sent with your next message."
+
+
+def _make_paste_handler(
+    workspace_path: Path,
+    attachment_dir: Path,
+    counter: Iterator[int],
+    ui_console: AgentConsole | None,
+) -> Callable[[], str | None]:
+    """Build the Ctrl-V clipboard-image handler for AgentPrompt.
+
+    Returns the workspace-relative path of the saved image, or None (with a
+    hint) when there is no clipboard image / Pillow is not installed.
+    """
+
+    def _on_paste() -> str | None:
+        name = f"paste-{next(counter)}.png"
+        saved = grab_clipboard_image(attachment_dir, name)
+        if saved is None:
+            if ui_console is not None:
+                ui_console.print_status(
+                    "Clipboard: no image found (or Pillow not installed; "
+                    'install with: uv pip install -e ".[clipboard]").'
+                )
+            return None
+        return saved.resolve().relative_to(workspace_path.resolve()).as_posix()
+
+    return _on_paste
+
+
 def _build_stdio_read_fn(
     workspace_path: Path,
     permission: PermissionGuard,
+    *,
+    attachment_dir: Path | None = None,
+    attach_counter: Iterator[int] | None = None,
+    ui_console: AgentConsole | None = None,
 ) -> Callable[[], str]:
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         return _read_stdio_input
+
+    on_paste: Callable[[], str | None] | None = None
+    if attachment_dir is not None and attach_counter is not None:
+        on_paste = _make_paste_handler(workspace_path, attachment_dir, attach_counter, ui_console)
 
     try:
         from bareagent.ui.prompt import AgentPrompt
@@ -2742,6 +2882,7 @@ def _build_stdio_read_fn(
             history_file=workspace_path / ".bareagent_history",
             get_mode_label=lambda: permission.mode.value.upper(),
             cycle_mode=lambda: _cycle_permission_mode(permission).value.upper(),
+            on_paste=on_paste,
         )
         return agent_prompt.read_input
     except Exception:
@@ -3826,6 +3967,12 @@ def _run_stdio_session(
     # prepended onto the next user turn (see _drain_workflow_results). Same
     # lifecycle as pending_team_messages.
     pending_workflow_messages: list[str] = []
+    # Image attachments queued via /attach or Ctrl-V paste, prepended (as a
+    # "please read_file this" prefix) onto the next user turn. Same session-scoped
+    # lifecycle as the pending_* buffers above.
+    pending_attachments: list[str] = []
+    attachment_dir = workspace_path / _ATTACHMENT_DIRNAME
+    attach_counter = itertools.count(1)
     messages = _initial_messages(
         workspace_path,
         skill_summary=skill_loader.get_skill_list_prompt(),
@@ -3845,7 +3992,13 @@ def _run_stdio_session(
     tools = get_tools(mcp_manager, lsp_manager, code_index, repo_map_index)
     permission = _build_permission_guard(config)
     _install_stdio_permission_prompt(permission, ui_console)
-    read_fn = _build_stdio_read_fn(workspace_path, permission)
+    read_fn = _build_stdio_read_fn(
+        workspace_path,
+        permission,
+        attachment_dir=attachment_dir,
+        attach_counter=attach_counter,
+        ui_console=ui_console,
+    )
     base_compact_fn = Compactor(
         provider=provider,
         transcript_mgr=transcript_mgr,
@@ -4005,6 +4158,7 @@ def _run_stdio_session(
                 spawned_agents = {}
                 pending_team_messages.clear()
                 pending_workflow_messages.clear()
+                pending_attachments.clear()
                 subagent_registry.clear()
                 workflow_registry.clear()
                 recency_tracker.clear()
@@ -4098,6 +4252,7 @@ def _run_stdio_session(
                     spawned_agents = {}
                     pending_team_messages.clear()
                     pending_workflow_messages.clear()
+                    pending_attachments.clear()
                     subagent_registry.clear()
                     workflow_registry.clear()
                     recency_tracker.clear()
@@ -4178,6 +4333,7 @@ def _run_stdio_session(
                 spawned_agents = {}
                 pending_team_messages.clear()
                 pending_workflow_messages.clear()
+                pending_attachments.clear()
                 subagent_registry.clear()
                 workflow_registry.clear()
                 recency_tracker.clear()
@@ -4282,6 +4438,7 @@ def _run_stdio_session(
                 spawned_agents = {}
                 pending_team_messages.clear()
                 pending_workflow_messages.clear()
+                pending_attachments.clear()
                 subagent_registry.clear()
                 workflow_registry.clear()
                 recency_tracker.clear()
@@ -4426,6 +4583,17 @@ def _run_stdio_session(
                     console=ui_console,
                 )
                 continue
+            if text == "/attach" or text.startswith("/attach "):
+                rel, feedback = _handle_attach_command(
+                    text[len("/attach") :],
+                    workspace_path=workspace_path,
+                    attachment_dir=attachment_dir,
+                    counter=attach_counter,
+                )
+                if rel is not None:
+                    pending_attachments.append(rel)
+                ui_console.print_status(feedback)
+                continue
             if text == "/reload":
                 _dispatch_reload_command(
                     config=config,
@@ -4515,6 +4683,17 @@ def _run_stdio_session(
                 pending_team_messages,
                 pending_workflow_messages,
             )
+
+            # Fold in image attachments: markers pasted inline this turn plus any
+            # queued via /attach. The prefix tells the model to read_file each one
+            # (which then routes through the vision gate). Attachment prefix goes
+            # first so it stays closest to the user's intent for this turn.
+            text, marker_paths = extract_attachments(text)
+            all_attachments = list(dict.fromkeys(pending_attachments + marker_paths))
+            attachment_prefix = build_attachment_prefix(all_attachments)
+            if attachment_prefix:
+                text = f"{attachment_prefix}\n{text}" if text else attachment_prefix
+            pending_attachments.clear()
 
             messages.append({"role": "user", "content": text})
             snapshot_len = len(messages) - 1

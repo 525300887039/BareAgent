@@ -14,6 +14,7 @@ from bareagent.core.file_recency import FileRecencyTracker
 from bareagent.core.tools import get_tools
 from bareagent.main import (
     MAIN_AGENT_NAME,
+    CapabilitiesConfig,
     ProviderConfig,
     RepoMapConfig,
     RetryConfig,
@@ -431,6 +432,7 @@ def _build_team_handlers(
         subagent=SubagentConfig(max_depth=3, default_type="general-purpose"),
         retry=RetryConfig(),
         repo_map=RepoMapConfig(),
+        capabilities=CapabilitiesConfig(),
     )
     return _make_team_handlers(
         config=config,  # type: ignore[arg-type]
