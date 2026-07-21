@@ -1651,3 +1651,54 @@ See the Summary above; the original detailed bullet list was not captured in thi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 50: Fix session tree cyclic rendering
+
+**Date**: 2026-07-22
+**Task**: Fix session tree cyclic rendering
+**Branch**: `main`
+
+### Summary
+
+Rendered corrupt session lineage cycles fail-open without duplicates and completed all project quality gates.
+
+### Main Changes
+
+- Fixed `render_tree()` so corrupt pure cycles, self-cycles, and mixed forests render every session exactly once.
+- Moved cycle detection before line emission and added deterministic fallback traversal in the original sessions order.
+- Added regression coverage for two-node cycles, self-cycles, independent cycles beside a normal tree, and current markers inside a cycle.
+- Recorded the fail-open lineage rendering rule in the backend persistence spec.
+
+Validation:
+- `uv run pytest tests/test_session_tree.py`: 30 passed.
+- `uv run ruff check src tests`: passed.
+- `uv run ruff format --check src tests`: passed.
+- `uv run pyright`: 0 errors, 7 existing optional-dependency warnings.
+- `uv run pytest`: 1400 passed, 47 deselected.
+- `uv run pytest -m socket`: 11 passed, 1436 deselected.
+- `npm run docs:build` from `docs/`: passed.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e43511f732de366cadabe8f9674a028ee013a281` | (see git log) |
+
+### Testing
+
+- [OK] Session tree: 30 passed
+- [OK] Ruff lint and format check
+- [OK] Pyright: 0 errors
+- [OK] Default pytest: 1400 passed, 47 deselected
+- [OK] Socket pytest: 11 passed
+- [OK] VitePress docs build
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
