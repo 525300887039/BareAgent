@@ -90,9 +90,11 @@ include = [
     "tests",
     "scripts",
     ".github/workflows/ci.yml",
+    ".github/workflows/release.yml",
     ".githooks/pre-push",
     "pyproject.toml",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
 ]
 

@@ -85,6 +85,31 @@ pytest tests/test_loop.py -k "stream" # by name substring
 
 ---
 
+## Releases are gated by built artifacts
+
+`.github/workflows/ci.yml` is the single source of truth for the Python quality
+gate. It runs directly for PR/main events and is called from
+`.github/workflows/release.yml` through `workflow_call`; do not copy the Ruff,
+Pyright, or pytest commands into a second release-only implementation.
+
+Before either TestPyPI or PyPI receives OIDC permission, the release workflow
+must pass the reusable quality gate, build from a clean `dist/`, validate exactly
+one wheel and one sdist, run `twine check`, and install-test both artifacts in
+fresh environments. Tag builds must use strict `vMAJOR.MINOR.PATCH` syntax and
+the wheel/sdist metadata version must exactly match the hatch-vcs tag version.
+
+**Rules**:
+
+- Publish jobs explicitly depend on quality, build, wheel smoke, and sdist smoke.
+- Only publish jobs receive `id-token: write`; other release jobs remain read-only.
+- Artifact upload uses exact wheel/sdist globs, never a broad or uncleared `dist/`.
+- Installation smoke tests install the built artifact, never editable source.
+- External actions in the CI/PyPI release path use immutable 40-character commit SHAs.
+- Changes to these contracts require regression coverage in
+  `tests/test_release_workflow.py`.
+
+---
+
 ## Conventional Commits (with the project's exact casing)
 
 Commit subject format observed in `git log`:

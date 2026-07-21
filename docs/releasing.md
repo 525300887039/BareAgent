@@ -1,102 +1,166 @@
 # 发布到 PyPI（Releasing）
 
-BareAgent 通过 **git tag 触发 GitHub Actions + PyPI Trusted Publishing (OIDC)** 自动发布，
-**不在 GitHub Secrets 里存任何 PyPI token**。版本号由 **hatch-vcs 从 git tag 自动派生**
-（打 tag = 定版本，无需手改 `pyproject.toml`）。
+BareAgent 使用 **Git tag + GitHub Actions + PyPI Trusted Publishing (OIDC)** 发布。
+版本由 **hatch-vcs** 从 Git 历史和 tag 派生；不要在 `pyproject.toml` 或包源码中维护第二份版本号，
+也不要在 GitHub Secrets 中保存长期 PyPI token。
 
-工作流文件：[`.github/workflows/release.yml`](../.github/workflows/release.yml)
+工作流：
 
-- **推 `vX.Y.Z` tag** → 构建并发布到正式 **PyPI**
-- **手动 `Run workflow`（workflow_dispatch）** → 发布到 **TestPyPI**（演练用）
+- [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)：PR、main 和 release 共用的质量门。
+- [`.github/workflows/release.yml`](../.github/workflows/release.yml)：构建、安装冒烟和 OIDC 发布。
 
----
+## 一、PR 与 main CI
 
-## 一、一次性设置（首次发布前必做）
+`ci.yml` 直接响应 main push 和 pull request，也通过 `workflow_call` 被 release workflow 复用。
+它包含：
 
-OIDC Trusted Publishing 需要在 PyPI 端登记一个「pending publisher」绑定，把
-「哪个 GitHub 仓库的哪个 workflow」授权为可发布者。**字段必须完全匹配**，任一不符都会
-导致发布步骤 403（`invalid-publisher`）。
+- Ubuntu + Windows 的默认 pytest；
+- Linux 上的 Ruff lint 与 Ruff format check；
+- Linux 上的 Pyright；
+- Linux 上的 localhost socket suite。
 
-本项目的绑定值：
+main push 失败时，`notify` job 会维护 `ci-failure` issue。release 调用复用 workflow 时，
+`github.event_name == 'push' && github.ref == 'refs/heads/main'` 不会同时成立，因此该 job 跳过，
+也不会获得 issue 写权限。
 
-| 字段 | 值 |
-|---|---|
-| PyPI Project Name | `bareagent-cli` |
-| Owner | `525300887039` |
-| Repository name | `BareAgent` |
-| Workflow name | `release.yml` |
-| Environment name | `pypi`（PyPI）/ `testpypi`（TestPyPI） |
-
-### 1. PyPI（正式）
-
-1. 登录 <https://pypi.org>，打开 **<https://pypi.org/manage/account/publishing/>**。
-2. 在「Add a new pending publisher」选 **GitHub**，按上表填入，Environment name 填 `pypi`。
-3. 点 **Add**。
-
-> 项目无需预先存在：首次成功发布时 PyPI 会自动创建 `bareagent-cli` 项目并转正这个 pending publisher。
-> 注意：pending publisher **不预留名字**——发布前先确认 `bareagent-cli` 在 <https://pypi.org/project/bareagent-cli/> 仍未被占用。
-
-### 2. TestPyPI（演练，独立账号）
-
-TestPyPI 是与 PyPI **完全独立**的注册表（独立账号、独立绑定）。
-
-1. 在 <https://test.pypi.org> 注册/登录（与 PyPI 不是同一账号）。
-2. 打开 **<https://test.pypi.org/manage/account/publishing/>**，同样填上表，但 Environment name 填 `testpypi`。
-3. 点 **Add**。
-
-### 3. GitHub Environments
-
-仓库 **Settings → Environments**：
-
-- 新建环境 `pypi`，建议添加 **Required reviewers**（每次正式发布前需人工点 Approve，纵深防御）。
-- 新建环境 `testpypi`（演练环境，通常无需审批）。
-
----
-
-## 二、正式发布一个版本
+本地完整质量门：
 
 ```bash
-# 1. 确保 main 干净、CI 绿
-git switch main && git pull
-
-# 2. 打版本 tag（X.Y.Z 语义化版本；hatch-vcs 会据此定版本号）
-git tag -a v0.1.0 -m "v0.1.0"
-
-# 3. 推 tag —— 触发 release.yml
-git push origin v0.1.0
+uv run ruff check src tests
+uv run ruff format --check src tests
+uv run pyright
+uv run pytest
+uv run pytest -m socket
 ```
 
-随后 GitHub Actions：构建 sdist+wheel → `twine check` → （若配了 reviewer）等待审批 →
-通过 OIDC 发布到 PyPI。发布后任何人可：
+文档是单独的门：
 
 ```bash
-uv tool install bareagent-cli      # 或 pipx install bareagent-cli
-bareagent --help
+cd docs
+npm run docs:build
 ```
 
-> **版本号不可覆盖**：PyPI 不允许重传同一版本/文件，删除也是永久的。发布失败需修复后
-> **打一个新的更高版本 tag** 重发（不要复用同号 tag）。
+## 二、发布 workflow 的阻塞路径
 
----
+tag push 和手动 TestPyPI 演练执行同一条 DAG：
 
-## 三、发布前演练（TestPyPI dry run）
+```text
+quality (调用完整 ci.yml)
 
-正式 tag 之前，可先把整条管线（OIDC 握手、构建、上传）在 TestPyPI 上跑一遍：
+build (严格 ref -> 清空 dist -> wheel+sdist -> 版本/twine 校验 -> artifact)
+  ├─ smoke-wheel (全新 venv，从 wheel 安装)
+  └─ smoke-sdist (全新 venv，从 sdist 构建并安装)
 
-1. GitHub 仓库 **Actions → Publish to PyPI → Run workflow**（即 `workflow_dispatch`）。
-2. 它会构建当前分支并发布到 TestPyPI。未打 tag 的提交版本形如 `0.1.1.devN`
-   （已配置 `local_scheme = "no-local-version"`，去掉 `+local` 段以便可上传；重复演练靠
-   `skip-existing` 不报错）。
-3. 验证：`uv tool install --index-url https://test.pypi.org/simple/ bareagent-cli`。
+quality + build + smoke-wheel + smoke-sdist
+  ├─ publish-to-pypi      (严格正式 tag push)
+  └─ publish-to-testpypi  (workflow_dispatch)
+```
 
----
+两个 publish jobs 都显式 `needs` 四个前置 jobs。只有实际 publish jobs 有
+`id-token: write`；测试、构建和冒烟 jobs 没有 OIDC 发布权限。相同 ref 的 runs 串行，且不会
+取消已经进入发布过程的 run。
 
-## 四、原理与排错要点
+build job 会先删除并重建 `dist/`，且只接受一个 wheel 和一个 sdist。它读取 wheel
+`METADATA` 与 sdist `PKG-INFO`：二者版本必须一致；tag 构建还必须与 tag 去掉 `v` 后完全一致。
+artifact 和 twine check 只接收本次的 `dist/*.whl` 与 `dist/*.tar.gz`。
 
-- **OIDC，无 token**：`id-token: write` 只加在发布 job（非全局），运行时换取 PyPI 短时令牌。
-- **`fetch-depth: 0`**：checkout 必须取全历史+tag，否则 hatch-vcs 看不到 tag、版本号错。
-- **杂牌 tag**：仓库历史有非版本 tag（如 `backup-before-email-rewrite`）；`pyproject.toml`
-  的 `tag-pattern` 已限定只认 `vX.Y.Z`，不受其干扰。
-- **403 / invalid-publisher**：逐一核对 owner / repo / workflow 文件名 / environment 四项是否与
-  PyPI 绑定完全一致。
-- **Linux only**：`pypa/gh-action-pypi-publish` 是 Docker action，只能在 `ubuntu-latest` 上跑。
+wheel/sdist 冒烟都会验证：
+
+- `import bareagent`；
+- `bareagent --help`；
+- 安装包内的 `config.toml`；
+- 内置 `code-review`、`git`、`test` skills 的 `SKILL.md`。
+
+## 三、一次性 Trusted Publisher 设置
+
+PyPI 与 TestPyPI 是两个独立注册表，需要分别配置：
+
+| 字段 | PyPI | TestPyPI |
+|---|---|---|
+| Project | `bareagent-cli` | `bareagent-cli` |
+| Owner | `525300887039` | `525300887039` |
+| Repository | `BareAgent` | `BareAgent` |
+| Workflow | `release.yml` | `release.yml` |
+| Environment | `pypi` | `testpypi` |
+
+对于已经存在的项目，在 PyPI/TestPyPI 项目的 **Manage → Publishing** 页面添加 GitHub
+Trusted Publisher；尚未创建的项目则分别在
+[PyPI account publishing](https://pypi.org/manage/account/publishing/) 和
+[TestPyPI account publishing](https://test.pypi.org/manage/account/publishing/) 添加 pending
+publisher。两边的绑定相互独立，owner、repository、workflow 与 environment 必须和上表完全一致。
+
+在 GitHub Settings → Environments 创建 `pypi` 与 `testpypi`。正式 `pypi` 环境建议配置
+Required reviewers；等待 reviewer 时 workflow 是 pending，不代表失败或成功。
+
+## 四、TestPyPI 演练
+
+正式 tag 前先把 release candidate commit push 到 main，并等待该 SHA 的 main CI 成功。然后：
+
+1. GitHub Actions → **Publish to PyPI** → **Run workflow**。
+2. 观察 quality、build、两个 smoke 和 `publish-to-testpypi` 全部成功。
+3. 从 build job 输出取得实际 hatch-vcs dev version，例如 `0.1.1.dev70`。
+4. 在全新环境安装该精确版本。TestPyPI 通常没有依赖包，因此只让 BareAgent 本身来自
+   TestPyPI，依赖回退到正式 PyPI：
+
+```bash
+uv venv .testpypi-smoke
+uv pip install --python .testpypi-smoke/bin/python \
+  --index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ \
+  bareagent-cli==<actual-dev-version>
+.testpypi-smoke/bin/python -c "import bareagent; print(bareagent.__file__)"
+.testpypi-smoke/bin/bareagent --help
+```
+
+TestPyPI 演练不使用 `skip-existing`。注册表不允许覆盖同版本文件：如果同一 commit 的 dev
+version 已存在，重跑上传应明确失败，而不是伪装成本次 artifact 已发布。确认既有文件正确，或产生
+一个经过完整检查的新 commit（从而得到新的 dev version）再演练。
+
+## 五、正式 v0.2.0 / PyPI 发布
+
+发布候选必须满足：工作区干净、完整本地质量门与 docs build 通过、干净 wheel/sdist 本地安装
+冒烟通过、目标 commit 已 push、GitHub CI 与 TestPyPI 演练成功，并确认本地/远端/PyPI 均没有
+`v0.2.0`。
+
+本地候选构建也使用与 workflow 相同的确定产物约束：
+
+```bash
+uv build --out-dir dist --clear --no-create-gitignore
+uv run python scripts/release_contract.py \
+  --event-name workflow_dispatch --ref-type branch --ref-name main --dist-dir dist
+uvx twine check dist/*.whl dist/*.tar.gz
+```
+
+得到最终发布确认后，在已报告的最终 commit 上创建 annotated tag：
+
+```bash
+git tag -a v0.2.0 -m "v0.2.0" <final-commit-sha>
+git push origin v0.2.0
+```
+
+GitHub 的 `v*` 只是触发粗筛；workflow 会拒绝任何不是严格
+`vMAJOR.MINOR.PATCH` 的 tag，包括预发布后缀、build metadata、多余段和带前导零的数字。
+
+tag push 后持续观察对应 **Publish to PyPI** run，直到 `publish-to-pypi` 成功或出现明确失败。
+成功后验证：
+
+```bash
+uv venv .pypi-smoke
+uv pip install --python .pypi-smoke/bin/python bareagent-cli==0.2.0
+.pypi-smoke/bin/python -c "import bareagent; print(bareagent.__file__)"
+.pypi-smoke/bin/bareagent --help
+```
+
+## 六、失败与重试
+
+- **tag 前失败**：修复后产生新 commit，重跑完整本地门、main CI 和 TestPyPI；不要降低门或手工上传。
+- **TestPyPI 版本冲突**：不能覆盖。核对已存在文件，或以新 commit 的新 dev version 重跑。
+- **等待 environment approval**：审批后继续同一 run；不要另开并行发布。
+- **tag workflow 在 PyPI 上传前失败**：不要移动或重建 tag。修复不涉及 tag 内容的瞬时环境问题时，
+  可 rerun 同一个 GitHub Actions run；代码/产物问题需要后续新版本修复。
+- **PyPI 已出现部分或完整 `0.2.0` 文件后失败**：不要删除、覆盖、移动 tag 或重传同名文件。
+  先核对注册表实际状态；若需要修复，使用更高的新版本（例如 `v0.2.1`）并重新走全部链路。
+- **自动化失败但手动上传可行**：仍视为发布链路失败。修复 workflow 和契约测试，不用手工成功替代。
+
+CI 与 PyPI release 链路中的第三方 GitHub Actions 固定到 40 位 commit SHA。升级 action 时先核对
+上游 release/安全公告，更新 SHA 与行尾版本注释，并让发布契约测试保持通过。

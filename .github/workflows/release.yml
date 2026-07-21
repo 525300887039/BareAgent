@@ -1,69 +1,189 @@
 name: Publish to PyPI
 
-# Tag push (vX.Y.Z) -> publish to PyPI.
-# Manual run (workflow_dispatch) -> publish to TestPyPI for a dry run.
-#
-# Auth is PyPI Trusted Publishing (OIDC) — no API token is stored in GitHub
-# Secrets. See docs/releasing.md for the one-time pending-publisher binding on
-# pypi.org / test.pypi.org and the GitHub Environments setup.
-
+# GitHub's tag filter is only a coarse trigger. The build job enforces strict
+# vMAJOR.MINOR.PATCH syntax and verifies hatch-vcs metadata before artifacts can
+# reach either Trusted Publishing job.
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch: {}
 
+permissions: {}
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  quality:
+    name: Complete CI quality gate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
   build:
-    name: Build distribution
+    name: Build and validate distributions
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.contract.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          # hatch-vcs derives the version from git tags; a shallow clone hides
-          # tags and breaks versioning, so fetch full history + tags.
+          # hatch-vcs needs the complete tag history to derive the version.
           fetch-depth: 0
           persist-credentials: false
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Install uv and Python 3.12
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           python-version: "3.12"
-      - name: Build sdist + wheel
-        run: uv build
+
+      - name: Validate release ref
+        run: |
+          python scripts/release_contract.py \
+            --event-name "${{ github.event_name }}" \
+            --ref-type "${{ github.ref_type }}" \
+            --ref-name "${{ github.ref_name }}" \
+            --ref-only
+
+      - name: Clean distribution directory
+        run: |
+          rm -rf dist
+          mkdir dist
+
+      - name: Build one sdist and one wheel
+        run: uv build --out-dir dist --no-create-gitignore
+
+      - name: Validate artifact inventory and hatch-vcs version
+        id: contract
+        shell: bash
+        run: |
+          version=$(
+            python scripts/release_contract.py \
+              --event-name "${{ github.event_name }}" \
+              --ref-type "${{ github.ref_type }}" \
+              --ref-name "${{ github.ref_name }}" \
+              --dist-dir dist
+          )
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "Validated bareagent-cli ${version}"
+
       - name: Check distribution metadata
-        run: uvx twine check dist/*
-      - name: Upload distributions
-        uses: actions/upload-artifact@v5
+        run: uvx twine check dist/*.whl dist/*.tar.gz
+
+      - name: Upload exact distributions
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: python-package-distributions
-          path: dist/
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  smoke-wheel:
+    name: Install and smoke-test wheel
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Install uv and Python 3.12
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Download distributions
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: python-package-distributions
+          path: dist
+
+      - name: Revalidate downloaded distributions
+        run: |
+          python scripts/release_contract.py \
+            --event-name "${{ github.event_name }}" \
+            --ref-type "${{ github.ref_type }}" \
+            --ref-name "${{ github.ref_name }}" \
+            --dist-dir dist
+
+      - name: Install wheel in a fresh environment
+        run: |
+          uv venv .smoke-wheel
+          uv pip install --python .smoke-wheel/bin/python dist/*.whl
+          .smoke-wheel/bin/python scripts/smoke_installed_package.py
+          .smoke-wheel/bin/bareagent --help
+
+  smoke-sdist:
+    name: Build, install, and smoke-test sdist
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Install uv and Python 3.12
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Download distributions
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: python-package-distributions
+          path: dist
+
+      - name: Revalidate downloaded distributions
+        run: |
+          python scripts/release_contract.py \
+            --event-name "${{ github.event_name }}" \
+            --ref-type "${{ github.ref_type }}" \
+            --ref-name "${{ github.ref_name }}" \
+            --dist-dir dist
+
+      - name: Install sdist in a fresh environment
+        run: |
+          uv venv .smoke-sdist
+          uv pip install --python .smoke-sdist/bin/python dist/*.tar.gz
+          .smoke-sdist/bin/python scripts/smoke_installed_package.py
+          .smoke-sdist/bin/bareagent --help
 
   publish-to-pypi:
     name: Publish to PyPI
-    # Only on a version tag push.
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [build]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [quality, build, smoke-wheel, smoke-sdist]
     runs-on: ubuntu-latest
     environment:
       name: pypi
       url: https://pypi.org/p/bareagent-cli
     permissions:
-      id-token: write          # MANDATORY for Trusted Publishing (this job only)
+      id-token: write
     steps:
-      - name: Download distributions
-        uses: actions/download-artifact@v6
+      - name: Download validated distributions
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: python-package-distributions
-          path: dist/
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        # No user/password: OIDC Trusted Publishing is implicit.
+          path: dist
+
+      - name: Publish to PyPI with Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # release/v1
+        with:
+          packages-dir: dist/
 
   publish-to-testpypi:
     name: Publish to TestPyPI (dry run)
-    # Only on a manual run.
     if: github.event_name == 'workflow_dispatch'
-    needs: [build]
+    needs: [quality, build, smoke-wheel, smoke-sdist]
     runs-on: ubuntu-latest
     environment:
       name: testpypi
@@ -71,14 +191,14 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - name: Download distributions
-        uses: actions/download-artifact@v6
+      - name: Download validated distributions
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: python-package-distributions
-          path: dist/
-      - name: Publish to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+          path: dist
+
+      - name: Publish to TestPyPI with Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # release/v1
         with:
+          packages-dir: dist/
           repository-url: https://test.pypi.org/legacy/
-          # Re-dispatching the dry run can reuse a dev version; don't fail on it.
-          skip-existing: true

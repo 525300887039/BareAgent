@@ -283,20 +283,27 @@ npm run docs:dev
 ## 🛠️ 开发
 
 ```bash
-# 测试
-uv run pytest                             # 全部测试
-uv run pytest tests/test_loop.py          # 单个文件
-uv run pytest tests/test_loop.py -k "test_name"  # 单个测试
+# Python 质量门
+uv run ruff check src tests
+uv run ruff format --check src tests
+uv run pyright
+uv run pytest                              # 默认测试（排除 manual）
+uv run pytest -m socket                    # localhost socket 专项
 
-# 代码检查与格式化
-uv run ruff check src tests               # 检查
-uv run ruff check --fix src tests          # 自动修复
-uv run ruff format src tests               # 格式化
+# 定向测试 / 本地格式化
+uv run pytest tests/test_loop.py
+uv run pytest tests/test_loop.py -k "test_name"
+uv run ruff check --fix src tests
+uv run ruff format src tests
+
+# 文档构建
+cd docs
+npm run docs:build
 ```
 
 ### 本地 CI 闸（pre-push hook）
 
-仓库自带一个 push 前的本地检查闸，跑的就是 CI 同款命令（ruff check、format check、pyright、pytest 全部经 `uv run`），
+仓库自带一个 push 前的本地核心检查闸（ruff check、format check、pyright、默认 pytest 全部经 `uv run`），
 在代码推上去变红之前先在本地拦下来。**用 `uv run` 而非 `python -m pytest`**——后者会把当前目录前插到
 `sys.path`，掩盖只有 CI 裸 `uv run pytest` 才暴露的导入差异。
 
@@ -311,7 +318,9 @@ bash scripts/ci-check.sh
 BAREAGENT_PREPUSH_SKIP=1 git push  # 或 git push --no-verify
 ```
 
-万一本地闸被绕过、main 仍变红，CI 会自动开一个 `ci-failure` issue 跟踪，恢复后自动关闭。
+socket 专项与文档构建按上面的命令单独运行；PR/main CI 会额外阻塞 socket suite。万一本地闸被绕过、
+main 仍变红，CI 会自动开一个 `ci-failure` issue 跟踪，恢复后自动关闭。tag/TestPyPI 发布也会先复用
+完整 CI 门，详细发布路径见 [`docs/releasing.md`](docs/releasing.md)。
 
 提交信息遵循 Conventional Commits：`Fix:`、`Feat:`、`Refactor:`、`Test:`、`Docs:`
 
