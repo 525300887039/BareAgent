@@ -1,0 +1,40 @@
+{
+  "id": "fix-session-tree-cycles",
+  "name": "fix-session-tree-cycles",
+  "title": "Fix session tree cyclic data rendering",
+  "description": "Render every transcript exactly once when the session lineage sidecar contains pure cycles, self-cycles, or mixed forests.",
+  "status": "completed",
+  "dev_type": null,
+  "scope": "backend/memory",
+  "package": null,
+  "priority": "P2",
+  "creator": "ducat",
+  "assignee": "ducat",
+  "createdAt": "2026-07-21",
+  "completedAt": "2026-07-22",
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": "e43511f732de366cadabe8f9674a028ee013a281",
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "07-21-session-tree-release-v0-2-0",
+  "relatedFiles": [
+    "src/bareagent/memory/session_tree.py",
+    "tests/test_session_tree.py",
+    ".trellis/spec/backend/state-persistence.md"
+  ],
+  "notes": "Implemented and fully validated before the release-hardening child task. Work commit contains no release changes.",
+  "meta": {
+    "validation": {
+      "targeted_pytest": "30 passed",
+      "ruff": "passed",
+      "pyright": "0 errors, 7 existing optional-dependency warnings",
+      "pytest": "1400 passed, 47 deselected",
+      "socket_pytest": "11 passed, 1436 deselected",
+      "docs_build": "passed"
+    },
+    "journal_session": 50
+  }
+}
