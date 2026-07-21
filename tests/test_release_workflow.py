@@ -139,12 +139,14 @@ def test_distribution_contract_rejects_tag_version_mismatch(tmp_path: Path) -> N
 
 def test_release_reuses_the_complete_ci_workflow() -> None:
     ci = _read(".github/workflows/ci.yml")
+    quality_workflow = _read(".github/workflows/quality.yml")
     release = _read(".github/workflows/release.yml")
     quality = _job(release, "quality")
-    ci_commands = _command_lines(ci)
+    quality_commands = _command_lines(quality_workflow)
 
-    assert "workflow_call:" in ci
-    assert "uses: ./.github/workflows/ci.yml" in quality
+    assert "workflow_call:" in quality_workflow
+    assert "uses: ./.github/workflows/quality.yml" in _job(ci, "quality")
+    assert "uses: ./.github/workflows/quality.yml" in quality
     for command in (
         "uv run ruff check src tests",
         "uv run ruff format --check src tests",
@@ -152,7 +154,22 @@ def test_release_reuses_the_complete_ci_workflow() -> None:
         "uv run pytest",
         "uv run pytest -m socket",
     ):
-        assert command in ci_commands
+        assert command in quality_commands
+
+
+def test_reusable_quality_gate_cannot_request_release_write_permissions() -> None:
+    ci = _read(".github/workflows/ci.yml")
+    quality_workflow = _read(".github/workflows/quality.yml")
+    release = _read(".github/workflows/release.yml")
+    quality_header = quality_workflow.split("\njobs:", maxsplit=1)[0]
+
+    assert re.search(r"(?m)^permissions:\n  contents: read$", quality_header)
+    assert "issues: write" not in quality_workflow
+    assert "id-token: write" not in quality_workflow
+    for caller in (_job(ci, "quality"), _job(release, "quality")):
+        assert "uses: ./.github/workflows/quality.yml" in caller
+        assert _permissions(caller) == ["contents: read"]
+    assert "issues: write" in _job(ci, "notify")
 
 
 def test_publish_jobs_explicitly_need_every_gate() -> None:
@@ -220,7 +237,7 @@ def test_release_serializes_the_same_ref_without_cancelling() -> None:
 
 
 def test_external_actions_are_pinned_to_commits() -> None:
-    for workflow_name in ("ci.yml", "release.yml"):
+    for workflow_name in ("ci.yml", "quality.yml", "release.yml"):
         for line in _read(f".github/workflows/{workflow_name}").splitlines():
             stripped = line.strip()
             if not stripped.startswith("uses: "):
@@ -241,5 +258,6 @@ def test_sdist_contains_release_contract_layout() -> None:
     include = set(pyproject["tool"]["hatch"]["build"]["targets"]["sdist"]["include"])
     assert "scripts" in include
     assert ".github/workflows/ci.yml" in include
+    assert ".github/workflows/quality.yml" in include
     assert ".github/workflows/release.yml" in include
     assert "CHANGELOG.md" in include

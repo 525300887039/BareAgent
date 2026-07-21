@@ -6,22 +6,22 @@ BareAgent 使用 **Git tag + GitHub Actions + PyPI Trusted Publishing (OIDC)** �
 
 工作流：
 
-- [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)：PR、main 和 release 共用的质量门。
+- [`.github/workflows/quality.yml`](../.github/workflows/quality.yml)：PR、main 和 release 共用的纯质量门。
+- [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)：PR/main 调度与 main 状态通知。
 - [`.github/workflows/release.yml`](../.github/workflows/release.yml)：构建、安装冒烟和 OIDC 发布。
 
 ## 一、PR 与 main CI
 
-`ci.yml` 直接响应 main push 和 pull request，也通过 `workflow_call` 被 release workflow 复用。
-它包含：
+`ci.yml` 直接响应 main push 和 pull request；它与 release workflow 都通过 `workflow_call`
+调用只读的 `quality.yml`。质量门包含：
 
 - Ubuntu + Windows 的默认 pytest；
 - Linux 上的 Ruff lint 与 Ruff format check；
 - Linux 上的 Pyright；
 - Linux 上的 localhost socket suite。
 
-main push 失败时，`notify` job 会维护 `ci-failure` issue。release 调用复用 workflow 时，
-`github.event_name == 'push' && github.ref == 'refs/heads/main'` 不会同时成立，因此该 job 跳过，
-也不会获得 issue 写权限。
+main push 失败时，`ci.yml` 内独立的 `notify` job 会维护 `ci-failure` issue。它不在可复用的
+`quality.yml` 中，因此 release 的 read-only caller 不会继承或请求 issue 写权限。
 
 本地完整质量门：
 
@@ -45,7 +45,7 @@ npm run docs:build
 tag push 和手动 TestPyPI 演练执行同一条 DAG：
 
 ```text
-quality (调用完整 ci.yml)
+quality (调用完整 quality.yml)
 
 build (严格 ref -> 清空 dist -> wheel+sdist -> 版本/twine 校验 -> artifact)
   ├─ smoke-wheel (全新 venv，从 wheel 安装)

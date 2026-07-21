@@ -82,10 +82,10 @@ def _command_lines(text: str) -> str:
 
 
 def test_ci_workflow_runs_faithful_uv_run_pytest() -> None:
-    ci = _read(".github/workflows/ci.yml")
-    assert "uv run pytest" in ci
+    quality = _read(".github/workflows/quality.yml")
+    assert "uv run pytest" in quality
     # `python -m pytest` prepends cwd to sys.path and would re-mask the import bug.
-    assert "python -m pytest" not in _command_lines(ci)
+    assert "python -m pytest" not in _command_lines(quality)
 
 
 def test_ci_check_script_runs_faithful_uv_run_pytest() -> None:
@@ -104,18 +104,19 @@ def test_ci_workflow_has_notify_job() -> None:
 
 
 def test_ci_workflow_has_socket_job() -> None:
-    ci = _read(".github/workflows/ci.yml")
-    assert "socket:" in ci
+    quality = _read(".github/workflows/quality.yml")
+    assert "socket:" in quality
     # The socket job's whole point: run the otherwise-zero-coverage socket suite.
-    assert "uv run pytest -m socket" in ci
+    assert "uv run pytest -m socket" in quality
 
 
-def test_notify_depends_on_socket_job() -> None:
-    # Socket-job failures on main must also trigger the ci-failure issue; if notify
-    # only watched `test`, a socket regression would redden CI with no tracking issue.
+def test_notify_depends_on_complete_reusable_quality_gate() -> None:
+    # The called gate folds Linux, Windows, lint/type, and socket results into one
+    # caller result, so any inner failure must still trigger the main-status notifier.
     ci = _read(".github/workflows/ci.yml")
-    assert "needs: [test, socket]" in ci
-    assert "socket:${{ needs.socket.result }}" in ci
+    assert "uses: ./.github/workflows/quality.yml" in ci
+    assert "needs: [quality]" in ci
+    assert "quality:${{ needs.quality.result }}" in ci
 
 
 def test_socket_marker_registered() -> None:
@@ -127,10 +128,10 @@ def test_socket_marker_registered() -> None:
 def test_ci_test_job_covers_windows() -> None:
     # CI must keep testing the Windows dev platform, not just Linux; fail-fast off
     # so a Windows-only failure doesn't mask/cancel the Linux result.
-    ci = _read(".github/workflows/ci.yml")
-    assert "windows-latest" in ci
-    assert "ubuntu-latest" in ci
-    assert "fail-fast: false" in ci
+    quality = _read(".github/workflows/quality.yml")
+    assert "windows-latest" in quality
+    assert "ubuntu-latest" in quality
+    assert "fail-fast: false" in quality
 
 
 def test_ruff_pinned_exact() -> None:
@@ -143,9 +144,9 @@ def test_ruff_pinned_exact() -> None:
 
 def test_format_check_enforced_in_ci_and_local_gate() -> None:
     # Bulk-reformat only "sticks" if both CI and the pre-push gate reject drift.
-    ci = _read(".github/workflows/ci.yml")
+    quality = _read(".github/workflows/quality.yml")
     gate = _read("scripts/ci-check.sh")
-    assert "ruff format --check src tests" in ci
+    assert "ruff format --check src tests" in quality
     assert "ruff format --check src tests" in gate
 
 
@@ -165,8 +166,8 @@ def test_pyproject_keeps_pythonpath_root() -> None:
 def test_ci_workflow_runs_pyright() -> None:
     # pyright is configured in [tool.pyright] but must actually run in CI; otherwise
     # it's a "configured but never enforced" gate -- the failure mode this task closed.
-    ci = _read(".github/workflows/ci.yml")
-    assert "uv run pyright" in ci
+    quality = _read(".github/workflows/quality.yml")
+    assert "uv run pyright" in quality
 
 
 def test_ci_check_script_runs_pyright() -> None:
@@ -199,5 +200,6 @@ def test_sdist_includes_repo_layout_files_used_by_tests() -> None:
     include = set(pyproject["tool"]["hatch"]["build"]["targets"]["sdist"]["include"])
     assert "scripts" in include
     assert ".github/workflows/ci.yml" in include
+    assert ".github/workflows/quality.yml" in include
     assert ".githooks/pre-push" in include
     assert "pyproject.toml" in include

@@ -20,7 +20,7 @@ jobs:
     name: Complete CI quality gate
     permissions:
       contents: read
-    uses: ./.github/workflows/ci.yml
+    uses: ./.github/workflows/quality.yml
 
   build:
     name: Build and validate distributions

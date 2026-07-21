@@ -87,10 +87,12 @@ pytest tests/test_loop.py -k "stream" # by name substring
 
 ## Releases are gated by built artifacts
 
-`.github/workflows/ci.yml` is the single source of truth for the Python quality
-gate. It runs directly for PR/main events and is called from
-`.github/workflows/release.yml` through `workflow_call`; do not copy the Ruff,
-Pyright, or pytest commands into a second release-only implementation.
+`.github/workflows/quality.yml` is the single source of truth for the Python
+quality gate. Both the PR/main orchestrator (`ci.yml`) and the release workflow
+call it through `workflow_call`; do not copy the Ruff, Pyright, or pytest
+commands into a second event-specific implementation. Keep main-only jobs that
+need write permissions (such as the CI failure issue notifier) in `ci.yml`,
+outside the reusable quality workflow, so read-only release callers can load it.
 
 Before either TestPyPI or PyPI receives OIDC permission, the release workflow
 must pass the reusable quality gate, build from a clean `dist/`, validate exactly

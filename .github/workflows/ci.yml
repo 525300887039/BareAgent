@@ -4,78 +4,20 @@ on:
   push:
     branches: [main]
   pull_request:
-  workflow_call:
 
 permissions:
   contents: read
 
 jobs:
-  test:
-    # Run the default suite on both the Linux CI target and the Windows dev
-    # platform, so platform-divergent bugs (paths, CRLF, encoding) surface in CI.
-    # fail-fast: false so one OS failing doesn't cancel the other's result.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-
-      - name: Install uv (+ Python 3.12)
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          python-version: "3.12"
-          enable-cache: true
-
-      - name: Install dependencies
-        run: |
-          uv venv
-          uv pip install -e ".[dev]"
-
-      - name: Lint + format check (ruff)
-        # ruff results are platform-independent; run it once (on Linux) only.
-        # format --check enforces the pinned-ruff formatting so the tree can't drift.
-        if: runner.os == 'Linux'
-        run: |
-          uv run ruff check src tests
-          uv run ruff format --check src tests
-
-      - name: Type check (pyright)
-        # Type results are platform-independent; run once (on Linux) only. Blocking:
-        # errors fail the test job -> fold into needs.test.result -> notify covers it.
-        if: runner.os == 'Linux'
-        run: uv run pyright
-
-      - name: Test (pytest)
-        run: uv run pytest
-
-  socket:
-    name: Socket tests (localhost)
-    # The localhost-socket suite (web viewer + MCP http transport) is excluded
-    # from the default run because it flakes on dev loopback; run it here on Linux
-    # where loopback is reliable, so it isn't left with zero automated coverage.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-
-      - name: Install uv (+ Python 3.12)
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          python-version: "3.12"
-          enable-cache: true
-
-      - name: Install dependencies
-        run: |
-          uv venv
-          uv pip install -e ".[dev]"
-
-      - name: Socket tests (pytest -m socket)
-        run: uv run pytest -m socket
+  quality:
+    name: Complete Python quality gate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/quality.yml
 
   notify:
     name: Track main status
-    needs: [test, socket]
+    needs: [quality]
     # Only on pushes to main, regardless of whether the upstream jobs passed or
     # failed, so we can both open the tracking issue on red and close it on recovery.
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -90,7 +32,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 scripts/ci_notify.py \
-            --conclusion "test:${{ needs.test.result }}" \
-            --conclusion "socket:${{ needs.socket.result }}" \
+            --conclusion "quality:${{ needs.quality.result }}" \
             --sha "${{ github.sha }}" \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
