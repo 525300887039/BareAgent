@@ -253,6 +253,14 @@ def test_testpypi_does_not_mask_duplicate_versions() -> None:
     assert "skip-existing" not in job
 
 
+def test_testpypi_install_docs_use_the_exact_registry_wheel() -> None:
+    docs = _read("docs/releasing.md")
+    assert "https://test.pypi.org/pypi/bareagent-cli/<actual-dev-version>/json" in docs
+    assert "https://test-files.pythonhosted.org/*" in docs
+    assert 'uv pip install --python .testpypi-smoke/bin/python "$TESTPYPI_WHEEL_URL"' in docs
+    assert "--extra-index-url https://pypi.org/simple/" not in docs
+
+
 def test_sdist_contains_release_contract_layout() -> None:
     pyproject = tomllib.loads(_read("pyproject.toml"))
     include = set(pyproject["tool"]["hatch"]["build"]["targets"]["sdist"]["include"])

@@ -99,18 +99,30 @@ Required reviewers；等待 reviewer 时 workflow 是 pending，不代表失败�
 1. GitHub Actions → **Publish to PyPI** → **Run workflow**。
 2. 观察 quality、build、两个 smoke 和 `publish-to-testpypi` 全部成功。
 3. 从 build job 输出取得实际 hatch-vcs dev version，例如 `0.1.1.dev70`。
-4. 在全新环境安装该精确版本。TestPyPI 通常没有依赖包，因此只让 BareAgent 本身来自
-   TestPyPI，依赖回退到正式 PyPI：
+4. 从 TestPyPI JSON 取得该版本的精确 wheel URL，在全新环境直接安装这个 registry artifact；
+   wheel 的运行时依赖使用 uv 默认的正式 PyPI：
 
 ```bash
+TESTPYPI_WHEEL_URL="$(
+  uv run python -c \
+    'import json, sys, urllib.request; data=json.load(urllib.request.urlopen(sys.argv[1])); print(next(item["url"] for item in data["urls"] if item["packagetype"] == "bdist_wheel"))' \
+    "https://test.pypi.org/pypi/bareagent-cli/<actual-dev-version>/json"
+)"
+case "$TESTPYPI_WHEEL_URL" in
+  https://test-files.pythonhosted.org/*) ;;
+  *) echo "unexpected TestPyPI wheel URL" >&2; exit 1 ;;
+esac
+
 uv venv .testpypi-smoke
-uv pip install --python .testpypi-smoke/bin/python \
-  --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ \
-  bareagent-cli==<actual-dev-version>
+uv pip install --python .testpypi-smoke/bin/python "$TESTPYPI_WHEEL_URL"
 .testpypi-smoke/bin/python -c "import bareagent; print(bareagent.__file__)"
+.testpypi-smoke/bin/python scripts/smoke_installed_package.py
 .testpypi-smoke/bin/bareagent --help
+uv pip check --python .testpypi-smoke/bin/python
 ```
+
+不要用 `--index-strategy unsafe-best-match` 合并 TestPyPI/PyPI，也不要依赖两个 index 参数的
+隐式优先级；精确 TestPyPI wheel URL 能证明安装的是本次上传产物，同时避免依赖混淆。
 
 TestPyPI 演练不使用 `skip-existing`。注册表不允许覆盖同版本文件：如果同一 commit 的 dev
 version 已存在，重跑上传应明确失败，而不是伪装成本次 artifact 已发布。确认既有文件正确，或产生
