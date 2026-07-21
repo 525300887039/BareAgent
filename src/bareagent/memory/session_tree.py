@@ -283,6 +283,9 @@ def render_tree(
         return label
 
     def walk(sid: str, prefix: str, is_last: bool, is_root: bool) -> None:
+        if sid in visited:
+            return
+        visited.add(sid)
         if is_root:
             connector = ""
             child_prefix = ""
@@ -290,9 +293,6 @@ def render_tree(
             connector = "└─ " if is_last else "├─ "
             child_prefix = "   " if is_last else "│  "
         lines.append(f"{prefix}{connector}{annotate(sid)}")
-        if sid in visited:
-            return
-        visited.add(sid)
         kids = children.get(sid, [])
         for position, child in enumerate(kids):
             walk(
@@ -304,5 +304,10 @@ def render_tree(
 
     for sid in roots:
         walk(sid, "", True, is_root=True)
+    # Corrupt components made entirely of cycles have no root. Render each such
+    # component from its first session so damaged lineage never hides transcripts.
+    for sid in sessions:
+        if sid not in visited:
+            walk(sid, "", True, is_root=True)
 
     return "\n".join(lines)

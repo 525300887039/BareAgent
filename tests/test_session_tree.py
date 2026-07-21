@@ -313,16 +313,46 @@ def test_render_sibling_forks() -> None:
 
 
 def test_render_cycle_does_not_hang() -> None:
-    # A corrupt sidecar describing a 2-cycle must not infinite-loop.
+    # A corrupt sidecar describing a 2-cycle must show both sessions once.
     sessions = ["a", "b"]
-    tree = {"a": ForkRecord("b", 1, 1, "t"), "b": ForkRecord("a", 1, 1, "t")}
+    tree = {"a": ForkRecord("b", 1, 1, "t"), "b": ForkRecord("a", 2, 1, "t")}
     out = render_tree(sessions, tree, current=None)
-    # no root exists in a pure cycle -> empty, but crucially it returns
-    assert isinstance(out, str)
+    assert out.splitlines() == ["a  @ turn 1", "└─ b  @ turn 2"]
+    assert out.count("a") == 1
+    assert out.count("b") == 1
 
 
 def test_render_self_loop_does_not_hang() -> None:
     sessions = ["a"]
     tree = {"a": ForkRecord("a", 1, 1, "t")}
     out = render_tree(sessions, tree, current=None)
-    assert isinstance(out, str)
+    assert out == "a  @ turn 1"
+
+
+def test_render_normal_tree_and_independent_cycle_shows_every_session_once() -> None:
+    sessions = ["cycle-b", "tree-child", "cycle-a", "tree-root"]
+    tree = {
+        "tree-child": ForkRecord("tree-root", 3, 5, "t"),
+        "cycle-a": ForkRecord("cycle-b", 1, 1, "t"),
+        "cycle-b": ForkRecord("cycle-a", 2, 1, "t"),
+    }
+
+    out = render_tree(sessions, tree, current=None)
+
+    assert out.splitlines() == [
+        "tree-root",
+        "└─ tree-child  @ turn 3",
+        "cycle-b  @ turn 2",
+        "└─ cycle-a  @ turn 1",
+    ]
+    for session_id in sessions:
+        assert out.count(session_id) == 1
+
+
+def test_render_current_session_in_cycle_is_marked() -> None:
+    sessions = ["a", "b"]
+    tree = {"a": ForkRecord("b", 1, 1, "t"), "b": ForkRecord("a", 2, 1, "t")}
+
+    out = render_tree(sessions, tree, current="b")
+
+    assert out.splitlines() == ["a  @ turn 1", "└─ b  @ turn 2  ● current"]
