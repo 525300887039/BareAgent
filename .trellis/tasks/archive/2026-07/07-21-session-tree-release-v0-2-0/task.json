@@ -1,0 +1,49 @@
+{
+  "id": "session-tree-release-v0-2-0",
+  "name": "session-tree-release-v0-2-0",
+  "title": "Fix session tree cycles and release v0.2.0",
+  "description": "Coordinate the ordered session-tree fix and v0.2.0 release, with a separate irreversible publication confirmation gate.",
+  "status": "completed",
+  "dev_type": null,
+  "scope": "backend,release,docs",
+  "package": null,
+  "priority": "P2",
+  "creator": "ducat",
+  "assignee": "ducat",
+  "createdAt": "2026-07-21",
+  "completedAt": "2026-07-22",
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": "b4ada030712ac1055626a0bddfe14fa769111851",
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "07-21-fix-session-tree-cycles",
+    "07-21-harden-release-v0-2-0"
+  ],
+  "parent": null,
+  "relatedFiles": [
+    ".trellis/tasks/archive/2026-07/07-21-fix-session-tree-cycles",
+    ".trellis/tasks/archive/2026-07/07-21-harden-release-v0-2-0",
+    ".github/workflows/quality.yml",
+    ".github/workflows/release.yml",
+    "CHANGELOG.md"
+  ],
+  "notes": "Child 1 completed and was archived before child 2 began. After release-candidate CI and TestPyPI validation, the user gave the single final publication confirmation. Annotated tag v0.2.0 points to b4ada030712ac1055626a0bddfe14fa769111851; the formal release DAG, PyPI publication, and fresh Python 3.12.13 installation all succeeded.",
+  "meta": {
+    "session_tree_commit": "e43511f732de366cadabe8f9674a028ee013a281",
+    "release_candidate_commit": "b4ada030712ac1055626a0bddfe14fa769111851",
+    "main_ci": "https://github.com/525300887039/BareAgent/actions/runs/29860462663",
+    "testpypi_run": "https://github.com/525300887039/BareAgent/actions/runs/29860570431",
+    "testpypi_version": "0.1.1.dev72",
+    "target_tag": "v0.2.0",
+    "final_confirmation_received": true,
+    "tag_type": "annotated",
+    "tag_target": "b4ada030712ac1055626a0bddfe14fa769111851",
+    "release_workflow": "success: https://github.com/525300887039/BareAgent/actions/runs/29885666639",
+    "pypi_release": "https://pypi.org/project/bareagent-cli/0.2.0/",
+    "pypi_install": "Python 3.12.13; bareagent-cli==0.2.0 version/import/resources/help/uv-pip-check passed",
+    "journal_session": 51
+  }
+}
