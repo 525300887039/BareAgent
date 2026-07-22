@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 50
+- **Total Sessions**: 51
 - **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1699 | Active |
+| `journal-1.md` | ~1739 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 51 | 2026-07-22 | Harden publishing and release v0.2.0 | `61f099f5f81a06c001bf7b433bf45a85d724fe69`, `3c3995635b878310af3474e7eb7f592985708673`, `b4ada030712ac1055626a0bddfe14fa769111851` | `main` |
 | 50 | 2026-07-22 | Fix session tree cyclic rendering | `e43511f732de366cadabe8f9674a028ee013a281` | `main` |
 | 49 | 2026-06-21 | 会话 fork 与树状分支 (/fork + /tree) | `0e373dd`, `07100a1` | `feat/session-fork` |
 | 48 | 2026-06-21 | pyright 类型门收紧到 standard 模式 | `eb05c9f`, `3618287` | `main` |

@@ -1702,3 +1702,38 @@ Validation:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 51: Harden publishing and release v0.2.0
+
+**Date**: 2026-07-22
+**Task**: Harden publishing and release v0.2.0
+**Branch**: `main`
+
+### Summary
+
+Hardened the release DAG with a reusable read-only quality gate, deterministic wheel/sdist validation, fresh installation smoke tests, strict tag/version checks, least-privilege OIDC publishing, immutable action pins, release-contract tests, and focused release documentation. After final confirmation, published annotated v0.2.0 through GitHub Actions run 29885666639 and verified the PyPI artifacts plus a fresh Python 3.12.13 installation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `61f099f5f81a06c001bf7b433bf45a85d724fe69` | (see git log) |
+| `3c3995635b878310af3474e7eb7f592985708673` | (see git log) |
+| `b4ada030712ac1055626a0bddfe14fa769111851` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
