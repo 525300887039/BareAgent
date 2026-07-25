@@ -98,6 +98,13 @@ fallback defaults. In particular, retry parsing must still guarantee
 default maximum. Regression tests must cover NaN, both infinities, and any
 post-fallback invariant.
 
+Applying a finite cap after exponential backoff does not make the intermediate
+power calculation safe: a large accepted retry count can raise `OverflowError`
+before `min(max_delay_sec, raw)` runs. Bounded delay calculations must saturate
+before or when exponentiation overflows, and regression tests must cross the
+floating-point exponent limit rather than stopping at merely large ordinary
+attempts.
+
 ---
 
 ## Releases are gated by built artifacts
