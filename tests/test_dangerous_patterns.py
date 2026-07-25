@@ -11,7 +11,14 @@ from bareagent.permission.guard import PermissionGuard, PermissionMode
 DANGEROUS_COMMANDS = [
     "rm -rf /",
     "rm -rf ~",
+    "rm -fr build",
     "git push --force",
+    "git push -f origin main",
+    "git push -qf origin main",
+    "GIT push --force origin main",
+    "git clean -fdx",
+    "Remove-Item -Recurse -Force build",
+    "REMOVE-ITEM -FORCE -RECURSE build",
     "DROP TABLE users;",
     "chmod 777 /",
     "mkfs.ext4 /dev/sda",
@@ -24,6 +31,10 @@ SAFE_COMMANDS = [
     "cat README.md",
     "echo hello",
     "python --version",
+    "git clean -n",
+    "git clean -n target-f",
+    "git push origin release-f",
+    "Remove-Item -WhatIf build",
 ]
 
 

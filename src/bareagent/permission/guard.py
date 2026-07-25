@@ -84,26 +84,34 @@ class PermissionGuard:
         re.compile(r"^(pytest|python\s+-m\s+pytest|ruff|mypy)\b"),
         re.compile(r"^npm\s+(test|run\s+lint|run\s+test)\b"),
     ]
+    # PowerShell command and executable resolution is case-insensitive on the
+    # Windows execution path. Compile the complete set consistently so casing
+    # the invoked command cannot turn destructive input into an AUTO bypass.
     DANGEROUS_PATTERNS = [
-        re.compile(r"(^|\s)rm\s+-[rR]f?\b"),
-        re.compile(r"git\s+push\s+--force\b"),
-        re.compile(r"git\s+reset\s+--hard\b"),
-        re.compile(r"DROP\s+TABLE\b", re.IGNORECASE),
-        re.compile(r"DELETE\s+FROM\b", re.IGNORECASE),
-        # shell wrapper bypass
-        re.compile(rf"(^|\s)({_SHELLS})\s+-c\b"),
-        # absolute-path rm bypass
-        re.compile(r"(^|\s)/(?:usr/)?bin/rm\b"),
-        # env prefix bypass
-        re.compile(r"(^|\s)env\s+"),
-        # pipe-to-shell execution
-        re.compile(rf"curl\b.*\|\s*({_SHELLS})\b"),
-        re.compile(rf"wget\b.*\|\s*({_SHELLS})\b"),
-        # destructive system commands
-        re.compile(r"(^|\s)chmod\s+777\b"),
-        re.compile(r"(^|\s)mkfs\b"),
-        re.compile(r"(^|\s)dd\s+if="),
-        re.compile(r"find\b.*-delete\b"),
+        re.compile(pattern, re.IGNORECASE)
+        for pattern in (
+            r"(^|[\s;&|])rm\s+-[a-z]*r[a-z]*\b",
+            r"\bremove-item\b(?=[^;\r\n|]*\s-recurse\b)(?=[^;\r\n|]*\s-force\b)",
+            r"\bgit\s+push\b[^\r\n;&|]*(?<!\S)(?:--force(?:-with-lease|-if-includes)?|-[a-z]*f[a-z]*)\b",
+            r"\bgit\s+clean\b[^\r\n;&|]*(?<!\S)(?:--force\b|-[a-z]*f[a-z]*\b)",
+            r"git\s+reset\s+--hard\b",
+            r"DROP\s+TABLE\b",
+            r"DELETE\s+FROM\b",
+            # shell wrapper bypass
+            rf"(^|\s)({_SHELLS})\s+-c\b",
+            # absolute-path rm bypass
+            r"(^|\s)/(?:usr/)?bin/rm\b",
+            # env prefix bypass
+            r"(^|\s)env\s+",
+            # pipe-to-shell execution
+            rf"curl\b.*\|\s*({_SHELLS})\b",
+            rf"wget\b.*\|\s*({_SHELLS})\b",
+            # destructive system commands
+            r"(^|\s)chmod\s+777\b",
+            r"(^|\s)mkfs\b",
+            r"(^|\s)dd\s+if=",
+            r"find\b.*-delete\b",
+        )
     ]
 
     def __init__(
