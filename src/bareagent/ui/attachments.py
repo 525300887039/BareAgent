@@ -77,7 +77,10 @@ def grab_clipboard_image(dest_dir: Path, name: str) -> Path | None:
             for entry in grabbed:
                 src = Path(str(entry))
                 if src.suffix.lower() in IMAGE_EXTS and src.is_file():
-                    dest = dest_dir / name
+                    # File-list clipboard entries are copied byte-for-byte, so
+                    # preserve their extension. read_file derives MIME from the
+                    # suffix and must not label JPEG/GIF/WebP bytes as PNG.
+                    dest = (dest_dir / name).with_suffix(src.suffix.lower())
                     shutil.copy(src, dest)
                     return dest
             return None

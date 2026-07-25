@@ -117,6 +117,17 @@ def test_grab_copies_first_image_from_file_list(monkeypatch, tmp_path):
     assert result.read_bytes() == b"src-bytes"
 
 
+def test_grab_preserves_file_list_image_extension(monkeypatch, tmp_path):
+    src = tmp_path / "clip.jpg"
+    src.write_bytes(b"jpeg-bytes")
+    _install_fake_pil(monkeypatch, grab_return=[str(src)])
+
+    result = grab_clipboard_image(tmp_path / "dest", "paste-3.png")
+
+    assert result == tmp_path / "dest" / "paste-3.jpg"
+    assert result.read_bytes() == b"jpeg-bytes"
+
+
 def test_grab_returns_none_when_clipboard_empty(monkeypatch, tmp_path):
     _install_fake_pil(monkeypatch, grab_return=None)
     assert grab_clipboard_image(tmp_path, "p.png") is None
