@@ -109,6 +109,75 @@ mode into prompt-on-every-command.
 
 ---
 
+## Scenario: Automatic Git worktree cleanup
+
+### 1. Scope / Trigger
+
+This contract applies when a sub-agent worktree is finalized automatically.
+Cleanup can destroy both uncommitted files and commits, so uncertainty must
+retain the worktree or branch rather than guessing that it is disposable.
+
+### 2. Signatures
+
+- `WorktreeHandle.base_commit: str | None` records the exact creation point.
+- `worktree_status(handle: WorktreeHandle) -> tuple[bool, str]` reports whether
+  any work or inspection uncertainty requires retention.
+- `remove_pristine_worktree(handle) -> tuple[bool, bool, str]` separately
+  reports worktree removal, branch removal, and a human-readable reason.
+
+### 3. Contracts
+
+- `git worktree add` is pinned to the recorded `base_commit`.
+- Automatic cleanup runs only after successful empty porcelain status and a
+  successful HEAD lookup equal to `base_commit`.
+- Worktree removal is non-forced so Git can reject changes that appear after
+  the status check.
+- Branch deletion uses `git update-ref -d <ref> <base_commit>` so deletion is
+  atomic and succeeds only while the ref still has the expected value.
+- Forced removal remains an explicit/manual cleanup operation, never the
+  automatic finalizer path.
+
+### 4. Validation & Error Matrix
+
+- Status exception or non-zero exit -> keep worktree and branch.
+- Non-empty porcelain status -> keep worktree and branch.
+- Missing creation commit -> keep worktree and branch.
+- HEAD exception, non-zero exit, or mismatch -> keep worktree and branch.
+- Non-forced worktree removal refusal -> keep worktree and branch.
+- Worktree removed but expected-ref deletion fails -> keep the branch and
+  report that only the worktree path was removed.
+- Every check succeeds and the ref is unchanged -> remove both.
+
+### 5. Good / Base / Bad Cases
+
+- Good: a pristine unchanged worktree is removed automatically.
+- Base: a dirty worktree or clean branch with a new commit is retained and its
+  location is reported.
+- Bad: unavailable Git status is treated as clean, followed by `--force` and
+  `branch -D`; this can erase work precisely when inspection failed.
+
+### 6. Tests Required
+
+`tests/test_worktree.py` must assert clean cleanup, uncommitted retention,
+committed-ahead retention, status and HEAD exception/non-zero handling, and
+the two post-check races: a late file makes non-forced removal fail, while a
+late commit makes expected-ref deletion preserve the branch.
+
+### 7. Wrong vs Correct
+
+```python
+# Wrong: check-then-force-delete has a race and discards unknown state.
+if not dirty:
+    git("worktree", "remove", "--force", path)
+    git("branch", "-D", branch)
+
+# Correct: Git re-checks the worktree and atomically guards the branch ref.
+git("worktree", "remove", path)
+git("update-ref", "-d", f"refs/heads/{branch}", base_commit)
+```
+
+---
+
 ## Tool handlers return errors as structured output, not exceptions
 
 A handler that raises propagates to `agent_loop` and crashes the iteration. Instead, handlers report failures as text so the LLM can read them and decide what to do.
