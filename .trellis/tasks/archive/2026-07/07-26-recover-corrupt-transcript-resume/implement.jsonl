@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend pre-development checklist and implementation conventions."}
+{"file":".trellis/spec/backend/state-persistence.md","reason":"JSONL readers must validate rows with file and line context."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Expected persistence failures must not terminate the REPL."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Requires regression coverage and the repository quality gate."}

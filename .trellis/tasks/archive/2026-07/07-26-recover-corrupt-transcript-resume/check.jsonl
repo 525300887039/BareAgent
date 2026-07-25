@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend quality-check checklist and review conventions."}
+{"file":".trellis/spec/backend/state-persistence.md","reason":"Verify JSONL error context and no partial restore."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Verify resume failures remain user-visible data rather than crashes."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Verify regression coverage and full validation."}
