@@ -295,6 +295,77 @@ Once data has crossed a boundary, internal callers trust the types. **Do not** s
 
 ---
 
+## Scenario: LSP WorkspaceEdit target confinement
+
+### 1. Scope / Trigger
+
+This contract applies whenever a language-server response can write files,
+currently semantic rename via LSP `WorkspaceEdit`. Server-returned URIs are
+external input even when the initiating file was already permission-approved.
+
+### 2. Signatures
+
+- `apply_workspace_edit(workspace_edit, *, workspace_root: str | Path)` requires
+  the security boundary explicitly.
+- The production semantic-rename handler passes
+  `LanguageServerManager.repository_root`; callers must not infer a root from
+  the process working directory.
+
+### 3. Contracts
+
+- Parse and require URI scheme `file` before converting the URI to a path.
+- Derive a relative path from `workspace_root`, then call
+  `safe_path(relative, Path(workspace_root))` before any read or write.
+- The shared sandbox check owns canonicalization, parent traversal, cross-drive,
+  and symlink rejection.
+- Rejected, malformed, unsupported, or unreadable targets are appended to
+  `WorkspaceEditResult.skipped`; other safe file groups continue to apply.
+- Result summaries label these generally as skipped WorkspaceEdit entries, not
+  only as resource operations.
+
+### 4. Validation & Error Matrix
+
+- Missing or non-`file` scheme -> skip as unsupported.
+- Malformed URI parse -> skip as invalid and continue.
+- Cross-drive `relpath` failure -> skip as unsafe.
+- Parent escape or resolved target outside root -> skip as unsafe.
+- Symlink anywhere in the candidate chain -> skip as unsafe.
+- `Path.resolve` symlink loop (`RuntimeError`) -> skip as unsafe.
+- In-root path that cannot be read -> skip as unreadable.
+- Valid in-root path -> apply edits bottom-up and atomically write it.
+
+### 5. Good / Base / Bad Cases
+
+- Good: a multi-file rename updates every target inside the repository.
+- Base: a mixed response updates safe files and reports outside targets without
+  touching them.
+- Bad: converting a server URI directly to an absolute path and opening it;
+  permission for the initiating file does not authorize arbitrary response
+  targets.
+
+### 6. Tests Required
+
+`tests/test_lsp_workspace_edit.py` must cover both WorkspaceEdit shapes,
+outside-root targets, symlink escape, opaque non-file URIs, malformed URI
+continuation, and normal in-root application. `tests/test_lsp_tools.py` must
+exercise manager-root propagation with mixed safe/unsafe entries in both
+`changes` and `documentChanges` forms.
+
+### 7. Wrong vs Correct
+
+```python
+# Wrong: the language server controls an unrestricted absolute write target.
+path = document_uri_to_path(uri)
+atomic_write_text(Path(path), updated)
+
+# Correct: the manager supplies the root and the shared sandbox resolves it.
+relative = os.path.relpath(document_uri_to_path(uri), start=workspace_root)
+path = safe_path(relative, Path(workspace_root))
+atomic_write_text(path, updated)
+```
+
+---
+
 ## Background failures must not leak silently
 
 `BackgroundManager._run` in `src/concurrency/background.py`:
