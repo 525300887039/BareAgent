@@ -232,6 +232,12 @@ def test_load_tree_corrupt_json_is_empty(tmp_path: Path) -> None:
     assert load_tree(path) == {}
 
 
+def test_load_tree_invalid_utf8_is_empty(tmp_path: Path) -> None:
+    path = tree_path(tmp_path)
+    path.write_bytes(b"\xff\xfe\xfd")
+    assert load_tree(path) == {}
+
+
 def test_load_tree_non_object_is_empty(tmp_path: Path) -> None:
     path = tree_path(tmp_path)
     path.write_text("[1, 2, 3]", encoding="utf-8")
@@ -244,7 +250,13 @@ def test_load_tree_skips_bad_entries_keeps_good(tmp_path: Path) -> None:
         "good": {"parent": "p", "fork_point": 2, "parent_len": 4, "created": "t"},
         "no-parent": {"fork_point": 1, "parent_len": 2, "created": "t"},
         "bad-types": {"parent": "p2", "fork_point": "x", "parent_len": "y", "created": "t"},
-        "": {"parent": "p3", "fork_point": 1, "parent_len": 1, "created": "t"},
+        "overflow-types": {
+            "parent": "p3",
+            "fork_point": float("inf"),
+            "parent_len": 1,
+            "created": "t",
+        },
+        "": {"parent": "p4", "fork_point": 1, "parent_len": 1, "created": "t"},
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
     loaded = load_tree(path)

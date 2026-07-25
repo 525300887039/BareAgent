@@ -179,7 +179,7 @@ def _coerce_record(value: Any) -> ForkRecord | None:
     try:
         fork_point = int(value.get("fork_point", 0))
         parent_len = int(value.get("parent_len", 0))
-    except (TypeError, ValueError):
+    except (OverflowError, TypeError, ValueError):
         return None
     created = value.get("created", "")
     return ForkRecord(
@@ -198,7 +198,7 @@ def load_tree(path: Path) -> dict[str, ForkRecord]:
     """
     try:
         raw = Path(path).read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeError):
         return {}
     try:
         document = json.loads(raw)
