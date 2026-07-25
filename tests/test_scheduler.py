@@ -57,6 +57,14 @@ def test_add_rejects_interval_below_minimum() -> None:
     assert scheduler.list() == []
 
 
+@pytest.mark.parametrize("interval", [float("nan"), float("inf"), float("-inf")])
+def test_add_rejects_non_finite_interval(interval: float) -> None:
+    scheduler, _ = _make_scheduler()
+    with pytest.raises(SchedulerError, match="finite"):
+        scheduler.add(interval, "echo hi")
+    assert scheduler.list() == []
+
+
 def test_add_rejects_empty_command() -> None:
     scheduler, _ = _make_scheduler()
     with pytest.raises(SchedulerError):

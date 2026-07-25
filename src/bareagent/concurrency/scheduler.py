@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -59,9 +60,10 @@ class Scheduler:
         self._timers: dict[str, threading.Timer] = {}
 
     def add(self, interval_sec: float, command: str) -> ScheduledJob:
-        if interval_sec < MIN_INTERVAL_SEC:
+        if not math.isfinite(interval_sec) or interval_sec < MIN_INTERVAL_SEC:
             raise SchedulerError(
-                f"Interval must be at least {MIN_INTERVAL_SEC:g} seconds (got {interval_sec:g})."
+                f"Interval must be finite and at least {MIN_INTERVAL_SEC:g} seconds "
+                f"(got {interval_sec:g})."
             )
         command = command.strip()
         if not command:

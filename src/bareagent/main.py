@@ -5,6 +5,7 @@ import atexit
 import itertools
 import json
 import logging
+import math
 import os
 import shutil
 import signal
@@ -698,11 +699,16 @@ def _parse_retry_config(retry_raw: dict) -> RetryConfig:
         jitter = defaults.jitter
     if max_attempts < 1:
         max_attempts = defaults.max_attempts
-    if base_delay_sec < 0:
+    if not math.isfinite(base_delay_sec) or base_delay_sec < 0:
         base_delay_sec = defaults.base_delay_sec
-    if max_delay_sec < 0 or max_delay_sec < base_delay_sec:
+    if not math.isfinite(max_delay_sec) or max_delay_sec < 0 or max_delay_sec < base_delay_sec:
         max_delay_sec = defaults.max_delay_sec
-    if multiplier < 1:
+    # A valid but unusually high base can still exceed the default max chosen
+    # above. Preserve the requested base while restoring the required cap
+    # invariant so compute_delay never returns more than max_delay_sec.
+    if max_delay_sec < base_delay_sec:
+        max_delay_sec = base_delay_sec
+    if not math.isfinite(multiplier) or multiplier < 1:
         multiplier = defaults.multiplier
     return RetryConfig(
         enabled=enabled,

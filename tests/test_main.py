@@ -513,6 +513,27 @@ def test_parse_retry_config_rejects_max_delay_below_base_delay() -> None:
     assert retry.multiplier == 1
 
 
+def test_parse_retry_config_preserves_max_delay_invariant_for_large_base() -> None:
+    retry = main_module._parse_retry_config(
+        {
+            "base_delay_sec": 100,
+            "max_delay_sec": 1,
+        }
+    )
+
+    assert retry.base_delay_sec == 100
+    assert retry.max_delay_sec == 100
+
+
+def test_parse_retry_config_rejects_non_finite_backoff_values() -> None:
+    defaults = main_module.RetryConfig()
+
+    for field in ("base_delay_sec", "max_delay_sec", "multiplier"):
+        for value in (float("nan"), float("inf"), float("-inf")):
+            retry = main_module._parse_retry_config({field: value})
+            assert getattr(retry, field) == getattr(defaults, field)
+
+
 def test_load_config_rejects_unknown_subagent_default_type(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(
