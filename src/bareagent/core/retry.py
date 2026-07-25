@@ -86,7 +86,16 @@ def compute_delay(
 
     ``attempt`` starts at 1 (the wait before the first retry).
     """
-    raw = policy.base_delay_sec * (policy.multiplier ** max(0, attempt - 1))
+    exponent = max(0, attempt - 1)
+    if policy.base_delay_sec == 0.0 or policy.multiplier == 1.0:
+        raw = policy.base_delay_sec
+    else:
+        try:
+            raw = policy.base_delay_sec * (policy.multiplier**exponent)
+        except OverflowError:
+            # Valid policies have a positive base and multiplier > 1 here, so
+            # an overflowed exponential is necessarily beyond the finite cap.
+            raw = policy.max_delay_sec
     capped = min(policy.max_delay_sec, raw)
     if policy.jitter:
         return rng(0.0, capped)

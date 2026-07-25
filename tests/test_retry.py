@@ -103,9 +103,10 @@ def test_compute_delay_no_jitter_is_monotonic_and_capped() -> None:
     assert delays[-1] == 30.0
 
 
-def test_compute_delay_large_attempt_stays_capped() -> None:
+@pytest.mark.parametrize("attempt", [1025, 2049])
+def test_compute_delay_large_attempt_stays_capped(attempt: int) -> None:
     policy = RetryPolicy(base_delay_sec=1.0, max_delay_sec=30.0, multiplier=2.0, jitter=False)
-    assert compute_delay(50, policy) == 30.0
+    assert compute_delay(attempt, policy) == 30.0
 
 
 def test_compute_delay_jitter_passes_capped_bounds_to_rng() -> None:
