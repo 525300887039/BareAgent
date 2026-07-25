@@ -97,6 +97,13 @@ prevents infinite recursion but still duplicates the node reached by a cycle's b
 Do not rewrite or "repair" the sidecar during rendering. Rendering is a fail-open read path;
 persisted lineage changes continue to go through the atomic writer.
 
+Loading follows the same rule at both corruption scopes: unreadable bytes,
+invalid UTF-8, invalid JSON, or a non-object document discard only the optional
+sidecar and return an empty lineage map; a malformed individual record is
+skipped while valid sibling records survive. Numeric coercion must also treat
+non-finite/overflowing JSON values as a bad record rather than allowing the
+sidecar to break `/tree` or `/fork`.
+
 ---
 
 ## Session IDs are timestamp + random suffix

@@ -95,9 +95,17 @@ def requires_confirm(self, tool_name, tool_input):
 
 ## Dangerous shell patterns are blocked *before* the handler runs
 
-`PermissionGuard.DANGEROUS_PATTERNS` (regex list in `guard.py`) covers `rm -rf`, `git push --force`, `git reset --hard`, `DROP TABLE`, shell-wrapper bypass (`bash -c`), absolute-path `rm`, `env`-prefix bypass, `curl | sh`, `mkfs`, `dd if=`, `find -delete`, `chmod 777`, etc. Any of these forces a permission prompt regardless of mode (except BYPASS).
+`PermissionGuard.DANGEROUS_PATTERNS` (regex list in `guard.py`) covers `rm -rf`, forced `git push` / `git clean`, recursive forced PowerShell `Remove-Item`, `git reset --hard`, `DROP TABLE`, shell-wrapper bypass (`bash -c`), absolute-path `rm`, `env`-prefix bypass, `curl | sh`, `mkfs`, `dd if=`, `find -delete`, `chmod 777`, etc. Any of these forces a permission prompt regardless of mode (except BYPASS).
 
 **Rule when adding tools that take shell input**: extend `DANGEROUS_PATTERNS` rather than adding ad-hoc checks in the handler. The handler's job is to *execute*; the guard's job is to *gate*. Splitting that boundary would let a future caller invoke the handler directly and skip the check.
+
+On Windows, the shell handler executes through PowerShell, whose command names
+and parameter names are case-insensitive. Keep the dangerous-pattern set
+case-insensitive as a whole, and cover destructive short or bundled flags (for
+example `git push -f` and `git clean -fdx`) as well as their long forms. Every
+new pattern needs both a destructive regression case and a nearby safe case
+such as a dry run or `-WhatIf`, so broader matching does not silently turn AUTO
+mode into prompt-on-every-command.
 
 ---
 

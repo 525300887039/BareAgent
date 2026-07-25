@@ -85,6 +85,21 @@ pytest tests/test_loop.py -k "stream" # by name substring
 
 ---
 
+## Validate timing floats at the boundary
+
+Any float that will reach `threading.Timer`, `Event.wait`, or `sleep` must be
+validated with `math.isfinite` at the public/configuration boundary. Range
+comparisons alone are insufficient because NaN makes both `<` and `>` false,
+while infinities can overflow or create jobs that never run.
+
+For related timing fields, re-check cross-field invariants after applying
+fallback defaults. In particular, retry parsing must still guarantee
+`max_delay_sec >= base_delay_sec` when a valid custom base is larger than the
+default maximum. Regression tests must cover NaN, both infinities, and any
+post-fallback invariant.
+
+---
+
 ## Releases are gated by built artifacts
 
 `.github/workflows/quality.yml` is the single source of truth for the Python
