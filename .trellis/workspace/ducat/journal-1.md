@@ -1716,7 +1716,11 @@ Hardened the release DAG with a reusable read-only quality gate, deterministic w
 
 ### Main Changes
 
-(Add details)
+- Prevented retry backoff exponentiation from overflowing on very large attempt counts.
+- Made automatic worktree cleanup fail closed for unknown state or independently committed work.
+- Confined LSP `WorkspaceEdit` reads and writes to the repository root.
+- Made corrupt transcript snapshots fail atomically without terminating `/resume` or mutating session state.
+- Added focused regression coverage, updated prevention specs, and archived four completed Trellis tasks.
 
 ### Git Commits
 
@@ -1728,7 +1732,11 @@ Hardened the release DAG with a reusable read-only quality gate, deterministic w
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] `uv run pytest` - 1461 passed, 47 deselected
+- [OK] `uv run ruff check src tests`
+- [OK] `uv run ruff format --check src tests` - 221 files already formatted
+- [OK] `uv run pyright` - 0 errors, 7 existing optional-dependency warnings
+- [OK] Independent review of `origin/main..HEAD` found no push blockers
 
 ### Status
 
@@ -1763,6 +1771,50 @@ Fixed native-PDF provider gating and four confirmed maintenance regressions; all
 | `f36906c` | (see git log) |
 | `7ae632b` | (see git log) |
 | `6dbdffb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 53: Daily bug audit: runtime safety fixes
+
+**Date**: 2026-07-26
+**Task**: Daily bug audit: runtime safety fixes
+**Branch**: `main`
+
+### Summary
+
+Fixed retry overflow, unsafe worktree cleanup, out-of-root LSP edits, and corrupt transcript resume failures; full pytest, Ruff, and Pyright gates passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `95c9fd9` | (see git log) |
+| `8dda7aa` | (see git log) |
+| `1b42711` | (see git log) |
+| `541088c` | (see git log) |
+| `b05764e` | (see git log) |
+| `28bc6d8` | (see git log) |
+| `30b71ac` | (see git log) |
+| `aa38c54` | (see git log) |
+| `d9f2369` | (see git log) |
+| `81453f8` | (see git log) |
+| `7c4155a` | (see git log) |
+| `12f508a` | (see git log) |
 
 ### Testing
 
