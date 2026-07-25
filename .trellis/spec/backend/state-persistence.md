@@ -52,6 +52,78 @@ Notes that any new JSONL writer must replicate:
 
 ---
 
+## Scenario: Resume a transcript snapshot
+
+### 1. Scope / Trigger
+
+This contract applies to `.transcripts/*.jsonl` reads used by `/resume`.
+Unlike an independent mailbox event stream, a transcript is an ordered
+conversation snapshot whose assistant/tool-result relationships must remain
+intact; never restore only the rows that happened to parse.
+
+### 2. Signatures
+
+- `TranscriptManager.load(session_id) -> list[dict[str, Any]]` validates the
+  selected snapshot and raises `ValueError` for format corruption.
+- `TranscriptManager.resume(session_id | None)` preserves that contract after
+  selecting the requested or latest snapshot.
+- The `/resume` REPL branch catches expected `OSError` and `ValueError` before
+  mutating live session state.
+
+### 3. Contracts
+
+- Read in binary mode and decode each physical line as UTF-8 so both decoding
+  and JSON errors can report the exact file and line number.
+- Every non-blank row must decode to one JSON object; arrays and scalar JSON are
+  invalid transcript entries.
+- Accumulate into a new list and return it only after the entire file validates.
+- On failure, do not replace `messages`, reset tokens, switch runtime/mailbox
+  session, clear registries, or rewrite/delete the corrupt file.
+- Print the failure and continue the REPL input loop.
+
+### 4. Validation & Error Matrix
+
+- Session/snapshot missing -> `FileNotFoundError`, displayed by `/resume`.
+- File open/read failure -> `OSError`, displayed by `/resume`.
+- Invalid UTF-8 -> `ValueError` with path and physical line.
+- Invalid JSON -> `ValueError` with path, physical line, and parser reason.
+- Valid JSON that is not an object -> `ValueError` with path and physical line.
+- All rows valid -> atomically replace the live message list, then switch the
+  other runtime session components.
+
+### 5. Good / Base / Bad Cases
+
+- Good: a valid snapshot restores every message and switches runtime state.
+- Base: a corrupt snapshot prints an error; the next command (including
+  `/exit`) still runs in the existing session.
+- Bad: letting `JSONDecodeError` or `UnicodeDecodeError` escape the command loop,
+  or skipping one row and restoring a structurally incomplete conversation.
+
+### 6. Tests Required
+
+Manager tests must cover invalid JSON, invalid UTF-8, and non-object rows with
+path + line assertions. Stdio integration must parameterize valid, invalid-JSON,
+and invalid-UTF-8 `/resume` inputs followed by `/exit`, asserting return code 0
+and no false `Resumed session` message on corruption.
+
+### 7. Wrong vs Correct
+
+```python
+# Wrong: decoding/parsing exceptions escape and partial acceptance is tempting.
+return [json.loads(line) for line in path.open(encoding="utf-8") if line.strip()]
+
+# Correct: validate a fresh list completely before the caller swaps live state.
+messages = []
+for line_number, raw_line in enumerate(path.open("rb"), start=1):
+    message = json.loads(raw_line.decode("utf-8"))
+    if not isinstance(message, dict):
+        raise ValueError(f"Invalid transcript entry at line {line_number}")
+    messages.append(message)
+return messages
+```
+
+---
+
 ## Mutable structured state: write whole file atomically
 
 For state that is read-modify-write (task graphs, teammate rosters), use `atomic_write_json` from `src/core/fileutil.py`:
