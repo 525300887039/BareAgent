@@ -4262,7 +4262,7 @@ def _run_stdio_session(
                 requested_session = raw_session_id.strip() or None
                 try:
                     restored_messages = transcript_mgr.resume(requested_session)
-                except FileNotFoundError as exc:
+                except (OSError, ValueError) as exc:
                     ui_console.print_error(str(exc))
                     continue
                 messages[:] = restored_messages

@@ -36,8 +36,30 @@ class TranscriptManager:
 
     def load(self, session_id: str) -> list[dict[str, Any]]:
         entry = self._get_session_entry(session_id)
-        with entry.path.open("r", encoding="utf-8") as file:
-            return [json.loads(line) for line in file if line.strip()]
+        messages: list[dict[str, Any]] = []
+        with entry.path.open("rb") as file:
+            for line_number, raw_line in enumerate(file, start=1):
+                if not raw_line.strip():
+                    continue
+                try:
+                    line = raw_line.decode("utf-8")
+                except UnicodeDecodeError as exc:
+                    raise ValueError(
+                        f"Invalid UTF-8 in transcript {entry.path} at line {line_number}: {exc}"
+                    ) from exc
+                try:
+                    message = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(
+                        f"Invalid JSON in transcript {entry.path} at line {line_number}: {exc.msg}"
+                    ) from exc
+                if not isinstance(message, dict):
+                    raise ValueError(
+                        f"Invalid transcript entry in {entry.path} at line {line_number}: "
+                        "expected a JSON object"
+                    )
+                messages.append(message)
+        return messages
 
     def list_sessions(self) -> list[str]:
         latest_by_session: dict[str, datetime] = {}

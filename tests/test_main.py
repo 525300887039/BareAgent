@@ -5,6 +5,7 @@ from io import StringIO
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
+import pytest
 from rich.console import Console
 
 import bareagent.main as main_module
@@ -1198,9 +1199,20 @@ def test_install_stdio_permission_prompt_persists_always_allow_rule(
     assert "bash(prefix:git commit -m test*)" in guard.allow_rules
 
 
-def test_resume_replays_transcript_to_stdio_console(
+@pytest.mark.parametrize(
+    ("corrupt_payload", "expected_error"),
+    [
+        (None, None),
+        (b"{not json}\n", "Invalid JSON"),
+        (b"\xff\n", "Invalid UTF-8"),
+    ],
+    ids=["valid", "invalid-json", "invalid-utf8"],
+)
+def test_resume_replays_or_reports_corrupt_transcript_to_stdio_console(
     monkeypatch,
     tmp_path: Path,
+    corrupt_payload: bytes | None,
+    expected_error: str | None,
 ) -> None:
     config = make_test_config(tmp_path)
     transcript_dir = tmp_path / ".transcripts"
@@ -1234,10 +1246,13 @@ def test_resume_replays_transcript_to_stdio_console(
         },
         {"role": "assistant", "content": "Done."},
     ]
-    transcript_path.write_text(
-        "\n".join(json.dumps(message) for message in transcript_messages) + "\n",
-        encoding="utf-8",
-    )
+    if corrupt_payload is None:
+        transcript_path.write_text(
+            "\n".join(json.dumps(message) for message in transcript_messages) + "\n",
+            encoding="utf-8",
+        )
+    else:
+        transcript_path.write_bytes(corrupt_payload)
 
     output_buffer = StringIO()
     agent_console = AgentConsole(
@@ -1302,6 +1317,10 @@ def test_resume_replays_transcript_to_stdio_console(
     )
 
     rendered = output_buffer.getvalue()
+    if expected_error is not None:
+        assert expected_error in rendered
+        assert f"Resumed session: {session_id}" not in rendered
+        return
     assert "> [red]hello[/red] [foo]" in rendered
     assert "checking workspace" in rendered
     assert "Tool Call" in rendered

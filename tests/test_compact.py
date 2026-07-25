@@ -4,6 +4,8 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
+import pytest
+
 from bareagent.memory.compact import Compactor, _micro_compact
 from bareagent.memory.token_counter import estimate_tokens
 from bareagent.memory.transcript import TranscriptManager
@@ -231,6 +233,32 @@ def test_transcript_manager_save_and_load_round_trip(tmp_path: Path) -> None:
 
     assert saved_path.exists()
     assert manager.load("roundtrip") == messages
+
+
+@pytest.mark.parametrize(
+    ("payload", "error_text"),
+    [
+        (b'{"role": "user"}\n{not json}\n', "Invalid JSON"),
+        (b'{"role": "user"}\n\xff\n', "Invalid UTF-8"),
+        (b'{"role": "user"}\n[]\n', "expected a JSON object"),
+    ],
+)
+def test_transcript_manager_load_reports_corrupt_line(
+    tmp_path: Path, payload: bytes, error_text: str
+) -> None:
+    transcript_dir = tmp_path / ".transcripts"
+    transcript_dir.mkdir()
+    transcript_path = transcript_dir / "broken_2026-04-03T09-00-00.jsonl"
+    transcript_path.write_bytes(payload)
+    manager = TranscriptManager(transcript_dir)
+
+    with pytest.raises(ValueError) as raised:
+        manager.load("broken")
+
+    message = str(raised.value)
+    assert error_text in message
+    assert str(transcript_path) in message
+    assert "line 2" in message
 
 
 def test_get_latest_session_returns_latest_session_id(tmp_path: Path) -> None:
