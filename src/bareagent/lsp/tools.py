@@ -378,11 +378,14 @@ def _make_semantic_rename_handler(
                 "symbol). No files were changed."
             )
 
-        result = apply_workspace_edit(workspace_edit)
+        result = apply_workspace_edit(
+            workspace_edit,
+            workspace_root=manager.repository_root,
+        )
         if not result.changed_any:
             note = ""
             if result.skipped:
-                note = " Skipped resource operations: " + "; ".join(result.skipped)
+                note = " Skipped WorkspaceEdit entries: " + "; ".join(result.skipped)
             return "Error: rename produced no applicable text edits. No files were changed." + note
         return _format_rename_result(new_name, result)
 
@@ -402,10 +405,7 @@ def _format_rename_result(new_name: str, result: Any) -> str:
         count = result.files[path]
         lines.append(f"  {path}: {count} edit{'s' if count != 1 else ''}")
     if result.skipped:
-        lines.append(
-            "Skipped resource operations (file create/rename/delete are not "
-            "performed by semantic_rename):"
-        )
+        lines.append("Skipped WorkspaceEdit entries:")
         for note in result.skipped:
             lines.append(f"  {note}")
     return "\n".join(lines)

@@ -414,6 +414,48 @@ def test_semantic_rename_applies_changes_form(fake_setup) -> None:
     assert "2 edits across 1 file" in out
 
 
+@pytest.mark.parametrize("workspace_edit_shape", ["changes", "documentChanges"])
+def test_semantic_rename_skips_outside_workspace_edits(
+    fake_setup, workspace_edit_shape: str
+) -> None:
+    sample = fake_setup["sample"]
+    sample.write_text("foo = 1\n", encoding="utf-8")
+    outside = fake_setup["tmp_path"].with_name(fake_setup["tmp_path"].name + "-outside.py")
+    outside.write_text("foo = 2\n", encoding="utf-8")
+    edit = {
+        "range": {
+            "start": {"line": 0, "character": 0},
+            "end": {"line": 0, "character": 3},
+        },
+        "newText": "bar",
+    }
+    safe_uri = path_to_document_uri(str(sample))
+    outside_uri = path_to_document_uri(str(outside))
+    if workspace_edit_shape == "changes":
+        response = {"changes": {safe_uri: [edit], outside_uri: [edit]}}
+    else:
+        response = {
+            "documentChanges": [
+                {"textDocument": {"uri": safe_uri}, "edits": [edit]},
+                {"textDocument": {"uri": outside_uri}, "edits": [edit]},
+            ]
+        }
+    fake_setup["manager"].rename_response = response
+
+    try:
+        out = fake_setup["handlers"][SEMANTIC_RENAME_TOOL_NAME](
+            file=str(sample), line=1, col=1, new_name="bar"
+        )
+
+        assert sample.read_text(encoding="utf-8") == "bar = 1\n"
+        assert outside.read_text(encoding="utf-8") == "foo = 2\n"
+        assert "1 edit across 1 file" in out
+        assert "Skipped WorkspaceEdit entries" in out
+        assert "escapes workspace" in out
+    finally:
+        outside.unlink(missing_ok=True)
+
+
 def test_semantic_rename_converts_request_column_to_utf16(fake_setup) -> None:
     sample = fake_setup["sample"]
     sample.write_text("\U0001f600foo = 1\n", encoding="utf-8")

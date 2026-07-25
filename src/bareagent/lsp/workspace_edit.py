@@ -24,10 +24,14 @@ character offsets of later ones.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from bareagent.core.fileutil import atomic_write_text
+from bareagent.core.sandbox import safe_path
 
 from .coord import document_uri_to_path
 
@@ -37,9 +41,9 @@ class WorkspaceEditResult:
     """Outcome of applying a ``WorkspaceEdit``.
 
     ``files`` maps an absolute (native) file path to the number of ``TextEdit``
-    entries applied to it. ``skipped`` holds human-readable descriptions of any
-    resource operations (CreateFile / RenameFile / DeleteFile) that the MVP did
-    not perform.
+    entries applied to it. ``skipped`` holds human-readable descriptions of
+    resource operations, unsupported URIs, and unsafe or unreadable paths that
+    were not applied.
     """
 
     files: dict[str, int] = field(default_factory=dict)
@@ -250,21 +254,33 @@ def apply_text_edits(text: str, edits: list[dict[str, Any]]) -> str:
     return result
 
 
-def apply_workspace_edit(workspace_edit: dict[str, Any]) -> WorkspaceEditResult:
+def apply_workspace_edit(
+    workspace_edit: dict[str, Any], *, workspace_root: str | Path
+) -> WorkspaceEditResult:
     """Apply a full ``WorkspaceEdit`` to disk and return a summary.
 
     Parses both ``changes`` and ``documentChanges`` forms, groups the
     ``TextEdit`` entries by URI, applies each group bottom-up, and writes the
     result atomically. Resource operations (CreateFile / RenameFile /
     DeleteFile) are skipped and reported. A URI that resolves to a non-``file:``
-    target, or whose file cannot be read, is skipped with a note rather than
-    raising — the caller turns an empty result into an explicit error.
+    target, falls outside ``workspace_root``, traverses a symlink, or cannot be
+    read is skipped with a note rather than raising — the caller turns an empty
+    result into an explicit error.
     """
     result = WorkspaceEditResult()
     groups = _iter_edit_groups(workspace_edit, result.skipped)
+    root = Path(workspace_root)
 
     for uri, edits in groups.items():
         if not edits:
+            continue
+        try:
+            scheme = urlparse(uri).scheme.lower()
+        except ValueError as exc:
+            result.skipped.append(f"invalid document URI: {uri} ({exc})")
+            continue
+        if scheme != "file":
+            result.skipped.append(f"unsupported document URI: {uri}")
             continue
         path = document_uri_to_path(uri)
         if path.startswith("file:") or "://" in path:
@@ -273,25 +289,20 @@ def apply_workspace_edit(workspace_edit: dict[str, Any]) -> WorkspaceEditResult:
             result.skipped.append(f"unsupported document URI: {uri}")
             continue
         try:
-            with open(path, encoding="utf-8", newline="") as handle:
+            relative = os.path.relpath(path, start=root)
+            resolved = safe_path(relative, root)
+        except (OSError, RuntimeError, ValueError) as exc:
+            result.skipped.append(f"unsafe document URI for workspace: {uri} ({exc})")
+            continue
+        try:
+            with open(resolved, encoding="utf-8", newline="") as handle:
                 original = handle.read()
         except OSError as exc:
-            result.skipped.append(f"could not read {path}: {exc}")
+            result.skipped.append(f"could not read {resolved}: {exc}")
             continue
         updated = apply_text_edits(original, edits)
         if updated != original:
-            atomic_write_text_path(path, updated)
-        result.files[path] = len(edits)
+            atomic_write_text(resolved, updated)
+        result.files[str(resolved)] = len(edits)
 
     return result
-
-
-def atomic_write_text_path(path: str, text: str) -> None:
-    """Thin shim so :func:`apply_workspace_edit` can write a ``str`` path.
-
-    :func:`bareagent.core.fileutil.atomic_write_text` takes a ``Path``; constructing
-    it here keeps the import surface of this module to one helper.
-    """
-    from pathlib import Path
-
-    atomic_write_text(Path(path), text)

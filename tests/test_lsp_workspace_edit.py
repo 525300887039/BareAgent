@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from bareagent.lsp.coord import path_to_document_uri
 from bareagent.lsp.workspace_edit import apply_text_edits, apply_workspace_edit
 
@@ -151,7 +153,7 @@ def test_changes_form_single_file(tmp_path: Path) -> None:
             ]
         }
     }
-    result = apply_workspace_edit(workspace_edit)
+    result = apply_workspace_edit(workspace_edit, workspace_root=tmp_path)
     assert result.changed_any
     assert result.total_edits == 2
     assert target.read_text(encoding="utf-8") == "bar = 1\nprint(bar)\n"
@@ -177,7 +179,7 @@ def test_document_changes_form_single_file(tmp_path: Path) -> None:
             }
         ]
     }
-    result = apply_workspace_edit(workspace_edit)
+    result = apply_workspace_edit(workspace_edit, workspace_root=tmp_path)
     assert result.total_edits == 1
     assert target.read_text(encoding="utf-8") == "bar = 1\n"
 
@@ -202,7 +204,7 @@ def test_cross_file_rename(tmp_path: Path) -> None:
             ],
         }
     }
-    result = apply_workspace_edit(workspace_edit)
+    result = apply_workspace_edit(workspace_edit, workspace_root=tmp_path)
     assert len(result.files) == 2
     assert result.total_edits == 3
     assert defn.read_text(encoding="utf-8") == "def bar():\n    return 1\n"
@@ -230,7 +232,7 @@ def test_resource_operations_are_skipped(tmp_path: Path) -> None:
             },
         ]
     }
-    result = apply_workspace_edit(workspace_edit)
+    result = apply_workspace_edit(workspace_edit, workspace_root=tmp_path)
     # The text edit still applied...
     assert target.read_text(encoding="utf-8") == "bar = 1\n"
     assert result.total_edits == 1
@@ -259,7 +261,7 @@ def test_document_changes_wins_over_changes_no_double_apply(tmp_path: Path) -> N
         ],
         "changes": {uri: [edit]},
     }
-    result = apply_workspace_edit(workspace_edit)
+    result = apply_workspace_edit(workspace_edit, workspace_root=tmp_path)
     # Applied once: 3-char "foo" -> "bar". A double splice would corrupt this.
     assert target.read_text(encoding="utf-8") == "bar = 1\n"
     assert result.total_edits == 1
@@ -271,7 +273,7 @@ def test_changes_only_still_applied_regression(tmp_path: Path) -> None:
     target.write_text("foo = 1\n", encoding="utf-8")
     uri = path_to_document_uri(str(target))
     workspace_edit = {"changes": {uri: [_text_edit(0, 0, 0, 3, "bar")]}}
-    result = apply_workspace_edit(workspace_edit)
+    result = apply_workspace_edit(workspace_edit, workspace_root=tmp_path)
     assert target.read_text(encoding="utf-8") == "bar = 1\n"
     assert result.total_edits == 1
 
@@ -285,13 +287,13 @@ def test_document_changes_only_still_applied_regression(tmp_path: Path) -> None:
             {"textDocument": {"uri": uri}, "edits": [_text_edit(0, 0, 0, 3, "bar")]},
         ]
     }
-    result = apply_workspace_edit(workspace_edit)
+    result = apply_workspace_edit(workspace_edit, workspace_root=tmp_path)
     assert target.read_text(encoding="utf-8") == "bar = 1\n"
     assert result.total_edits == 1
 
 
 def test_empty_workspace_edit_changes_nothing(tmp_path: Path) -> None:
-    result = apply_workspace_edit({})
+    result = apply_workspace_edit({}, workspace_root=tmp_path)
     assert not result.changed_any
     assert result.total_edits == 0
 
@@ -300,6 +302,74 @@ def test_unreadable_uri_is_skipped_not_raised(tmp_path: Path) -> None:
     missing = tmp_path / "ghost.py"  # never created
     uri = path_to_document_uri(str(missing))
     workspace_edit = {"changes": {uri: [_text_edit(0, 0, 0, 3, "bar")]}}
-    result = apply_workspace_edit(workspace_edit)
+    result = apply_workspace_edit(workspace_edit, workspace_root=tmp_path)
     assert not result.changed_any
     assert result.skipped  # a "could not read" note was recorded
+
+
+def test_opaque_non_file_uri_is_rejected_before_path_conversion(tmp_path: Path) -> None:
+    workspace_edit = {"changes": {"untitled:buffer": [_text_edit(0, 0, 0, 1, "x")]}}
+
+    result = apply_workspace_edit(workspace_edit, workspace_root=tmp_path)
+
+    assert not result.changed_any
+    assert result.skipped == ["unsupported document URI: untitled:buffer"]
+
+
+def test_malformed_uri_is_skipped_without_aborting(tmp_path: Path) -> None:
+    target = tmp_path / "safe.py"
+    target.write_text("a = 1\n", encoding="utf-8")
+    workspace_edit = {
+        "changes": {
+            "file://[invalid": [_text_edit(0, 0, 0, 1, "x")],
+            path_to_document_uri(str(target)): [_text_edit(0, 0, 0, 1, "b")],
+        }
+    }
+
+    result = apply_workspace_edit(workspace_edit, workspace_root=tmp_path)
+
+    assert result.changed_any
+    assert target.read_text(encoding="utf-8") == "b = 1\n"
+    assert len(result.skipped) == 1
+    assert result.skipped[0].startswith("invalid document URI: file://[invalid")
+
+
+def test_outside_workspace_uri_is_skipped_before_write(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.py"
+    outside.write_text("foo = 1\n", encoding="utf-8")
+    workspace_edit = {
+        "changes": {
+            path_to_document_uri(str(outside)): [_text_edit(0, 0, 0, 3, "bar")],
+        }
+    }
+
+    result = apply_workspace_edit(workspace_edit, workspace_root=workspace)
+
+    assert not result.changed_any
+    assert outside.read_text(encoding="utf-8") == "foo = 1\n"
+    assert any("escapes workspace" in note for note in result.skipped)
+
+
+def test_symlink_target_outside_workspace_is_skipped(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.py"
+    outside.write_text("foo = 1\n", encoding="utf-8")
+    linked = workspace / "linked.py"
+    try:
+        linked.symlink_to(outside)
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"symlinks unavailable: {exc}")
+    workspace_edit = {
+        "changes": {
+            path_to_document_uri(str(linked)): [_text_edit(0, 0, 0, 3, "bar")],
+        }
+    }
+
+    result = apply_workspace_edit(workspace_edit, workspace_root=workspace)
+
+    assert not result.changed_any
+    assert outside.read_text(encoding="utf-8") == "foo = 1\n"
+    assert any("escapes workspace" in note for note in result.skipped)
