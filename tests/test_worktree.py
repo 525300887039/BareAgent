@@ -16,10 +16,12 @@ from bareagent.core.handlers.glob_search import run_glob
 from bareagent.core.handlers.grep_search import run_grep
 from bareagent.core.tools import rebind_workspace_handlers
 from bareagent.planning import worktree
-from bareagent.planning.subagent import run_subagent
+from bareagent.planning.subagent import _finalize_worktree, run_subagent
 from bareagent.planning.worktree import (
+    WorktreeHandle,
     create_worktree,
     is_git_repo,
+    remove_pristine_worktree,
     remove_worktree,
     worktree_status,
 )
@@ -84,7 +86,7 @@ def test_worktree_lifecycle_clean(tmp_path) -> None:
         assert handle.branch.startswith("bareagent/wt-")
         assert handle.base_workspace == str(repo)
 
-        dirty, summary = worktree_status(handle.path)
+        dirty, summary = worktree_status(handle)
         assert dirty is False
         assert summary == "no changes"
     finally:
@@ -102,9 +104,163 @@ def test_worktree_status_dirty_after_write(tmp_path) -> None:
     handle = create_worktree(repo)
     try:
         (Path(handle.path) / "new_file.txt").write_text("hello\n", encoding="utf-8")
-        dirty, summary = worktree_status(handle.path)
+        dirty, summary = worktree_status(handle)
         assert dirty is True
         assert "1 file(s) changed" == summary
+    finally:
+        remove_worktree(handle)
+
+
+@requires_git
+def test_finalize_worktree_keeps_clean_branch_with_new_commit(tmp_path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+
+    handle = create_worktree(repo)
+    try:
+        worktree_path = Path(handle.path)
+        (worktree_path / "committed.txt").write_text("kept\n", encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=worktree_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "subagent work"],
+            cwd=worktree_path,
+            check=True,
+            capture_output=True,
+        )
+
+        note = _finalize_worktree(handle)
+
+        assert "[worktree] kept at" in note
+        assert "HEAD changed from creation commit" in note
+        assert worktree_path.exists()
+        branch_result = subprocess.run(
+            ["git", "show-ref", "--verify", f"refs/heads/{handle.branch}"],
+            cwd=repo,
+            capture_output=True,
+        )
+        assert branch_result.returncode == 0
+    finally:
+        remove_worktree(handle)
+
+
+@pytest.mark.parametrize("failure_mode", ["exception", "nonzero"])
+def test_finalize_worktree_keeps_when_status_unavailable(
+    tmp_path, monkeypatch, failure_mode: str
+) -> None:
+    handle = WorktreeHandle(
+        path=str(tmp_path / "worktree"),
+        branch="bareagent/wt-test",
+        base_workspace=str(tmp_path),
+        base_commit="abc123",
+    )
+    removed = False
+
+    def _unavailable_status(_workspace, *_args):
+        if failure_mode == "exception":
+            raise OSError("git unavailable")
+        return subprocess.CompletedProcess(
+            args=["git", "status"], returncode=128, stdout="", stderr="not a worktree"
+        )
+
+    def _record_remove(_handle) -> None:
+        nonlocal removed
+        removed = True
+
+    monkeypatch.setattr(worktree, "_run_git", _unavailable_status)
+    monkeypatch.setattr("bareagent.planning.subagent.remove_pristine_worktree", _record_remove)
+
+    note = _finalize_worktree(handle)
+
+    assert "[worktree] kept at" in note
+    assert "status unavailable" in note
+    assert removed is False
+
+
+@pytest.mark.parametrize("failure_mode", ["exception", "nonzero"])
+def test_worktree_status_fails_closed_when_head_unavailable(
+    tmp_path, monkeypatch, failure_mode: str
+) -> None:
+    handle = WorktreeHandle(
+        path=str(tmp_path / "worktree"),
+        branch="bareagent/wt-test",
+        base_workspace=str(tmp_path),
+        base_commit="abc123",
+    )
+
+    def _run(_workspace, *args):
+        if args[0] == "status":
+            return subprocess.CompletedProcess(
+                args=["git", *args], returncode=0, stdout="", stderr=""
+            )
+        if failure_mode == "exception":
+            raise OSError("git unavailable")
+        return subprocess.CompletedProcess(
+            args=["git", *args], returncode=128, stdout="", stderr="missing HEAD"
+        )
+
+    monkeypatch.setattr(worktree, "_run_git", _run)
+
+    dirty, summary = worktree_status(handle)
+
+    assert dirty is True
+    expected = (
+        "HEAD unavailable" if failure_mode == "exception" else "HEAD unavailable: missing HEAD"
+    )
+    assert summary == expected
+
+
+@requires_git
+def test_remove_pristine_worktree_refuses_new_uncommitted_changes(tmp_path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+
+    handle = create_worktree(repo)
+    try:
+        worktree_path = Path(handle.path)
+        (worktree_path / "late.txt").write_text("late write\n", encoding="utf-8")
+
+        worktree_removed, branch_removed, summary = remove_pristine_worktree(handle)
+
+        assert worktree_removed is False
+        assert branch_removed is False
+        assert "worktree removal refused" in summary
+        assert worktree_path.exists()
+    finally:
+        remove_worktree(handle)
+
+
+@requires_git
+def test_remove_pristine_worktree_preserves_new_commit_on_branch(tmp_path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+
+    handle = create_worktree(repo)
+    try:
+        worktree_path = Path(handle.path)
+        (worktree_path / "late.txt").write_text("late commit\n", encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=worktree_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "late commit"],
+            cwd=worktree_path,
+            check=True,
+            capture_output=True,
+        )
+
+        worktree_removed, branch_removed, summary = remove_pristine_worktree(handle)
+
+        assert worktree_removed is True
+        assert branch_removed is False
+        assert "branch retained" in summary
+        assert not worktree_path.exists()
+        branch_result = subprocess.run(
+            ["git", "show-ref", "--verify", f"refs/heads/{handle.branch}"],
+            cwd=repo,
+            capture_output=True,
+        )
+        assert branch_result.returncode == 0
     finally:
         remove_worktree(handle)
 

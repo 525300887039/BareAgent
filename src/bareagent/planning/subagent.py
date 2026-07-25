@@ -24,7 +24,7 @@ from bareagent.planning.worktree import (
     WorktreeHandle,
     create_worktree,
     is_git_repo,
-    remove_worktree,
+    remove_pristine_worktree,
     worktree_status,
 )
 from bareagent.provider.base import BaseLLMProvider
@@ -325,13 +325,23 @@ def _finalize_worktree(handle: WorktreeHandle) -> str:
 
     Returns the footnote to append to the sub-agent's result.
     """
-    dirty, summary = worktree_status(handle.path)
+    dirty, summary = worktree_status(handle)
     if dirty:
         return (
             f"\n\n[worktree] kept at {handle.path} on branch {handle.branch} "
             f"({summary}). Inspect with: git worktree list."
         )
-    remove_worktree(handle)
+    worktree_removed, branch_removed, cleanup_summary = remove_pristine_worktree(handle)
+    if not worktree_removed:
+        return (
+            f"\n\n[worktree] kept at {handle.path} on branch {handle.branch} "
+            f"({cleanup_summary}). Inspect with: git worktree list."
+        )
+    if not branch_removed:
+        return (
+            f"\n\n[worktree] removed at {handle.path}, but branch {handle.branch} "
+            f"was kept ({cleanup_summary})."
+        )
     return f"\n\n[worktree] cleaned up (no changes) at branch {handle.branch}."
 
 

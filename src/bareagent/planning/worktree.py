@@ -36,6 +36,7 @@ class WorktreeHandle:
     path: str
     branch: str
     base_workspace: str
+    base_commit: str | None = None
 
 
 def _run_git(workspace: str | Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -71,12 +72,28 @@ def create_worktree(workspace: str | Path) -> WorktreeHandle:
     index). ``mkdtemp`` pre-creates an empty directory; ``git worktree add``
     accepts an existing empty directory as its target.
     """
+    try:
+        base_result = _run_git(workspace, "rev-parse", "HEAD")
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise WorktreeError(f"git rev-parse HEAD failed: {exc}") from exc
+    if base_result.returncode != 0 or not base_result.stdout.strip():
+        detail = base_result.stderr.strip() or base_result.stdout.strip() or "unknown error"
+        raise WorktreeError(f"git rev-parse HEAD failed: {detail}")
+
     worktree_id = generate_random_id(8)
     branch = f"bareagent/wt-{worktree_id}"
     path = tempfile.mkdtemp(prefix="bareagent-wt-")
 
     try:
-        completed = _run_git(workspace, "worktree", "add", path, "-b", branch)
+        completed = _run_git(
+            workspace,
+            "worktree",
+            "add",
+            path,
+            "-b",
+            branch,
+            base_result.stdout.strip(),
+        )
     except (OSError, subprocess.SubprocessError) as exc:
         raise WorktreeError(f"git worktree add failed: {exc}") from exc
 
@@ -84,25 +101,80 @@ def create_worktree(workspace: str | Path) -> WorktreeHandle:
         detail = completed.stderr.strip() or completed.stdout.strip() or "unknown error"
         raise WorktreeError(f"git worktree add failed: {detail}")
 
-    return WorktreeHandle(path=path, branch=branch, base_workspace=str(workspace))
+    return WorktreeHandle(
+        path=path,
+        branch=branch,
+        base_workspace=str(workspace),
+        base_commit=base_result.stdout.strip(),
+    )
 
 
-def worktree_status(path: str | Path) -> tuple[bool, str]:
-    """Return ``(dirty, summary)`` for the worktree at *path*.
+def worktree_status(handle: WorktreeHandle) -> tuple[bool, str]:
+    """Return whether *handle* contains work that must be retained.
 
-    Dirty is defined as a non-empty ``git status --porcelain`` — a sub-agent's
-    output is uncommitted changes (auto-commit is out of scope), so there is no
-    commits-ahead comparison.
+    Cleanup is allowed only after both Git inspections succeed, the porcelain
+    status is empty, and HEAD still matches the commit captured at creation.
+    Inspection failures fail closed so unavailable state is never discarded.
     """
     try:
-        completed = _run_git(path, "status", "--porcelain")
+        completed = _run_git(handle.path, "status", "--porcelain")
     except (OSError, subprocess.SubprocessError):
-        return False, "status unavailable"
+        return True, "status unavailable"
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip() or "unknown error"
+        return True, f"status unavailable: {detail}"
 
     lines = [line for line in completed.stdout.splitlines() if line.strip()]
-    dirty = bool(lines)
-    summary = f"{len(lines)} file(s) changed" if dirty else "no changes"
-    return dirty, summary
+    if lines:
+        return True, f"{len(lines)} file(s) changed"
+    if handle.base_commit is None:
+        return True, "creation commit unavailable"
+
+    try:
+        head_result = _run_git(handle.path, "rev-parse", "HEAD")
+    except (OSError, subprocess.SubprocessError):
+        return True, "HEAD unavailable"
+    if head_result.returncode != 0 or not head_result.stdout.strip():
+        detail = head_result.stderr.strip() or head_result.stdout.strip() or "unknown error"
+        return True, f"HEAD unavailable: {detail}"
+    if head_result.stdout.strip() != handle.base_commit:
+        return True, "HEAD changed from creation commit"
+    return False, "no changes"
+
+
+def remove_pristine_worktree(handle: WorktreeHandle) -> tuple[bool, bool, str]:
+    """Safely remove an unchanged worktree and its still-unchanged branch.
+
+    The non-forced worktree removal lets Git reject uncommitted changes that
+    appear after the caller's status check. ``update-ref`` deletes the branch
+    atomically only if it still points to the creation commit, preserving any
+    commit that races the cleanup check.
+    """
+    if handle.base_commit is None:
+        return False, False, "creation commit unavailable"
+    try:
+        removed = _run_git(handle.base_workspace, "worktree", "remove", handle.path)
+    except (OSError, subprocess.SubprocessError):
+        return False, False, "worktree removal unavailable"
+    if removed.returncode != 0:
+        detail = removed.stderr.strip() or removed.stdout.strip() or "unknown error"
+        return False, False, f"worktree removal refused: {detail}"
+
+    branch_ref = f"refs/heads/{handle.branch}"
+    try:
+        branch_removed = _run_git(
+            handle.base_workspace,
+            "update-ref",
+            "-d",
+            branch_ref,
+            handle.base_commit,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return True, False, "branch cleanup unavailable"
+    if branch_removed.returncode != 0:
+        detail = branch_removed.stderr.strip() or branch_removed.stdout.strip() or "HEAD changed"
+        return True, False, f"branch retained: {detail}"
+    return True, True, "removed"
 
 
 def remove_worktree(handle: WorktreeHandle) -> None:
