@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# Model-level input-modality capabilities.
+# Input-modality capabilities.
 #
 # Vision (image_in) is a *model* property, not a provider one: the same
 # OpenAIProvider serves both gpt-4o (vision) and deepseek-chat (text-only). So
@@ -42,10 +42,10 @@ KNOWN_IMAGE_INPUT_PREFIXES: tuple[str, ...] = (
     "deepseek-vl",
 )
 
-# Model-id prefixes that accept native base64 PDF *document* blocks. This is an
-# Anthropic-only feature (the document block shape is Anthropic-native and only
-# AnthropicProvider lifts it into the request), so the table is the Claude family
-# alone. OpenAI-compatible endpoints stay off -> read_file falls back to pypdf.
+# Model-id prefixes that accept native base64 PDF *document* blocks. Model
+# support is only half of the gate: the provider transport must also declare
+# ``native_pdf_input`` because OpenAI-compatible endpoints cannot serialize the
+# Anthropic-native block shape, even when their model id starts with "claude".
 KNOWN_PDF_INPUT_PREFIXES: tuple[str, ...] = (
     "claude-3",
     "claude-opus-4",
@@ -71,14 +71,21 @@ def supports_image_input(model: str, *, override: bool | None = None) -> bool:
     return any(normalized.startswith(prefix) for prefix in KNOWN_IMAGE_INPUT_PREFIXES)
 
 
-def supports_pdf_input(model: str, *, override: bool | None = None) -> bool:
+def supports_pdf_input(
+    model: str,
+    *,
+    provider_supports_pdf: bool,
+    override: bool | None = None,
+) -> bool:
     """Whether *model* accepts native base64 PDF document blocks.
 
-    Same precedence as :func:`supports_image_input`: an explicit ``override``
-    wins, else a prefix match against the Claude-only PDF table. Unknown models
-    default to ``False`` (fail-safe) so a document block is never sent to a
-    provider that would choke on it -- read_file falls back to pypdf text.
+    The provider transport gate is mandatory and cannot be overridden. Within
+    a supported provider, an explicit ``override`` wins over the Claude model
+    table. Unknown models default to ``False`` so read_file falls back to pypdf
+    text instead of sending a document block the model may reject.
     """
+    if not provider_supports_pdf:
+        return False
     if override is not None:
         return override
     normalized = (model or "").strip().lower()

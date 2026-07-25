@@ -116,6 +116,10 @@ class BaseLLMProvider(ABC):
     # sees model strings, so coupling it to provider identity is avoided.
     cache_mode: ClassVar[Literal["explicit", "auto", "none"]] = "none"
 
+    # Whether this provider's wire format can carry Anthropic-native base64 PDF
+    # document blocks. Model support is checked separately in capabilities.py.
+    native_pdf_input: ClassVar[bool] = False
+
     @abstractmethod
     def create(
         self,

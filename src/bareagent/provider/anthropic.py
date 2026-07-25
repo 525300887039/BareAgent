@@ -40,6 +40,7 @@ def _is_real_user_turn(content: Any) -> bool:
 class AnthropicProvider(BaseLLMProvider):
     # Anthropic uses explicit cache_control breakpoints (see _build_request_params).
     cache_mode = "explicit"
+    native_pdf_input = True
 
     def __init__(
         self,

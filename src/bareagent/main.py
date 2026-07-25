@@ -2139,6 +2139,7 @@ def _build_handlers(
         ),
         pdf_input_enabled=supports_pdf_input(
             getattr(provider, "model", "") or "",
+            provider_supports_pdf=provider.native_pdf_input,
             override=config.capabilities.pdf_in,
         ),
     )

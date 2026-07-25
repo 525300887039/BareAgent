@@ -109,6 +109,15 @@ This is what `src/mcp/registry.py::_to_content_blocks` emits, what `src/core/loo
 3. Normalize at the data-source boundary (e.g. MCP `registry.py`, file readers). Never put translation logic inside `provider/*`.
 4. Each provider adapter maps internal → provider-native one-way.
 
+Provider-native modalities also need two independent capability gates. The
+provider adapter declares whether its wire format can carry the internal block
+shape (default deny on `BaseLLMProvider`), and the model capability resolver
+decides whether the selected model accepts it. A user override may override
+model detection, but it must never bypass the provider wire-format gate. For
+example, an OpenAI-compatible endpoint using a Claude-like model id must still
+fall back to extracted PDF text because it cannot serialize Anthropic
+`document` blocks.
+
 **Anti-pattern**: introducing a neutral `{type, mime, data}` abstraction and writing `from_internal()` / `to_internal()` on every provider. That doubles the surface area and creates round-trip ambiguity when fields don't line up (e.g. Anthropic's `media_type` vs OpenAI's MIME-in-URL).
 
 ---

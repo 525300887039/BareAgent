@@ -349,7 +349,8 @@ recent_files = 5
 # read_file 读图返友好 Error 而非撞 API）；true = 强制放行；false = 强制拒绝。
 # 走 env 覆盖 BAREAGENT_MODEL_IMAGE_IN（1/true/on 或 0/false/off），boot 固化 -> restart-required。
 # image_in = true
-# pdf_in 三态：留空 = auto（原生 base64 PDF document block 是 Anthropic 特性，仅 Claude
-# 家族默认放行，其余默认拒绝 -> read_file 读 PDF 回退 pypdf 文本）；true/false 强制。
+# pdf_in 三态：留空 = auto（原生 base64 PDF document block 是 Anthropic 特性，仅 Anthropic
+# provider + Claude 家族默认放行，其余回退 pypdf 文本）；true/false 仅覆盖模型判断，不能
+# 绕过 provider 传输格式门控。
 # 走 env 覆盖 BAREAGENT_MODEL_PDF_IN。显式传 pages 或超 20MB 时恒走 pypdf 文本路径。
 # pdf_in = true

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from bareagent.provider.anthropic import AnthropicProvider
 from bareagent.provider.capabilities import supports_image_input, supports_pdf_input
+from bareagent.provider.openai import OpenAIProvider
 
 
 @pytest.mark.parametrize(
@@ -77,7 +79,10 @@ def test_override_none_falls_back_to_table() -> None:
     ],
 )
 def test_claude_models_allow_native_pdf(model: str) -> None:
-    assert supports_pdf_input(model) is True
+    assert supports_pdf_input(
+        model,
+        provider_supports_pdf=AnthropicProvider.native_pdf_input,
+    )
 
 
 @pytest.mark.parametrize(
@@ -91,10 +96,36 @@ def test_claude_models_allow_native_pdf(model: str) -> None:
     ],
 )
 def test_non_claude_models_denied_native_pdf(model: str) -> None:
-    assert supports_pdf_input(model) is False
+    assert not supports_pdf_input(
+        model,
+        provider_supports_pdf=AnthropicProvider.native_pdf_input,
+    )
 
 
 def test_pdf_override_forces_regardless_of_table() -> None:
-    assert supports_pdf_input("gpt-4o", override=True) is True
-    assert supports_pdf_input("claude-opus-4-8", override=False) is False
-    assert supports_pdf_input("gpt-4o", override=None) is False
+    assert supports_pdf_input(
+        "gpt-4o",
+        provider_supports_pdf=AnthropicProvider.native_pdf_input,
+        override=True,
+    )
+    assert not supports_pdf_input(
+        "claude-opus-4-8",
+        provider_supports_pdf=AnthropicProvider.native_pdf_input,
+        override=False,
+    )
+    assert not supports_pdf_input(
+        "gpt-4o",
+        provider_supports_pdf=AnthropicProvider.native_pdf_input,
+        override=None,
+    )
+
+
+@pytest.mark.parametrize("override", [None, True, False])
+def test_openai_transport_denies_native_pdf_for_claude_model(
+    override: bool | None,
+) -> None:
+    assert not supports_pdf_input(
+        "claude-3-5-sonnet-20241022",
+        provider_supports_pdf=OpenAIProvider.native_pdf_input,
+        override=override,
+    )
