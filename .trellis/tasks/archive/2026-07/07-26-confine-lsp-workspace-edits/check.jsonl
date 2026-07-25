@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend quality-check checklist and review conventions."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Verify every external path is rejected before any read or write."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Verify regression coverage and full validation."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check root propagation and all direct callers across layers."}
