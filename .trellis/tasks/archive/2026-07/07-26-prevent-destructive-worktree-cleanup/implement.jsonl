@@ -1,0 +1,3 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend pre-development checklist and implementation conventions."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Cleanup must fail closed when Git inspection is unavailable."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Requires focused regression coverage and the repository quality gate."}
