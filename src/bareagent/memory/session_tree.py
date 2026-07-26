@@ -34,6 +34,7 @@ from bareagent.core.fileutil import atomic_write_json
 
 _PREVIEW_LIMIT = 60
 _PREVIEW_PLACEHOLDER = "(no text)"
+_MEMORY_RECALL_PREFIX = "<memory-recall>"
 _TREE_FILENAME = ".tree.json"
 
 # Serializes the read-modify-write of the lineage sidecar. Writes only ever come
@@ -88,8 +89,11 @@ def _preview(text: str, limit: int = _PREVIEW_LIMIT) -> str:
 
 
 def _is_real_user_turn(message: dict[str, Any]) -> bool:
-    """A user message that carries text (an actual prompt), not just tool_result."""
-    return message.get("role") == "user" and bool(_first_text(message.get("content")))
+    """A genuine user prompt, excluding tool results and injected context."""
+    text = _first_text(message.get("content"))
+    return (
+        message.get("role") == "user" and bool(text) and not text.startswith(_MEMORY_RECALL_PREFIX)
+    )
 
 
 def enumerate_fork_points(messages: list[dict[str, Any]]) -> list[ForkPoint]:

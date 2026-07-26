@@ -14,6 +14,7 @@ from bareagent.memory.persistent import (
     MemoryManager,
     parse_frontmatter,
 )
+from bareagent.memory.session_tree import enumerate_fork_points, slice_for_fork_point
 
 
 def _manager(tmp_path: Path) -> MemoryManager:
@@ -165,6 +166,25 @@ def test_refresh_memory_recall_injects_after_user(tmp_path):
     # Inserted right after the user message.
     user_index = messages.index({"role": "user", "content": "how do I docker deploy?"})
     assert messages[user_index + 1] is recalls[0]
+
+
+def test_memory_recall_does_not_replace_fork_point_user_preview(tmp_path: Path) -> None:
+    mm = _manager(tmp_path)
+    _write(mm, "deploy.md", "deploy", "docker production deployment notes")
+    messages = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "How do I deploy Docker to production?"},
+    ]
+
+    _refresh_memory_recall(messages, mm, recall_k=5)
+    messages.append({"role": "assistant", "content": "Use the release workflow."})
+
+    points = enumerate_fork_points(messages)
+    assert [(point.number, point.cut) for point in points] == [(1, 4)]
+    assert points[0].user_preview == "How do I deploy Docker to production?"
+    forked = slice_for_fork_point(messages, 1)
+    assert forked == messages
+    assert len(_recall_messages(forked)) == 1
 
 
 def test_refresh_memory_recall_replaces_stale_block(tmp_path):
