@@ -107,6 +107,33 @@ new pattern needs both a destructive regression case and a nearby safe case
 such as a dry run or `-WhatIf`, so broader matching does not silently turn AUTO
 mode into prompt-on-every-command.
 
+### Git invocations are classified from normalized tokens
+
+A literal `git <subcommand>` regular expression is not a sufficient boundary:
+the same executable can be invoked as `git.exe`, through a quoted absolute
+path, or with Git global options (`-C`, `-c`, `--no-pager`, and related forms)
+before the subcommand. PowerShell also uses `& "...\git.exe"` for quoted
+executable paths. All of these forms reach the shell handler unchanged.
+
+Use the shared Git invocation parser in `permission/guard.py` for both
+dangerous and DEFAULT-mode read-only classification. It must:
+
+- tokenize without executing, strip shell quotes, and compare the final path
+  component case-insensitively against `git` / `git.exe`;
+- skip value-taking and flag-style Git global options before locating the
+  subcommand;
+- force confirmation for forced push/clean, hard reset, and branch deletion
+  before consulting allow rules;
+- keep option boundaries precise so `clean -n` and a ref such as `release-f`
+  remain safe neighbors;
+- treat tokenization failure as not newly safe while retaining the legacy
+  dangerous regexes as a conservative fallback.
+
+Regression tests in `tests/test_dangerous_patterns.py` must exercise `bash`
+and `background_run`, direct `is_dangerous` results, allow-rule ordering,
+fail-closed denial, quoted/full-path executables, global options, and DEFAULT
+read-only variants. Never execute a destructive Git command to test the guard.
+
 ---
 
 ## Scenario: Automatic Git worktree cleanup
