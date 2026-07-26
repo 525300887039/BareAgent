@@ -115,6 +115,45 @@ def test_teammate_manager_persists_and_spawns(tmp_path: Path) -> None:
     assert spawned.provider == {"provider": "openai", "model": "gpt-test"}
 
 
+def test_teammate_manager_new_registration_rolls_back_when_persistence_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_file = tmp_path / ".team.json"
+    manager = TeammateManager(config_file)
+
+    def _fail_write(*_args: object, **_kwargs: object) -> None:
+        raise OSError("disk full")
+
+    with monkeypatch.context() as context:
+        context.setattr("bareagent.team.manager.atomic_write_json", _fail_write)
+        with pytest.raises(OSError, match="disk full"):
+            manager.register("ghost", "reviewer", "Review code.")
+
+    assert manager.list() == []
+    manager.register("later", "reviewer", "Review code.")
+    assert [teammate.name for teammate in TeammateManager(config_file).list()] == ["later"]
+
+
+def test_teammate_manager_replacement_rolls_back_when_persistence_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_file = tmp_path / ".team.json"
+    manager = TeammateManager(config_file)
+    before = manager.register("reviewer", "original role", "Original prompt.")
+
+    def _fail_write(*_args: object, **_kwargs: object) -> None:
+        raise OSError("disk full")
+
+    with monkeypatch.context() as context:
+        context.setattr("bareagent.team.manager.atomic_write_json", _fail_write)
+        with pytest.raises(OSError, match="disk full"):
+            manager.register("reviewer", "changed role", "Changed prompt.")
+
+    assert manager.get("reviewer") == before
+    manager.register("later", "reviewer", "Review code.")
+    assert TeammateManager(config_file).get("reviewer") == before
+
+
 def test_message_bus_send_receive_and_find(tmp_path: Path) -> None:
     bus = MessageBus(tmp_path / ".mailbox")
     bus.ensure_mailbox("main")

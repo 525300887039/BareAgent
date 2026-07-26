@@ -26,6 +26,59 @@ def test_task_manager_persists_created_tasks(tmp_path: Path) -> None:
     assert created.id in payload["tasks"]
 
 
+def test_task_manager_create_rolls_back_when_persistence_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    task_file = tmp_path / ".tasks.json"
+    manager = TaskManager(task_file)
+
+    def _fail_write(*_args: object, **_kwargs: object) -> None:
+        raise OSError("disk full")
+
+    with monkeypatch.context() as context:
+        context.setattr("bareagent.planning.tasks.atomic_write_json", _fail_write)
+        with pytest.raises(OSError, match="disk full"):
+            manager.create("ghost task")
+
+    assert manager.list() == []
+    manager.create("later task")
+    assert [task.title for task in TaskManager(task_file).list()] == ["later task"]
+
+
+def test_task_manager_update_rolls_back_when_persistence_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    task_file = tmp_path / ".tasks.json"
+    manager = TaskManager(task_file)
+    created = manager.create("original title")
+    before = manager.get(created.id)
+
+    def _fail_write(*_args: object, **_kwargs: object) -> None:
+        raise OSError("disk full")
+
+    with monkeypatch.context() as context:
+        context.setattr("bareagent.planning.tasks.atomic_write_json", _fail_write)
+        with pytest.raises(OSError, match="disk full"):
+            manager.update(created.id, status="done", title="changed title")
+
+    assert manager.get(created.id) == before
+    manager.create("later task")
+    assert TaskManager(task_file).get(created.id) == before
+
+
+def test_task_manager_update_validates_all_fields_before_mutating(tmp_path: Path) -> None:
+    task_file = tmp_path / ".tasks.json"
+    manager = TaskManager(task_file)
+    created = manager.create("original title")
+    before = manager.get(created.id)
+
+    with pytest.raises(ValueError, match="title must not be empty"):
+        manager.update(created.id, status="done", title=" ")
+
+    assert manager.get(created.id) == before
+    assert TaskManager(task_file).get(created.id) == before
+
+
 def test_task_manager_ready_tasks_follow_dependency_chain(tmp_path: Path) -> None:
     manager = TaskManager(tmp_path / ".tasks.json")
     task_a = manager.create("A")

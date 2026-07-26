@@ -70,8 +70,10 @@ class TeammateManager:
                 system_prompt=normalized_prompt,
                 provider_config=dict(provider_config or {}),
             )
-            self.teammates[normalized_name] = teammate
-            self._save()
+            candidate_teammates = dict(self.teammates)
+            candidate_teammates[normalized_name] = teammate
+            self._save(candidate_teammates)
+            self.teammates = candidate_teammates
             return teammate
 
     def get(self, name: str) -> Teammate:
@@ -105,8 +107,10 @@ class TeammateManager:
             provider_config=provider_config,
         )
 
-    def _save(self) -> None:
-        payload = {"teammates": {teammate.name: teammate.to_dict() for teammate in self.list()}}
+    def _save(self, teammates: dict[str, Teammate] | None = None) -> None:
+        source = self.teammates if teammates is None else teammates
+        ordered = sorted(source.values(), key=lambda teammate: teammate.name)
+        payload = {"teammates": {teammate.name: teammate.to_dict() for teammate in ordered}}
         atomic_write_json(self.config_file, payload)
 
     def _load(self) -> None:

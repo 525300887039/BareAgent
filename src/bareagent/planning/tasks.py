@@ -128,13 +128,11 @@ class TaskManager:
                 created_at=now,
                 updated_at=now,
             )
-            self.tasks[task.id] = task
-            try:
-                self._ensure_acyclic()
-            except Exception:
-                del self.tasks[task.id]
-                raise
-            self._save()
+            candidate_tasks = dict(self.tasks)
+            candidate_tasks[task.id] = task
+            self._ensure_acyclic(candidate_tasks)
+            self._save(candidate_tasks)
+            self.tasks = candidate_tasks
             return self._copy_task(task)
 
     def update(
@@ -155,26 +153,31 @@ class TaskManager:
                         f"expected {normalized_expected_status}"
                     )
 
+            candidate = self._copy_task(task)
             changed = False
 
             if status is not None:
                 normalized_status = status.strip()
                 self._validate_status(normalized_status)
-                if task.status != normalized_status:
-                    task.status = normalized_status
+                if candidate.status != normalized_status:
+                    candidate.status = normalized_status
                     changed = True
 
             if title is not None:
                 normalized_title = title.strip()
                 if not normalized_title:
                     raise ValueError("title must not be empty")
-                if task.title != normalized_title:
-                    task.title = normalized_title
+                if candidate.title != normalized_title:
+                    candidate.title = normalized_title
                     changed = True
 
             if changed:
-                task.updated_at = self._timestamp()
-                self._save()
+                candidate.updated_at = self._timestamp()
+                candidate_tasks = dict(self.tasks)
+                candidate_tasks[task.id] = candidate
+                self._save(candidate_tasks)
+                self.tasks = candidate_tasks
+                task = candidate
 
             return self._copy_task(task)
 
@@ -221,8 +224,9 @@ class TaskManager:
         copied.depends_on = list(task.depends_on)
         return copied
 
-    def _save(self) -> None:
-        payload = {"tasks": {task_id: task.to_dict() for task_id, task in self.tasks.items()}}
+    def _save(self, tasks: dict[str, Task] | None = None) -> None:
+        source = self.tasks if tasks is None else tasks
+        payload = {"tasks": {task_id: task.to_dict() for task_id, task in source.items()}}
         atomic_write_json(self.task_file, payload)
 
     def _load(self) -> None:
@@ -276,7 +280,8 @@ class TaskManager:
             if dependency_id not in self.tasks:
                 raise ValueError(f"Unknown dependency task id: {dependency_id}")
 
-    def _ensure_acyclic(self) -> None:
+    def _ensure_acyclic(self, tasks: dict[str, Task] | None = None) -> None:
+        source = self.tasks if tasks is None else tasks
         visiting: set[str] = set()
         visited: set[str] = set()
 
@@ -287,12 +292,12 @@ class TaskManager:
                 return
 
             visiting.add(task_id)
-            for dependency_id in self.tasks[task_id].depends_on:
+            for dependency_id in source[task_id].depends_on:
                 _dfs(dependency_id)
             visiting.remove(task_id)
             visited.add(task_id)
 
-        for task_id in self.tasks:
+        for task_id in source:
             _dfs(task_id)
 
     def _generate_task_id(self) -> str:
