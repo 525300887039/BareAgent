@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import sys
 from collections.abc import Callable
 from enum import Enum
@@ -29,6 +30,53 @@ _ALWAYS_MUTATING_TOOLS = {
 }
 _MEMORY_READ_COMMANDS = {"view"}
 
+_GIT_EXECUTABLES = {"git", "git.exe"}
+_GIT_GLOBAL_OPTIONS_WITH_VALUE = {
+    "-c",
+    "--attr-source",
+    "--config-env",
+    "--exec-path",
+    "--git-dir",
+    "--list-cmds",
+    "--namespace",
+    "--super-prefix",
+    "--work-tree",
+}
+_GIT_READ_ONLY_SUBCOMMANDS = {"diff", "log", "show", "status"}
+_BRANCH_LISTING_OPTIONS = {
+    "-a",
+    "-l",
+    "-r",
+    "--all",
+    "--contains",
+    "--format",
+    "--ignore-case",
+    "--list",
+    "--merged",
+    "--no-contains",
+    "--no-color",
+    "--no-column",
+    "--no-merged",
+    "--omit-empty",
+    "--points-at",
+    "--remotes",
+    "--show-current",
+    "--sort",
+    "--verbose",
+}
+_BRANCH_MUTATING_OPTIONS = {
+    "--copy",
+    "--delete",
+    "--edit-description",
+    "--force",
+    "--move",
+    "--no-track",
+    "--recurse-submodules",
+    "--set-upstream-to",
+    "--track",
+    "--unset-upstream",
+}
+
 _MCP_TOOL_PREFIX = "mcp__"
 # Preview limits for MCP ask prompts. MCP args are JSON, not shell text, and
 # servers can produce arbitrarily large strings (file blobs, long URLs). Cap
@@ -39,6 +87,163 @@ _MCP_PREVIEW_FIELD_LIMIT = 256
 def _is_mcp_tool(tool_name: str) -> bool:
     """Return True if ``tool_name`` follows the ``mcp__<server>__<tool>`` namespace."""
     return tool_name.startswith(_MCP_TOOL_PREFIX)
+
+
+def _shell_tokens(command: str) -> list[str] | None:
+    """Split shell text while preserving Windows paths and command separators."""
+    lexer = shlex.shlex(command, posix=False, punctuation_chars=";&|")
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    try:
+        return list(lexer)
+    except ValueError:
+        return None
+
+
+def _strip_shell_quotes(token: str) -> str:
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in {'"', "'"}:
+        return token[1:-1]
+    return token
+
+
+def _is_shell_separator(token: str) -> bool:
+    return bool(token) and all(character in ";&|" for character in token)
+
+
+def _is_git_executable(token: str) -> bool:
+    normalized = _strip_shell_quotes(token).replace("\\", "/")
+    return normalized.rsplit("/", 1)[-1].casefold() in _GIT_EXECUTABLES
+
+
+def _parse_git_invocation(tokens: list[str], executable_index: int) -> tuple[str, list[str]] | None:
+    end = executable_index + 1
+    while end < len(tokens) and not _is_shell_separator(tokens[end]):
+        end += 1
+
+    index = executable_index + 1
+    while index < end:
+        token = _strip_shell_quotes(tokens[index])
+        normalized = token.casefold()
+        if normalized == "--":
+            index += 1
+            break
+        if normalized in _GIT_GLOBAL_OPTIONS_WITH_VALUE:
+            index += 2
+            continue
+        if normalized.startswith("-"):
+            index += 1
+            continue
+        arguments = [_strip_shell_quotes(argument) for argument in tokens[index + 1 : end]]
+        return normalized, arguments
+
+    if index < end:
+        subcommand = _strip_shell_quotes(tokens[index]).casefold()
+        arguments = [_strip_shell_quotes(argument) for argument in tokens[index + 1 : end]]
+        return subcommand, arguments
+    return None
+
+
+def _git_invocations(command: str) -> list[tuple[str, list[str]]]:
+    tokens = _shell_tokens(command)
+    if tokens is None:
+        return []
+    invocations: list[tuple[str, list[str]]] = []
+    for index, token in enumerate(tokens):
+        if not _is_git_executable(token):
+            continue
+        invocation = _parse_git_invocation(tokens, index)
+        if invocation is not None:
+            invocations.append(invocation)
+    return invocations
+
+
+def _has_force_option(arguments: list[str]) -> bool:
+    for argument in arguments:
+        normalized = argument.casefold()
+        if normalized == "--":
+            break
+        if normalized == "--force" or normalized.startswith(
+            ("--force=", "--force-if-includes", "--force-with-lease")
+        ):
+            return True
+        if re.fullmatch(r"-[a-z]*f[a-z]*", normalized):
+            return True
+    return False
+
+
+def _has_branch_delete_option(arguments: list[str]) -> bool:
+    for argument in arguments:
+        normalized = argument.casefold()
+        if normalized == "--":
+            break
+        if normalized == "--delete" or normalized.startswith("--delete="):
+            return True
+        if re.fullmatch(r"-[a-z]*d[a-z]*", normalized):
+            return True
+    return False
+
+
+def _is_dangerous_git_command(command: str) -> bool:
+    for subcommand, arguments in _git_invocations(command):
+        if subcommand in {"clean", "push"} and _has_force_option(arguments):
+            return True
+        if subcommand == "reset" and any(argument.casefold() == "--hard" for argument in arguments):
+            return True
+        if subcommand == "branch" and _has_branch_delete_option(arguments):
+            return True
+    return False
+
+
+def _has_output_option(arguments: list[str]) -> bool:
+    return any(
+        argument.casefold() == "--output" or argument.casefold().startswith("--output=")
+        for argument in arguments
+    )
+
+
+def _has_mutating_branch_option(argument: str) -> bool:
+    normalized = argument.casefold()
+    if normalized in _BRANCH_MUTATING_OPTIONS:
+        return True
+    if any(normalized.startswith(f"{option}=") for option in _BRANCH_MUTATING_OPTIONS):
+        return True
+    return re.fullmatch(r"-[a-z]*[dmcfut][a-z]*", normalized) is not None
+
+
+def _is_read_only_branch(arguments: list[str]) -> bool:
+    if not arguments:
+        return True
+    if any(_has_mutating_branch_option(argument) for argument in arguments):
+        return False
+    if all(argument.startswith("-") for argument in arguments):
+        return True
+    return any(
+        normalized in _BRANCH_LISTING_OPTIONS
+        or any(normalized.startswith(f"{option}=") for option in _BRANCH_LISTING_OPTIONS)
+        for normalized in (argument.casefold() for argument in arguments)
+    )
+
+
+def _is_read_only_git_command(command: str) -> bool:
+    tokens = _shell_tokens(command)
+    if tokens is None or not tokens:
+        return False
+
+    executable_index = 0
+    if tokens[0] == "&":
+        executable_index = 1
+    if executable_index >= len(tokens) or not _is_git_executable(tokens[executable_index]):
+        return False
+
+    invocation = _parse_git_invocation(tokens, executable_index)
+    if invocation is None:
+        return False
+    subcommand, arguments = invocation
+    if subcommand in _GIT_READ_ONLY_SUBCOMMANDS:
+        return not _has_output_option(arguments)
+    if subcommand == "branch":
+        return _is_read_only_branch(arguments)
+    return False
 
 
 class PermissionGuard:
@@ -80,7 +285,6 @@ class PermissionGuard:
     }
     AUTO_SAFE_PATTERNS = [
         re.compile(r"^(ls|cat|head|tail|wc|echo|pwd|date|which|type)\b"),
-        re.compile(r"^git\s+(status|log|diff|branch|show)\b"),
         re.compile(r"^(pytest|python\s+-m\s+pytest|ruff|mypy)\b"),
         re.compile(r"^npm\s+(test|run\s+lint|run\s+test)\b"),
     ]
@@ -166,11 +370,15 @@ class PermissionGuard:
             cmd = rule_subject or ""
             if self._match_rules(self.deny_rules, normalized_tool, cmd):
                 return True
-            if any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS):
+            if _is_dangerous_git_command(cmd) or any(
+                pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS
+            ):
                 return True
             if self._match_rules(self.allow_rules, normalized_tool, cmd):
                 return False
-            if any(pattern.search(cmd) for pattern in self.AUTO_SAFE_PATTERNS):
+            if _is_read_only_git_command(cmd) or any(
+                pattern.search(cmd) for pattern in self.AUTO_SAFE_PATTERNS
+            ):
                 return False
             if self.mode == PermissionMode.DEFAULT:
                 return True
@@ -207,7 +415,9 @@ class PermissionGuard:
             return False
         if normalized_tool in _SHELL_COMMAND_TOOLS:
             cmd = str(tool_input.get("command", ""))
-            return any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS)
+            return _is_dangerous_git_command(cmd) or any(
+                pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS
+            )
         return False
 
     def format_preview(self, tool_name: str, tool_input: dict[str, Any]) -> str:
