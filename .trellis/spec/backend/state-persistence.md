@@ -152,6 +152,28 @@ def _save(self) -> None:
 
 `TaskManager` also holds a `threading.RLock` for the whole load/mutate/save cycle. Any new on-disk structured state must do the same.
 
+### Publish in-memory state only after persistence succeeds
+
+An atomic file replacement prevents partial JSON, but it does not make an
+in-memory mutation transactional. If a manager changes its live dictionary
+before calling `atomic_write_json`, a write failure can leave state that the
+caller was told did not succeed; a later successful operation can then persist
+that ghost state.
+
+For task and teammate mutations, keep the manager lock held and use this order:
+
+1. Validate every proposed field before changing live state.
+2. Build a candidate entry and candidate dictionary without mutating the live
+   entry or dictionary.
+3. Persist the candidate dictionary with `atomic_write_json`.
+4. Replace the live dictionary only after the write returns successfully.
+
+Let the original write exception propagate. After any validation or write
+failure, both the current manager and a freshly loaded manager must expose the
+same prior state, and a later successful save must not contain the rejected
+candidate. Regression tests must cover creates, updates (including timestamps
+and multi-field validation), new registrations, and replacement registrations.
+
 ---
 
 ## Session lineage rendering fails open
