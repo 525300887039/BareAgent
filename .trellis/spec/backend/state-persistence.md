@@ -176,6 +176,26 @@ and multi-field validation), new registrations, and replacement registrations.
 
 ---
 
+## Fork previews ignore synthetic user context
+
+Some context messages intentionally use `role="user"` for provider ordering
+even though they are not user prompts. Persistent memory recall is one such
+message and is identified by the reserved `<memory-recall>` prefix.
+
+`memory/session_tree.py::_is_real_user_turn` must exclude that prefix when
+choosing `ForkPoint.user_preview`. This filter is display-only: fork numbering
+and `cut` still come exclusively from completed assistant boundaries, and
+`slice_for_fork_point` must retain the recall block in the copied conversation
+so the branch preserves the exact model context. Keep the session-tree module
+independent of `main.py`; define the reserved prefix locally rather than
+importing REPL wiring.
+
+The cross-module regression test must inject recall through
+`_refresh_memory_recall`, enumerate the point, and slice it. A hand-constructed
+message alone does not protect the integration contract that caused this bug.
+
+---
+
 ## Session lineage rendering fails open
 
 The transcript list is authoritative for which sessions exist; the optional
