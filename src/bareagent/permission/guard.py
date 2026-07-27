@@ -20,7 +20,55 @@ class PermissionMode(Enum):
 
 
 _SHELLS = "bash|sh|zsh|dash|ksh|fish"
+_SHELL_WHITESPACE = " \t"
+_SHELL_CONTROL_CHARACTERS = ";&|<>()\r\n"
+_SHELL_COMMAND_SEPARATOR_CHARACTERS = ";&|()\r\n"
 _SHELL_COMMAND_TOOLS = {"bash", "background_run"}
+_TRANSPARENT_SHELL_PREFIXES = {"command", "exec", "nohup", "sudo"}
+_SUDO_OPTIONS_WITH_VALUE = {
+    "-C",
+    "--close-from",
+    "-D",
+    "--chdir",
+    "-g",
+    "--group",
+    "-h",
+    "--host",
+    "-p",
+    "--prompt",
+    "-R",
+    "--chroot",
+    "-r",
+    "--role",
+    "-T",
+    "--command-timeout",
+    "-t",
+    "--type",
+    "-u",
+    "--user",
+}
+_SUDO_COMMAND_FLAGS = {
+    "-A",
+    "--askpass",
+    "-b",
+    "--background",
+    "-E",
+    "--preserve-env",
+    "-H",
+    "--set-home",
+    "-k",
+    "--reset-timestamp",
+    "-n",
+    "--non-interactive",
+    "-P",
+    "--preserve-groups",
+    "-S",
+    "--stdin",
+    "-i",
+    "--login",
+    "-s",
+    "--shell",
+}
 _ALWAYS_MUTATING_TOOLS = {
     "edit_file",
     "write_file",
@@ -31,6 +79,32 @@ _ALWAYS_MUTATING_TOOLS = {
 _MEMORY_READ_COMMANDS = {"view"}
 
 _GIT_EXECUTABLES = {"git", "git.exe"}
+_POSIX_SHELL_EXECUTABLES = {
+    executable for shell in _SHELLS.split("|") for executable in (shell, f"{shell}.exe")
+}
+_POWERSHELL_EXECUTABLES = {"powershell", "powershell.exe", "pwsh", "pwsh.exe"}
+_CMD_EXECUTABLES = {"cmd", "cmd.exe"}
+_ENV_EXECUTABLES = {"env", "env.exe"}
+_POSIX_SHELL_OPTIONS_WITH_VALUE = {"-o", "--init-file", "--rcfile"}
+_POWERSHELL_51_SPECIAL_ESCAPES = "0abfnrtv\"'` \t"
+_BASH_ANSI_ESCAPE_PATTERN = re.compile(
+    r"\\(?:[abefnrtvE\\'\"]|x[0-9a-fA-F]{1,2}|u[0-9a-fA-F]{1,4}|"
+    r"U[0-9a-fA-F]{1,8}|[0-7]{1,3}|\r?\n)"
+)
+_BASH_ANSI_SIMPLE_ESCAPES = {
+    "a": "\a",
+    "b": "\b",
+    "e": "\x1b",
+    "E": "\x1b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+    "v": "\v",
+    "\\": "\\",
+    "'": "'",
+    '"': '"',
+}
 _GIT_GLOBAL_OPTIONS_WITH_VALUE = {
     "-c",
     "--attr-source",
@@ -89,9 +163,9 @@ def _is_mcp_tool(tool_name: str) -> bool:
     return tool_name.startswith(_MCP_TOOL_PREFIX)
 
 
-def _shell_tokens(command: str) -> list[str] | None:
-    """Split shell text while preserving Windows paths and command separators."""
-    lexer = shlex.shlex(command, posix=False, punctuation_chars=";&|")
+def _tokenize_shell(command: str, *, posix: bool) -> list[str] | None:
+    lexer = shlex.shlex(command, posix=posix, punctuation_chars=_SHELL_CONTROL_CHARACTERS)
+    lexer.whitespace = _SHELL_WHITESPACE
     lexer.whitespace_split = True
     lexer.commenters = ""
     try:
@@ -100,24 +174,556 @@ def _shell_tokens(command: str) -> list[str] | None:
         return None
 
 
+def _shell_tokens(command: str) -> list[str] | None:
+    """Split shell text while preserving Windows paths and command separators."""
+    return _tokenize_shell(command, posix=False)
+
+
+def _normalize_shell_escapes(
+    command: str, *, escape_character: str, special_escapes: str | None = None
+) -> str:
+    normalized: list[str] = []
+    quote: str | None = None
+    index = 0
+    while index < len(command):
+        character = command[index]
+        if quote != "'" and character == escape_character and index + 1 < len(command):
+            next_character = command[index + 1]
+            if next_character == "\n":
+                index += 2
+                continue
+            if next_character == "\r" and command[index + 2 : index + 3] == "\n":
+                index += 3
+                continue
+            if special_escapes is None:
+                normalized.extend((character, next_character))
+            elif next_character in special_escapes:
+                normalized.append("\ufffd")
+            else:
+                normalized.append(next_character)
+            index += 2
+            continue
+        normalized.append(character)
+        if character == quote:
+            quote = None
+        elif quote is None and character in {'"', "'"}:
+            quote = character
+        index += 1
+    return "".join(normalized)
+
+
+def _decode_bash_ansi_c(value: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        escape = match.group()[1:]
+        if escape in _BASH_ANSI_SIMPLE_ESCAPES:
+            return _BASH_ANSI_SIMPLE_ESCAPES[escape]
+        if escape.endswith("\n"):
+            return ""
+        base = 16 if escape[0] in "xXuU" else 8
+        digits = escape[1:] if base == 16 else escape
+        codepoint = int(digits, base)
+        return chr(codepoint) if codepoint <= 0x10FFFF else "\ufffd"
+
+    return _BASH_ANSI_ESCAPE_PATTERN.sub(replace, value)
+
+
+def _quote_posix_token(value: str) -> str:
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+
+def _normalize_bash_quotes(command: str) -> str:
+    normalized: list[str] = []
+    quote: str | None = None
+    index = 0
+    while index < len(command):
+        character = command[index]
+        if quote is not None:
+            normalized.append(character)
+            if quote == '"' and character == "\\" and index + 1 < len(command):
+                normalized.append(command[index + 1])
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+            index += 1
+            continue
+        if character == "\\" and index + 1 < len(command):
+            normalized.extend((character, command[index + 1]))
+            index += 2
+            continue
+        if character == "$" and command[index + 1 : index + 2] == "'":
+            end = index + 2
+            raw_value: list[str] = []
+            while end < len(command):
+                if command[end] == "\\" and end + 1 < len(command):
+                    raw_value.extend((command[end], command[end + 1]))
+                    end += 2
+                    continue
+                if command[end] == "'":
+                    break
+                raw_value.append(command[end])
+                end += 1
+            if end >= len(command):
+                normalized.append(command[index:])
+                break
+            decoded = _decode_bash_ansi_c("".join(raw_value))
+            normalized.append(_quote_posix_token(decoded))
+            index = end + 1
+            continue
+        if character == "$" and command[index + 1 : index + 2] == '"':
+            normalized.append('"')
+            quote = '"'
+            index += 2
+            continue
+        normalized.append(character)
+        if character in {'"', "'"}:
+            quote = character
+        index += 1
+    return "".join(normalized)
+
+
+def _posix_shell_tokens(command: str) -> list[str] | None:
+    """Split shell text while normalizing POSIX quote concatenation."""
+    normalized = _normalize_shell_escapes(command, escape_character="\\")
+    return _tokenize_shell(normalized, posix=True)
+
+
+def _bash_shell_tokens(command: str) -> list[str] | None:
+    normalized = _normalize_shell_escapes(command, escape_character="\\")
+    return _tokenize_shell(_normalize_bash_quotes(normalized), posix=True)
+
+
+def _powershell_shell_tokens(command: str) -> list[str] | None:
+    normalized = _normalize_shell_escapes(
+        command,
+        escape_character="`",
+        special_escapes=_POWERSHELL_51_SPECIAL_ESCAPES,
+    )
+    return _tokenize_shell(normalized, posix=False)
+
+
+def _shell_token_views(
+    command: str, *, include_escape_normalizations: bool = False
+) -> list[list[str]]:
+    token_views: list[list[str]] = []
+    views = [_shell_tokens(command), _posix_shell_tokens(command)]
+    if include_escape_normalizations:
+        views.extend((_powershell_shell_tokens(command), _bash_shell_tokens(command)))
+    for tokens in views:
+        if tokens is not None and tokens not in token_views:
+            token_views.append(tokens)
+    return token_views
+
+
 def _strip_shell_quotes(token: str) -> str:
     if len(token) >= 2 and token[0] == token[-1] and token[0] in {'"', "'"}:
         return token[1:-1]
     return token
 
 
-def _is_shell_separator(token: str) -> bool:
-    return bool(token) and all(character in ";&|" for character in token)
+def _is_shell_command_separator(token: str) -> bool:
+    return bool(token) and all(
+        character in _SHELL_COMMAND_SEPARATOR_CHARACTERS for character in token
+    )
+
+
+def _is_shell_redirection(token: str) -> bool:
+    return (
+        bool(token)
+        and any(character in "<>" for character in token)
+        and all(character in "<>&|" for character in token)
+    )
+
+
+def _is_shell_file_descriptor(token: str) -> bool:
+    return token.isdecimal() or token == "*"
+
+
+def _without_shell_redirections(tokens: list[str]) -> list[str]:
+    command_tokens: list[str] = []
+    index = 0
+    while index < len(tokens):
+        if (
+            _is_shell_file_descriptor(tokens[index])
+            and index + 2 < len(tokens)
+            and _is_shell_redirection(tokens[index + 1])
+            and not _is_shell_command_separator(tokens[index + 2])
+        ):
+            index += 3
+            continue
+        if (
+            _is_shell_redirection(tokens[index])
+            and index + 1 < len(tokens)
+            and not _is_shell_command_separator(tokens[index + 1])
+        ):
+            index += 2
+            continue
+        command_tokens.append(tokens[index])
+        index += 1
+    return command_tokens
+
+
+def _find_closing_backtick(command: str, start: int) -> int | None:
+    index = start
+    while index < len(command):
+        if command[index] == "\\":
+            index += 2
+            continue
+        if command[index] == "`":
+            return index
+        index += 1
+    return None
+
+
+def _find_closing_shell_parenthesis(command: str, start: int) -> int | None:
+    quote: str | None = None
+    depth = 1
+    index = start
+    while index < len(command):
+        character = command[index]
+        if quote == "'":
+            if character == "'":
+                quote = None
+            index += 1
+            continue
+        if character == "\\":
+            index += 2
+            continue
+        if character == "`":
+            closing_backtick = _find_closing_backtick(command, index + 1)
+            if closing_backtick is None:
+                return None
+            index = closing_backtick + 1
+            continue
+        if character == quote:
+            quote = None
+        elif quote is None and character in {'"', "'"}:
+            quote = character
+        elif quote is None and character == "(":
+            depth += 1
+        elif quote is None and character == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return None
+
+
+def _shell_substitution_bodies(command: str) -> list[str]:
+    bodies: list[str] = []
+    quote: str | None = None
+    index = 0
+    while index < len(command):
+        character = command[index]
+        if quote == "'":
+            if character == "'":
+                quote = None
+            index += 1
+            continue
+        if character == "\\":
+            index += 2
+            continue
+        if character == "`":
+            closing_backtick = _find_closing_backtick(command, index + 1)
+            if closing_backtick is not None:
+                bodies.append(command[index + 1 : closing_backtick])
+                index = closing_backtick + 1
+                continue
+            index += 2
+            continue
+        if (
+            character == "$"
+            and command[index + 1 : index + 2] == "("
+            and command[index + 2 : index + 3] != "("
+        ):
+            closing_parenthesis = _find_closing_shell_parenthesis(command, index + 2)
+            if closing_parenthesis is not None:
+                bodies.append(command[index + 2 : closing_parenthesis])
+                index = closing_parenthesis + 1
+                continue
+        if character == quote:
+            quote = None
+        elif quote is None and character in {'"', "'"}:
+            quote = character
+        index += 1
+    return bodies
+
+
+def _has_shell_control_syntax(
+    command: str, *, escape_character: str, backticks_execute: bool
+) -> bool:
+    quote: str | None = None
+    escaped = False
+    for index, character in enumerate(command):
+        if escaped:
+            escaped = False
+            continue
+        if quote == "'":
+            if character == "'":
+                quote = None
+            continue
+        if character == escape_character:
+            escaped = True
+            continue
+        if (backticks_execute and character == "`") or (
+            character == "$" and command[index + 1 : index + 2] == "("
+        ):
+            return True
+        if quote is None and character in _SHELL_CONTROL_CHARACTERS:
+            return True
+        if character == quote:
+            quote = None
+        elif quote is None and character in {'"', "'"}:
+            quote = character
+    return False
+
+
+def _is_simple_shell_command(command: str) -> bool:
+    trailing_backslashes = len(command) - len(command.rstrip("\\"))
+    if trailing_backslashes % 2:
+        return False
+    control_command = command.lstrip(_SHELL_WHITESPACE)
+    if control_command.startswith(("& ", "&\t")):
+        control_command = control_command[1:]
+    if _has_shell_control_syntax(
+        control_command, escape_character="\\", backticks_execute=True
+    ) or _has_shell_control_syntax(control_command, escape_character="`", backticks_execute=False):
+        return False
+    token_views = (_shell_tokens(command), _posix_shell_tokens(command))
+    return any(tokens is not None and bool(tokens) for tokens in token_views)
+
+
+def _shell_executable_name(token: str) -> str:
+    normalized = _strip_shell_quotes(token).replace("\\", "/")
+    return normalized.rsplit("/", 1)[-1].casefold()
 
 
 def _is_git_executable(token: str) -> bool:
-    normalized = _strip_shell_quotes(token).replace("\\", "/")
-    return normalized.rsplit("/", 1)[-1].casefold() in _GIT_EXECUTABLES
+    return _shell_executable_name(token) in _GIT_EXECUTABLES
+
+
+def _is_quote_concatenated_git_executable(token: str) -> bool:
+    return any(quote in token for quote in {'"', "'"}) and _is_git_executable(
+        token.replace('"', "").replace("'", "")
+    )
+
+
+def _is_shell_assignment(token: str) -> bool:
+    return re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*\+?=.*", token) is not None
+
+
+def _sudo_option_end(tokens: list[str], index: int, end: int) -> int | None:
+    option = _strip_shell_quotes(tokens[index])
+    if option.startswith("--"):
+        if option in _SUDO_OPTIONS_WITH_VALUE:
+            return index + 2 if index + 1 < end else None
+        if any(
+            option.startswith(f"{value_option}=")
+            for value_option in _SUDO_OPTIONS_WITH_VALUE
+            if value_option.startswith("--")
+        ):
+            return index + 1
+        if option in _SUDO_COMMAND_FLAGS or option.startswith("--preserve-env="):
+            return index + 1
+        return None
+
+    if not option.startswith("-") or len(option) < 2:
+        return None
+    for offset, short_option in enumerate(option[1:], start=1):
+        normalized = f"-{short_option}"
+        if normalized in _SUDO_OPTIONS_WITH_VALUE:
+            if offset + 1 < len(option):
+                return index + 1
+            return index + 2 if index + 1 < end else None
+        if normalized not in _SUDO_COMMAND_FLAGS:
+            return None
+    return index + 1
+
+
+def _sudo_command_index(tokens: list[str], sudo_index: int, end: int) -> int | None:
+    cursor = sudo_index + 1
+    options_allowed = True
+    while cursor < end:
+        if _is_shell_assignment(tokens[cursor]):
+            options_allowed = False
+            cursor += 1
+            continue
+        if options_allowed and tokens[cursor] == "--":
+            options_allowed = False
+            cursor += 1
+            continue
+        if options_allowed:
+            option_end = _sudo_option_end(tokens, cursor, end)
+            if option_end is not None:
+                cursor = option_end
+                continue
+        return cursor
+    return None
+
+
+def _command_builtin_command_index(tokens: list[str], command_index: int, end: int) -> int | None:
+    cursor = command_index + 1
+    while cursor < end:
+        argument = _strip_shell_quotes(tokens[cursor])
+        if argument == "--":
+            return cursor + 1 if cursor + 1 < end else None
+        if re.fullmatch(r"-[pVv]+", argument):
+            if "v" in argument.casefold():
+                return None
+            cursor += 1
+            continue
+        if argument.startswith("-"):
+            return None
+        return cursor
+    return None
+
+
+def _exec_builtin_command_index(tokens: list[str], exec_index: int, end: int) -> int | None:
+    cursor = exec_index + 1
+    while cursor < end:
+        argument = _strip_shell_quotes(tokens[cursor])
+        if argument == "--":
+            return cursor + 1 if cursor + 1 < end else None
+        if not argument.startswith("-") or argument == "-":
+            return cursor
+
+        for offset, short_option in enumerate(argument[1:], start=1):
+            if short_option == "a":
+                if offset + 1 < len(argument):
+                    cursor += 1
+                else:
+                    cursor += 2
+                break
+            if short_option not in "cl":
+                return None
+        else:
+            cursor += 1
+            continue
+        if cursor > end:
+            return None
+    return None
+
+
+def _nohup_command_index(tokens: list[str], nohup_index: int, end: int) -> int | None:
+    cursor = nohup_index + 1
+    if cursor >= end:
+        return None
+    argument = _strip_shell_quotes(tokens[cursor])
+    if argument in {"--help", "--version"}:
+        return None
+    if argument == "--":
+        return cursor + 1 if cursor + 1 < end else None
+    if argument.startswith("-"):
+        return None
+    return cursor
+
+
+def _transparent_prefix_command_index(tokens: list[str], index: int, end: int) -> int | None:
+    executable = _shell_executable_name(tokens[index])
+    if executable == "sudo":
+        return _sudo_command_index(tokens, index, end)
+    if executable == "command":
+        return _command_builtin_command_index(tokens, index, end)
+    if executable == "exec":
+        return _exec_builtin_command_index(tokens, index, end)
+    if executable == "nohup":
+        return _nohup_command_index(tokens, index, end)
+    return None
+
+
+def _is_wrapper_command_position(tokens: list[str], index: int) -> bool:
+    segment_start = index
+    while segment_start > 0 and not _is_shell_command_separator(tokens[segment_start - 1]):
+        segment_start -= 1
+    segment_end = index + 1
+    while segment_end < len(tokens) and not _is_shell_command_separator(tokens[segment_end]):
+        segment_end += 1
+
+    cursor = segment_start
+    while cursor < index and _is_shell_assignment(tokens[cursor]):
+        cursor += 1
+
+    while cursor < index:
+        if _shell_executable_name(tokens[cursor]) not in _TRANSPARENT_SHELL_PREFIXES:
+            return False
+        command_index = _transparent_prefix_command_index(tokens, cursor, segment_end)
+        if command_index is None:
+            return False
+        cursor = command_index
+    return cursor == index
+
+
+def _is_powershell_payload_option(argument: str) -> bool:
+    if argument.startswith("/"):
+        argument = f"-{argument[1:]}"
+    if len(argument) < 2:
+        return False
+    return (
+        "-command".startswith(argument)
+        or "-encodedcommand".startswith(argument)
+        or "-commandwithargs".startswith(argument)
+        or argument in {"-cwa", "-ec"}
+    )
+
+
+def _has_posix_shell_payload_option(arguments: list[str]) -> bool:
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == "--":
+            return False
+        if argument in _POSIX_SHELL_OPTIONS_WITH_VALUE:
+            index += 2
+            continue
+        if not argument.startswith("-"):
+            return False
+        if not argument.startswith("--") and re.fullmatch(r"-[a-z]*c[a-z]*", argument):
+            return True
+        index += 1
+    return False
+
+
+def _has_powershell_payload_option(arguments: list[str]) -> bool:
+    for argument in arguments:
+        normalized = f"-{argument[1:]}" if argument.startswith("/") else argument
+        if len(normalized) >= 2 and "-file".startswith(normalized):
+            return False
+        if _is_powershell_payload_option(normalized):
+            return True
+    return False
+
+
+def _is_opaque_shell_wrapper(command: str) -> bool:
+    for raw_tokens in _shell_token_views(command, include_escape_normalizations=True):
+        tokens = _without_shell_redirections(raw_tokens)
+        for index, token in enumerate(tokens):
+            if not _is_wrapper_command_position(tokens, index):
+                continue
+            executable = _shell_executable_name(token)
+            end = index + 1
+            while end < len(tokens) and not _is_shell_command_separator(tokens[end]):
+                end += 1
+            if executable in _ENV_EXECUTABLES and end > index + 1:
+                return True
+            arguments = [
+                _strip_shell_quotes(argument).casefold() for argument in tokens[index + 1 : end]
+            ]
+            if executable in _POSIX_SHELL_EXECUTABLES and _has_posix_shell_payload_option(
+                arguments
+            ):
+                return True
+            if executable in _POWERSHELL_EXECUTABLES and _has_powershell_payload_option(arguments):
+                return True
+            if executable in _CMD_EXECUTABLES and any(
+                argument.startswith(("/c", "/k")) for argument in arguments
+            ):
+                return True
+    return False
 
 
 def _parse_git_invocation(tokens: list[str], executable_index: int) -> tuple[str, list[str]] | None:
     end = executable_index + 1
-    while end < len(tokens) and not _is_shell_separator(tokens[end]):
+    while end < len(tokens) and not _is_shell_command_separator(tokens[end]):
         end += 1
 
     index = executable_index + 1
@@ -144,16 +750,20 @@ def _parse_git_invocation(tokens: list[str], executable_index: int) -> tuple[str
 
 
 def _git_invocations(command: str) -> list[tuple[str, list[str]]]:
-    tokens = _shell_tokens(command)
-    if tokens is None:
-        return []
     invocations: list[tuple[str, list[str]]] = []
-    for index, token in enumerate(tokens):
-        if not _is_git_executable(token):
-            continue
-        invocation = _parse_git_invocation(tokens, index)
-        if invocation is not None:
-            invocations.append(invocation)
+    seen: set[tuple[str, tuple[str, ...]]] = set()
+    for raw_tokens in _shell_token_views(command, include_escape_normalizations=True):
+        tokens = _without_shell_redirections(raw_tokens)
+        for index, token in enumerate(tokens):
+            if not _is_git_executable(token):
+                continue
+            invocation = _parse_git_invocation(tokens, index)
+            if invocation is None:
+                continue
+            key = (invocation[0], tuple(invocation[1]))
+            if key not in seen:
+                seen.add(key)
+                invocations.append(invocation)
     return invocations
 
 
@@ -194,6 +804,18 @@ def _is_dangerous_git_command(command: str) -> bool:
     return False
 
 
+def _has_dangerous_shell_substitution(command: str, patterns: list[re.Pattern[str]]) -> bool:
+    for body in _shell_substitution_bodies(command):
+        if (
+            _is_opaque_shell_wrapper(body)
+            or _is_dangerous_git_command(body)
+            or any(pattern.search(body) for pattern in patterns)
+            or _has_dangerous_shell_substitution(body, patterns)
+        ):
+            return True
+    return False
+
+
 def _has_output_option(arguments: list[str]) -> bool:
     return any(
         argument.casefold() == "--output" or argument.casefold().startswith("--output=")
@@ -225,25 +847,50 @@ def _is_read_only_branch(arguments: list[str]) -> bool:
 
 
 def _is_read_only_git_command(command: str) -> bool:
-    tokens = _shell_tokens(command)
-    if tokens is None or not tokens:
+    if not _is_simple_shell_command(command):
         return False
 
-    executable_index = 0
-    if tokens[0] == "&":
-        executable_index = 1
-    if executable_index >= len(tokens) or not _is_git_executable(tokens[executable_index]):
+    raw_tokens = _shell_tokens(command)
+    if not raw_tokens:
+        return False
+    raw_executable_index = 1 if raw_tokens[0] == "&" else 0
+    if raw_executable_index >= len(raw_tokens):
+        return False
+    raw_executable = raw_tokens[raw_executable_index]
+    if not _is_git_executable(raw_executable) and not _is_quote_concatenated_git_executable(
+        raw_executable
+    ):
         return False
 
-    invocation = _parse_git_invocation(tokens, executable_index)
-    if invocation is None:
-        return False
-    subcommand, arguments = invocation
-    if subcommand in _GIT_READ_ONLY_SUBCOMMANDS:
-        return not _has_output_option(arguments)
-    if subcommand == "branch":
-        return _is_read_only_branch(arguments)
-    return False
+    found_read_only_invocation = False
+    found_mutating_invocation = False
+    for raw_tokens in _shell_token_views(command):
+        tokens = _without_shell_redirections(raw_tokens)
+        executable_index = 0
+        if tokens[0] == "&":
+            executable_index = 1
+        if executable_index >= len(tokens) or not _is_git_executable(tokens[executable_index]):
+            continue
+
+        invocation = _parse_git_invocation(tokens, executable_index)
+        if invocation is None:
+            continue
+        subcommand, arguments = invocation
+        if subcommand in _GIT_READ_ONLY_SUBCOMMANDS:
+            if _has_output_option(arguments):
+                found_mutating_invocation = True
+            else:
+                found_read_only_invocation = True
+            continue
+        if subcommand == "branch":
+            if _is_read_only_branch(arguments):
+                found_read_only_invocation = True
+            else:
+                found_mutating_invocation = True
+            continue
+        if not any(character in subcommand for character in {'"', "'"}):
+            found_mutating_invocation = True
+    return found_read_only_invocation and not found_mutating_invocation
 
 
 class PermissionGuard:
@@ -284,9 +931,20 @@ class PermissionGuard:
         "exit_plan_mode",
     }
     AUTO_SAFE_PATTERNS = [
-        re.compile(r"^(ls|cat|head|tail|wc|echo|pwd|date|which|type)\b"),
-        re.compile(r"^(pytest|python\s+-m\s+pytest|ruff|mypy)\b"),
-        re.compile(r"^npm\s+(test|run\s+lint|run\s+test)\b"),
+        re.compile(
+            rf"^(ls|cat|head|tail|wc|echo|pwd|date|which|type)"
+            rf"(?=[{_SHELL_WHITESPACE}]|$)"
+        ),
+        re.compile(
+            rf"^(pytest|python[{_SHELL_WHITESPACE}]+-m"
+            rf"[{_SHELL_WHITESPACE}]+pytest|ruff|mypy)"
+            rf"(?=[{_SHELL_WHITESPACE}]|$)"
+        ),
+        re.compile(
+            rf"^npm[{_SHELL_WHITESPACE}]+"
+            rf"(test|run[{_SHELL_WHITESPACE}]+lint|run[{_SHELL_WHITESPACE}]+test)"
+            rf"(?=[{_SHELL_WHITESPACE}]|$)"
+        ),
     ]
     # PowerShell command and executable resolution is case-insensitive on the
     # Windows execution path. Compile the complete set consistently so casing
@@ -296,8 +954,8 @@ class PermissionGuard:
         for pattern in (
             r"(^|[\s;&|])rm\s+-[a-z]*r[a-z]*\b",
             r"\bremove-item\b(?=[^;\r\n|]*\s-recurse\b)(?=[^;\r\n|]*\s-force\b)",
-            r"\bgit\s+push\b[^\r\n;&|]*(?<!\S)(?:--force(?:-with-lease|-if-includes)?|-[a-z]*f[a-z]*)\b",
-            r"\bgit\s+clean\b[^\r\n;&|]*(?<!\S)(?:--force\b|-[a-z]*f[a-z]*\b)",
+            r"\bgit\s+push\b[^\r\n;&|<>]*(?<!\S)(?:--force(?:-with-lease|-if-includes)?|-[a-z]*f[a-z]*)\b",
+            r"\bgit\s+clean\b[^\r\n;&|<>]*(?<!\S)(?:--force\b|-[a-z]*f[a-z]*\b)",
             r"git\s+reset\s+--hard\b",
             r"DROP\s+TABLE\b",
             r"DELETE\s+FROM\b",
@@ -370,14 +1028,18 @@ class PermissionGuard:
             cmd = rule_subject or ""
             if self._match_rules(self.deny_rules, normalized_tool, cmd):
                 return True
-            if _is_dangerous_git_command(cmd) or any(
-                pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS
+            if (
+                _is_opaque_shell_wrapper(cmd)
+                or _has_dangerous_shell_substitution(cmd, self.DANGEROUS_PATTERNS)
+                or _is_dangerous_git_command(cmd)
+                or any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS)
             ):
                 return True
             if self._match_rules(self.allow_rules, normalized_tool, cmd):
                 return False
-            if _is_read_only_git_command(cmd) or any(
-                pattern.search(cmd) for pattern in self.AUTO_SAFE_PATTERNS
+            if _is_read_only_git_command(cmd) or (
+                _is_simple_shell_command(cmd)
+                and any(pattern.search(cmd) for pattern in self.AUTO_SAFE_PATTERNS)
             ):
                 return False
             if self.mode == PermissionMode.DEFAULT:
@@ -415,8 +1077,11 @@ class PermissionGuard:
             return False
         if normalized_tool in _SHELL_COMMAND_TOOLS:
             cmd = str(tool_input.get("command", ""))
-            return _is_dangerous_git_command(cmd) or any(
-                pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS
+            return (
+                _is_opaque_shell_wrapper(cmd)
+                or _has_dangerous_shell_substitution(cmd, self.DANGEROUS_PATTERNS)
+                or _is_dangerous_git_command(cmd)
+                or any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS)
             )
         return False
 
@@ -459,6 +1124,9 @@ class PermissionGuard:
 
     def _match_rules(self, rules: list[str], tool_name: str, cmd: str) -> bool:
         normalized_tool = tool_name.strip().lower()
+        normalized_subject = (
+            cmd.strip(_SHELL_WHITESPACE) if normalized_tool in _SHELL_COMMAND_TOOLS else cmd.strip()
+        )
         for rule in rules:
             parsed = _parse_prefix_rule(rule)
             if parsed is None:
@@ -466,7 +1134,7 @@ class PermissionGuard:
             rule_tool, prefix = parsed
             if rule_tool != normalized_tool:
                 continue
-            if cmd.strip().startswith(prefix):
+            if normalized_subject.startswith(prefix):
                 return True
         return False
 
@@ -533,7 +1201,7 @@ def _is_mutating_tool(tool_name: str, tool_input: dict[str, Any]) -> bool:
 def permission_rule_subject(tool_name: str, tool_input: dict[str, Any]) -> str | None:
     normalized_tool = tool_name.strip().lower()
     if normalized_tool in _SHELL_COMMAND_TOOLS:
-        command = str(tool_input.get("command", "")).strip()
+        command = str(tool_input.get("command", "")).strip(_SHELL_WHITESPACE)
         return command or None
 
     for key in ("file_path", "path", "name", "to_agent", "task_id", "skill_name"):
