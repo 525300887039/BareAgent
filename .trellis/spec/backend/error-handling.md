@@ -134,6 +134,48 @@ and `background_run`, direct `is_dangerous` results, allow-rule ordering,
 fail-closed denial, quoted/full-path executables, global options, and DEFAULT
 read-only variants. Never execute a destructive Git command to test the guard.
 
+### Automatic shell safety applies to the complete simple command
+
+DEFAULT-mode automatic approval is a whole-command decision. A read-only Git
+invocation or an `AUTO_SAFE_PATTERNS` prefix is safe only when the complete
+input is one well-formed simple command. Unquoted separators, CR/LF,
+redirections, grouping, active `$()` / backtick substitution, and malformed
+quoting must remove that shortcut; a safe first command does not authorize the
+remaining shell text. Quoted control characters remain ordinary argument
+content.
+
+Keep the read-only grant view separate from dangerous discovery. AUTO retains
+its allow-by-default behavior for otherwise unknown compound commands, while
+known destructive commands and opaque launchers are classified before allow
+rules. Inspect active substitution bodies recursively for the same known
+dangerous Git, wrapper, and regex patterns, but do not label a benign
+substitution dangerous merely because it is executable syntax.
+
+Shell token boundaries and command-prefix trimming must use only ASCII space
+and tab. Do not use Unicode-aware `strip()`, `isspace()`, or `\s` to grant an
+automatic shell shortcut: VT, FF, CR/LF, and Unicode separators are not parsed
+consistently by PowerShell and POSIX shells and therefore must fail closed.
+
+### Opaque launcher detection follows the real command position
+
+Treat shell payload launchers as dangerous when they occupy an executable
+command position: `sh`-family `-c`, PowerShell/pwsh command or encoded-command
+forms, `cmd /c` or `/k`, and `env` with arguments. Normalize quoted/full-path
+executables, shell-specific quote concatenation, escapes, and line
+continuations without executing the input.
+
+The command-position parser must pass through only explicitly modeled prefixes
+and their real option grammar: assignments, redirections, `sudo`, and the
+`command`, `exec`, and `nohup` launch prefixes. Non-executing forms such as
+`command -v` / `-V` and `nohup --help` / `--version` terminate this traversal.
+For redirections embedded in an argv segment, remove both the operator and its
+target before parsing the remaining Git or wrapper tokens; never reinterpret a
+redirection target as a command argument.
+
+Every parser expansion needs positive destructive/opaque cases and close
+non-executing neighbors. Classification tests operate on strings only and must
+never invoke the represented shell command.
+
 ---
 
 ## Scenario: Automatic Git worktree cleanup
