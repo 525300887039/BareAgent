@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Review permission-mode ordering, wrapper handling, and fail-closed behavior."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Review tests, typing, formatting, and minimal-scope expectations."}
+{"file": ".trellis/tasks/07-27-harden-composed-shell-permissions/research/permission-bypass-evidence.md", "reason": "Verify every reproduced bypass and its safe neighbors are covered."}
