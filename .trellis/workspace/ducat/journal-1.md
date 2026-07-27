@@ -1827,3 +1827,38 @@ Fixed retry overflow, unsafe worktree cleanup, out-of-root LSP edits, and corrup
 ### Next Steps
 
 - None - task complete
+
+
+## Session 54: Harden composed shell command permissions
+
+**Date**: 2026-07-27
+**Task**: Harden composed shell command permissions
+**Branch**: `main`
+
+### Summary
+
+Closed compound-command, nested shell wrapper, Git tokenization, substitution, redirection, sudo/prefix, and shell-whitespace permission bypasses; all focused and full quality gates passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d5d6c45` | (see git log) |
+| `5994f46` | (see git log) |
+| `8844420` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

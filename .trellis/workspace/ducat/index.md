@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 53
-- **Last Active**: 2026-07-26
+- **Total Sessions**: 54
+- **Last Active**: 2026-07-27
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1821 | Active |
+| `journal-1.md` | ~1864 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 54 | 2026-07-27 | Harden composed shell command permissions | `d5d6c45`, `5994f46`, `8844420` | `main` |
 | 53 | 2026-07-26 | Daily bug audit: runtime safety fixes | `95c9fd9`, `8dda7aa`, `1b42711`, `541088c`, `b05764e`, `28bc6d8`, `30b71ac`, `aa38c54`, `d9f2369`, `81453f8`, `7c4155a`, `12f508a` | `main` |
 | 52 | 2026-07-25 | Daily BareAgent maintenance audit | `829130b`, `5e4e282`, `230d300`, `f36906c`, `7ae632b`, `6dbdffb` | `main` |
 | 51 | 2026-07-22 | Harden publishing and release v0.2.0 | `61f099f5f81a06c001bf7b433bf45a85d724fe69`, `3c3995635b878310af3474e7eb7f592985708673`, `b4ada030712ac1055626a0bddfe14fa769111851` | `main` |
