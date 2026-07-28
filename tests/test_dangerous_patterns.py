@@ -49,6 +49,17 @@ DESTRUCTIVE_GIT_VARIANTS = [
     '"/usr/bin/git" reset "--hard"',
     "git branch -D old-branch",
     "git.exe branch --delete old-branch",
+    "git push origin --delete main",
+    "git push -d origin main",
+    "git push --delete origin main",
+    "git.exe push --delete=main",
+    "git push origin :main",
+    "git --no-pager push origin :refs/heads/main",
+    'git "push" origin ":main"',
+    "git push origin +main",
+    "git push origin +refs/heads/main:refs/heads/main",
+    "git push -- +main",
+    "git push origin -- :main",
 ]
 
 READ_ONLY_GIT_VARIANTS = [
@@ -67,6 +78,8 @@ SAFE_GIT_NEIGHBORS = [
     "git -C . clean --dry-run -d",
     "git push origin release-f",
     'git "push" origin feature-fix',
+    "git push origin main:main",
+    "git push origin HEAD:refs/heads/main",
     "git branch --list old-branch",
 ]
 
@@ -77,6 +90,9 @@ REDIRECTED_DESTRUCTIVE_GIT_COMMANDS = [
     "git 2>/dev/null reset --hard",
     "git reset 2>/dev/null --hard",
     "git branch >out --delete old-branch",
+    "git push >out --delete main",
+    "git push origin >out :main",
+    "git push origin >out +main",
 ]
 
 REDIRECTION_TARGET_SAFE_NEIGHBORS = [
@@ -84,6 +100,8 @@ REDIRECTION_TARGET_SAFE_NEIGHBORS = [
     "git clean > --force",
     "git reset > --hard",
     "git branch > --delete old-branch",
+    "git push > --delete origin",
+    "git push > :main origin",
     "powershell > -Command harmless",
     "bash > -c harmless",
     "cmd > /c harmless",

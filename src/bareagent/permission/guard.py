@@ -793,9 +793,43 @@ def _has_branch_delete_option(arguments: list[str]) -> bool:
     return False
 
 
+def _is_force_refspec(argument: str) -> bool:
+    """Return True for Git force refspecs such as ``+main`` or ``+src:dst``."""
+    return not argument.startswith("-") and argument.startswith("+")
+
+
+def _is_delete_refspec(argument: str) -> bool:
+    """Return True for Git delete refspecs such as ``:main`` or ``+:refs/heads/main``."""
+    if argument.startswith("-"):
+        return False
+    body = argument[1:] if argument.startswith("+") else argument
+    return body.startswith(":") and len(body) > 1
+
+
+def _has_dangerous_push_refspec(arguments: list[str]) -> bool:
+    """Detect force/delete refspecs among push positionals, including after ``--``."""
+    seen_double_dash = False
+    for argument in arguments:
+        if not seen_double_dash:
+            if argument == "--":
+                seen_double_dash = True
+                continue
+            if argument.startswith("-"):
+                continue
+        if _is_force_refspec(argument) or _is_delete_refspec(argument):
+            return True
+    return False
+
+
 def _is_dangerous_git_command(command: str) -> bool:
     for subcommand, arguments in _git_invocations(command):
-        if subcommand in {"clean", "push"} and _has_force_option(arguments):
+        if subcommand == "clean" and _has_force_option(arguments):
+            return True
+        if subcommand == "push" and (
+            _has_force_option(arguments)
+            or _has_branch_delete_option(arguments)
+            or _has_dangerous_push_refspec(arguments)
+        ):
             return True
         if subcommand == "reset" and any(argument.casefold() == "--hard" for argument in arguments):
             return True
