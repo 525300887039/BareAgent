@@ -124,8 +124,11 @@ dangerous and DEFAULT-mode read-only classification. It must:
   subcommand;
 - force confirmation for forced push/clean, hard reset, and branch deletion
   before consulting allow rules;
-- keep option boundaries precise so `clean -n` and a ref such as `release-f`
-  remain safe neighbors;
+- treat `git push --delete` / `-d`, delete refspecs (`:main`, `:refs/heads/x`),
+  and force refspecs (`+main`, `+src:dst`) as destructive push forms even when
+  they appear after `--` or without an explicit `--force` flag;
+- keep option boundaries precise so `clean -n`, ordinary refspecs such as
+  `main:main`, and a ref such as `release-f` remain safe neighbors;
 - treat tokenization failure as not newly safe while retaining the legacy
   dangerous regexes as a conservative fallback.
 
