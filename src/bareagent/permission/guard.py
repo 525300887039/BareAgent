@@ -79,6 +79,8 @@ _ALWAYS_MUTATING_TOOLS = {
 _MEMORY_READ_COMMANDS = {"view"}
 
 _GIT_EXECUTABLES = {"git", "git.exe"}
+_RM_EXECUTABLES = {"rm", "rm.exe"}
+_CHMOD_EXECUTABLES = {"chmod", "chmod.exe"}
 _POSIX_SHELL_EXECUTABLES = {
     executable for shell in _SHELLS.split("|") for executable in (shell, f"{shell}.exe")
 }
@@ -838,11 +840,89 @@ def _is_dangerous_git_command(command: str) -> bool:
     return False
 
 
+def _is_rm_executable(token: str) -> bool:
+    return _shell_executable_name(token) in _RM_EXECUTABLES
+
+
+def _is_quote_concatenated_rm_executable(token: str) -> bool:
+    return any(quote in token for quote in {'"', "'"}) and _is_rm_executable(
+        token.replace('"', "").replace("'", "")
+    )
+
+
+def _is_chmod_executable(token: str) -> bool:
+    return _shell_executable_name(token) in _CHMOD_EXECUTABLES
+
+
+def _is_quote_concatenated_chmod_executable(token: str) -> bool:
+    return any(quote in token for quote in {'"', "'"}) and _is_chmod_executable(
+        token.replace('"', "").replace("'", "")
+    )
+
+
+def _has_recursive_rm_option(arguments: list[str]) -> bool:
+    """Return True when rm arguments enable recursive deletion in any order."""
+    for argument in arguments:
+        normalized = argument.casefold()
+        if normalized == "--":
+            break
+        if normalized == "--recursive" or normalized.startswith("--recursive="):
+            return True
+        if re.fullmatch(r"-[a-z]*r[a-z]*", normalized):
+            return True
+    return False
+
+
+def _is_world_writable_chmod_mode(argument: str) -> bool:
+    """Return True for numeric modes that grant world rwx (e.g. 777, 0777)."""
+    return re.fullmatch(r"0*777", argument) is not None
+
+
+def _command_segment_arguments(tokens: list[str], executable_index: int) -> list[str]:
+    end = executable_index + 1
+    while end < len(tokens) and not _is_shell_command_separator(tokens[end]):
+        end += 1
+    return [_strip_shell_quotes(argument) for argument in tokens[executable_index + 1 : end]]
+
+
+def _is_dangerous_rm_command(command: str) -> bool:
+    """Detect recursive rm regardless of option order, long options, or quoting."""
+    for raw_tokens in _shell_token_views(command, include_escape_normalizations=True):
+        tokens = _without_shell_redirections(raw_tokens)
+        for index, token in enumerate(tokens):
+            if not _is_wrapper_command_position(tokens, index):
+                continue
+            if not (_is_rm_executable(token) or _is_quote_concatenated_rm_executable(token)):
+                continue
+            if _has_recursive_rm_option(_command_segment_arguments(tokens, index)):
+                return True
+    return False
+
+
+def _is_dangerous_chmod_command(command: str) -> bool:
+    """Detect chmod modes that grant world rwx, including with -R / leading zeros."""
+    for raw_tokens in _shell_token_views(command, include_escape_normalizations=True):
+        tokens = _without_shell_redirections(raw_tokens)
+        for index, token in enumerate(tokens):
+            if not _is_wrapper_command_position(tokens, index):
+                continue
+            if not (_is_chmod_executable(token) or _is_quote_concatenated_chmod_executable(token)):
+                continue
+            if any(
+                _is_world_writable_chmod_mode(argument)
+                for argument in _command_segment_arguments(tokens, index)
+            ):
+                return True
+    return False
+
+
 def _has_dangerous_shell_substitution(command: str, patterns: list[re.Pattern[str]]) -> bool:
     for body in _shell_substitution_bodies(command):
         if (
             _is_opaque_shell_wrapper(body)
             or _is_dangerous_git_command(body)
+            or _is_dangerous_rm_command(body)
+            or _is_dangerous_chmod_command(body)
             or any(pattern.search(body) for pattern in patterns)
             or _has_dangerous_shell_substitution(body, patterns)
         ):
@@ -1066,6 +1146,8 @@ class PermissionGuard:
                 _is_opaque_shell_wrapper(cmd)
                 or _has_dangerous_shell_substitution(cmd, self.DANGEROUS_PATTERNS)
                 or _is_dangerous_git_command(cmd)
+                or _is_dangerous_rm_command(cmd)
+                or _is_dangerous_chmod_command(cmd)
                 or any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS)
             ):
                 return True
@@ -1115,6 +1197,8 @@ class PermissionGuard:
                 _is_opaque_shell_wrapper(cmd)
                 or _has_dangerous_shell_substitution(cmd, self.DANGEROUS_PATTERNS)
                 or _is_dangerous_git_command(cmd)
+                or _is_dangerous_rm_command(cmd)
+                or _is_dangerous_chmod_command(cmd)
                 or any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS)
             )
         return False

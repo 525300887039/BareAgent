@@ -62,6 +62,57 @@ DESTRUCTIVE_GIT_VARIANTS = [
     "git push origin -- :main",
 ]
 
+DESTRUCTIVE_RM_VARIANTS = [
+    "rm -f -r build",
+    "rm -r -f build",
+    "rm --force -r build",
+    "rm --recursive build",
+    "rm --recursive --force build",
+    "rm --no-preserve-root -rf /",
+    "rm -rf --no-preserve-root /",
+    "rm '-rf' build",
+    'rm "-rf" build',
+    "rm $'-rf' build",
+    "r''m -rf build",
+    'r""m -rf build',
+    "command rm -f -r build",
+    "sudo rm --recursive build",
+    "/bin/rm -f -r /",
+    "/usr/bin/rm --force -r build",
+    "rm >out -f -r build",
+    "rm 2>/dev/null --recursive build",
+]
+
+SAFE_RM_NEIGHBORS = [
+    "rm file.txt",
+    "rm -f file.txt",
+    "rm -v file.txt",
+    "rm -i file.txt",
+    "rm -- -rf",
+    "rm -d empty",
+    "rmdir empty",
+]
+
+DESTRUCTIVE_CHMOD_VARIANTS = [
+    "chmod 777 /",
+    "chmod 0777 /",
+    "chmod -R 777 /",
+    "chmod -R 0777 dir",
+    "chmod 00777 secret",
+    "/bin/chmod 777 file",
+    "command chmod -R 777 dir",
+    "sudo chmod 0777 file",
+    'ch""mod 777 file',
+]
+
+SAFE_CHMOD_NEIGHBORS = [
+    "chmod 755 file",
+    "chmod +x file",
+    "chmod -R 755 dir",
+    "chmod 666 file",
+    "chmod u+rwx file",
+]
+
 READ_ONLY_GIT_VARIANTS = [
     "git.exe status --short",
     "git -C . status",
@@ -337,6 +388,66 @@ def test_destructive_git_invocation_variants_are_detected(command: str) -> None:
 
     assert guard.requires_confirm("bash", tool_input) is True
     assert guard.is_dangerous("bash", tool_input) is True
+
+
+@pytest.mark.parametrize("command", DESTRUCTIVE_RM_VARIANTS)
+def test_destructive_rm_invocation_variants_are_detected(command: str) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": command}
+
+    assert guard.requires_confirm("bash", tool_input) is True
+    assert guard.is_dangerous("bash", tool_input) is True
+
+
+@pytest.mark.parametrize("tool_name", ["bash", "background_run"])
+def test_rm_executable_variant_is_detected_for_shell_tools(tool_name: str) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": "rm.exe --recursive build"}
+
+    assert guard.requires_confirm(tool_name, tool_input) is True
+    assert guard.is_dangerous(tool_name, tool_input) is True
+
+
+@pytest.mark.parametrize(
+    ("command", "allow_rule"),
+    [
+        ("rm -f -r build", "bash(prefix:rm -f)"),
+        ("rm --recursive build", "bash(prefix:rm --recursive)"),
+        ("/bin/rm -rf /", "bash(prefix:/bin/rm)"),
+    ],
+)
+def test_allow_rule_cannot_bypass_destructive_rm_variant(command: str, allow_rule: str) -> None:
+    guard = PermissionGuard(mode=PermissionMode.DEFAULT)
+    guard.allow_rules = [allow_rule]
+
+    assert guard.requires_confirm("bash", {"command": command}) is True
+
+
+@pytest.mark.parametrize("command", SAFE_RM_NEIGHBORS)
+def test_safe_rm_near_neighbors_are_not_dangerous(command: str) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": command}
+
+    assert guard.requires_confirm("bash", tool_input) is False
+    assert guard.is_dangerous("bash", tool_input) is False
+
+
+@pytest.mark.parametrize("command", DESTRUCTIVE_CHMOD_VARIANTS)
+def test_destructive_chmod_invocation_variants_are_detected(command: str) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": command}
+
+    assert guard.requires_confirm("bash", tool_input) is True
+    assert guard.is_dangerous("bash", tool_input) is True
+
+
+@pytest.mark.parametrize("command", SAFE_CHMOD_NEIGHBORS)
+def test_safe_chmod_near_neighbors_are_not_dangerous(command: str) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": command}
+
+    assert guard.requires_confirm("bash", tool_input) is False
+    assert guard.is_dangerous("bash", tool_input) is False
 
 
 @pytest.mark.parametrize("tool_name", ["bash", "background_run"])
