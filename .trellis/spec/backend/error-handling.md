@@ -95,7 +95,7 @@ def requires_confirm(self, tool_name, tool_input):
 
 ## Dangerous shell patterns are blocked *before* the handler runs
 
-`PermissionGuard.DANGEROUS_PATTERNS` (regex list in `guard.py`) covers `rm -rf`, forced `git push` / `git clean`, recursive forced PowerShell `Remove-Item`, `git reset --hard`, `DROP TABLE`, shell-wrapper bypass (`bash -c`), absolute-path `rm`, `env`-prefix bypass, `curl | sh`, `mkfs`, `dd if=`, `find -delete`, `chmod 777`, etc. Any of these forces a permission prompt regardless of mode (except BYPASS).
+`PermissionGuard.DANGEROUS_PATTERNS` (regex list in `guard.py`) covers `rm -rf`, forced `git push` / `git clean`, recursive forced PowerShell `Remove-Item`, `git reset --hard`, `DROP TABLE`, shell-wrapper bypass (`bash -c`), absolute-path `rm`, `env`-prefix bypass, `curl | sh`, `mkfs`, `dd if=`, `find -delete`, `chmod 777`, etc. Any of these forces a permission prompt regardless of mode (except BYPASS). Recursive `rm` and world-writable `chmod 777` are also classified from normalized command tokens so option order, long options, quoting, transparent prefixes, and redirections cannot hide them from the legacy regexes.
 
 **Rule when adding tools that take shell input**: extend `DANGEROUS_PATTERNS` rather than adding ad-hoc checks in the handler. The handler's job is to *execute*; the guard's job is to *gate*. Splitting that boundary would let a future caller invoke the handler directly and skip the check.
 
@@ -136,6 +136,34 @@ Regression tests in `tests/test_dangerous_patterns.py` must exercise `bash`
 and `background_run`, direct `is_dangerous` results, allow-rule ordering,
 fail-closed denial, quoted/full-path executables, global options, and DEFAULT
 read-only variants. Never execute a destructive Git command to test the guard.
+
+### Recursive rm and world-writable chmod are classified from tokens
+
+A literal `rm -[flags]r` or `chmod 777` regular expression is not enough:
+option order (`rm -f -r`), long options (`--recursive`, `--force`), leading
+zeros in modes (`0777`), quoted arguments (`rm '-rf'`), quote-concatenated
+executables (`r''m`), transparent prefixes (`command` / `sudo`), and
+redirections can all hide the same destructive intent from the legacy regexes.
+
+Use the shared shell token views in `permission/guard.py` to classify these
+forms before allow rules:
+
+- treat an `rm` / `rm.exe` executable (including quoted absolute paths and
+  quote concatenation) as destructive when any argument before `--` is
+  recursive (`-r` / bundled short flags / `--recursive`);
+- treat a `chmod` / `chmod.exe` executable as destructive when any argument is
+  a numeric mode granting world rwx (`777`, `0777`, `00777`, …), including
+  when combined with `-R`;
+- honor command position via transparent prefixes and strip redirections the
+  same way Git/wrapper detection does;
+- keep non-recursive `rm -f file`, `rm -- -rf`, and non-777 modes such as
+  `chmod 755` / `chmod +x` as safe neighbors.
+
+Regression tests in `tests/test_dangerous_patterns.py` must cover option-order
+and long-option rm forms, quoted/ANSI-C/quote-concatenated variants, absolute
+paths, transparent prefixes, redirections, chmod leading-zero modes, allow-rule
+ordering, and nearby safe neighbors. Never execute a destructive command to
+test the guard.
 
 ### Automatic shell safety applies to the complete simple command
 
