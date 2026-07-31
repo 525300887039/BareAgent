@@ -122,7 +122,7 @@ dangerous and DEFAULT-mode read-only classification. It must:
   component case-insensitively against `git` / `git.exe`;
 - skip value-taking and flag-style Git global options before locating the
   subcommand;
-- force confirmation for forced push/clean, hard reset, and branch deletion
+- force confirmation for forced/mirror/pruned push, hard reset, and branch deletion
   before consulting allow rules;
 - treat `git push --delete` / `-d`, delete refspecs (`:main`, `:refs/heads/x`),
   and force refspecs (`+main`, `+src:dst`) as destructive push forms even when

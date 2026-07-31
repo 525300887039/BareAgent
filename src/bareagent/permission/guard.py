@@ -823,6 +823,16 @@ def _has_dangerous_push_refspec(arguments: list[str]) -> bool:
     return False
 
 
+def _has_dangerous_push_option(arguments: list[str]) -> bool:
+    for argument in arguments:
+        normalized = argument.casefold()
+        if normalized == "--":
+            break
+        if normalized in {"--mirror", "--prune"}:
+            return True
+    return False
+
+
 def _is_dangerous_git_command(command: str) -> bool:
     for subcommand, arguments in _git_invocations(command):
         if subcommand == "clean" and _has_force_option(arguments):
@@ -830,6 +840,7 @@ def _is_dangerous_git_command(command: str) -> bool:
         if subcommand == "push" and (
             _has_force_option(arguments)
             or _has_branch_delete_option(arguments)
+            or _has_dangerous_push_option(arguments)
             or _has_dangerous_push_refspec(arguments)
         ):
             return True

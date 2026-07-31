@@ -53,6 +53,8 @@ DESTRUCTIVE_GIT_VARIANTS = [
     "git push -d origin main",
     "git push --delete origin main",
     "git.exe push --delete=main",
+    "git push --mirror origin",
+    "git push origin --prune",
     "git push origin :main",
     "git --no-pager push origin :refs/heads/main",
     'git "push" origin ":main"',
@@ -131,6 +133,8 @@ SAFE_GIT_NEIGHBORS = [
     'git "push" origin feature-fix',
     "git push origin main:main",
     "git push origin HEAD:refs/heads/main",
+    "git push --no-mirror origin",
+    "git push origin --no-prune",
     "git branch --list old-branch",
 ]
 
@@ -464,6 +468,8 @@ def test_git_executable_variant_is_detected_for_shell_tools(tool_name: str) -> N
     [
         ("git.exe clean -fdx", "bash(prefix:git.exe clean)"),
         ("git -C . reset --hard", "bash(prefix:git -C .)"),
+        ("git push --mirror origin", "bash(prefix:git push)"),
+        ("git push origin --prune", "bash(prefix:git push)"),
     ],
 )
 def test_allow_rule_cannot_bypass_destructive_git_variant(command: str, allow_rule: str) -> None:
