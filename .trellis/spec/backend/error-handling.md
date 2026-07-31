@@ -148,9 +148,10 @@ redirections can all hide the same destructive intent from the legacy regexes.
 Use the shared shell token views in `permission/guard.py` to classify these
 forms before allow rules:
 
-- treat an `rm` / `rm.exe` executable (including quoted absolute paths and
-  quote concatenation) as destructive when any argument before `--` is
-  recursive (`-r` / bundled short flags / `--recursive`);
+- treat an `rm` / `rm.exe` executable or a Windows PowerShell
+  `Remove-Item` alias (`del`, `erase`, `rd`, `rmdir`, `ri`) as destructive
+  when any argument before `--` is recursive (`-r` / bundled short flags /
+  `--recursive`);
 - treat a `chmod` / `chmod.exe` executable as destructive when any argument is
   a numeric mode granting world rwx (`777`, `0777`, `00777`, …), including
   when combined with `-R`;

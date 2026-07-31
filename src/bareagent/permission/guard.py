@@ -80,6 +80,7 @@ _MEMORY_READ_COMMANDS = {"view"}
 
 _GIT_EXECUTABLES = {"git", "git.exe"}
 _RM_EXECUTABLES = {"rm", "rm.exe"}
+_POWERSHELL_REMOVE_ITEM_ALIASES = {"del", "erase", "rd", "rmdir", "ri"}
 _CHMOD_EXECUTABLES = {"chmod", "chmod.exe"}
 _POSIX_SHELL_EXECUTABLES = {
     executable for shell in _SHELLS.split("|") for executable in (shell, f"{shell}.exe")
@@ -852,7 +853,8 @@ def _is_dangerous_git_command(command: str) -> bool:
 
 
 def _is_rm_executable(token: str) -> bool:
-    return _shell_executable_name(token) in _RM_EXECUTABLES
+    executable = _shell_executable_name(token)
+    return executable in _RM_EXECUTABLES or executable in _POWERSHELL_REMOVE_ITEM_ALIASES
 
 
 def _is_quote_concatenated_rm_executable(token: str) -> bool:
