@@ -93,6 +93,13 @@ POWERSHELL_REMOVE_ITEM_ALIAS_VARIANTS = [
     "ri -Recurse -Force build",
 ]
 
+POWERSHELL_REMOVE_ITEM_CMDLET_VARIANTS = [
+    "Remove-Item -Recurse build",
+    "Remove-Item -Recurse -Force build",
+    "remove-item -force -recurse build",
+    "& Remove-Item -Recurse build",
+]
+
 SAFE_RM_NEIGHBORS = [
     "rm file.txt",
     "rm -f file.txt",
@@ -102,6 +109,9 @@ SAFE_RM_NEIGHBORS = [
     "rm -d empty",
     "del file.txt",
     "rmdir empty",
+    "Remove-Item -Recurse -WhatIf build",
+    "Remove-Item -Recurse -WhatIf -Force build",
+    "del -Recurse -WhatIf build",
 ]
 
 DESTRUCTIVE_CHMOD_VARIANTS = [
@@ -415,6 +425,16 @@ def test_destructive_rm_invocation_variants_are_detected(command: str) -> None:
 @pytest.mark.parametrize("tool_name", ["bash", "background_run"])
 @pytest.mark.parametrize("command", POWERSHELL_REMOVE_ITEM_ALIAS_VARIANTS)
 def test_powershell_remove_item_aliases_are_detected(command: str, tool_name: str) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": command}
+
+    assert guard.requires_confirm(tool_name, tool_input) is True
+    assert guard.is_dangerous(tool_name, tool_input) is True
+
+
+@pytest.mark.parametrize("tool_name", ["bash", "background_run"])
+@pytest.mark.parametrize("command", POWERSHELL_REMOVE_ITEM_CMDLET_VARIANTS)
+def test_powershell_remove_item_cmdlet_is_detected(command: str, tool_name: str) -> None:
     guard = PermissionGuard(mode=PermissionMode.AUTO)
     tool_input = {"command": command}
 

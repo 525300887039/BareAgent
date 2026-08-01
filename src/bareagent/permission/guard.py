@@ -80,7 +80,14 @@ _MEMORY_READ_COMMANDS = {"view"}
 
 _GIT_EXECUTABLES = {"git", "git.exe"}
 _RM_EXECUTABLES = {"rm", "rm.exe"}
-_POWERSHELL_REMOVE_ITEM_ALIASES = {"del", "erase", "rd", "rmdir", "ri"}
+_POWERSHELL_REMOVE_ITEM_EXECUTABLES = {
+    "remove-item",
+    "del",
+    "erase",
+    "rd",
+    "rmdir",
+    "ri",
+}
 _CHMOD_EXECUTABLES = {"chmod", "chmod.exe"}
 _POSIX_SHELL_EXECUTABLES = {
     executable for shell in _SHELLS.split("|") for executable in (shell, f"{shell}.exe")
@@ -854,7 +861,18 @@ def _is_dangerous_git_command(command: str) -> bool:
 
 def _is_rm_executable(token: str) -> bool:
     executable = _shell_executable_name(token)
-    return executable in _RM_EXECUTABLES or executable in _POWERSHELL_REMOVE_ITEM_ALIASES
+    return executable in _RM_EXECUTABLES or executable in _POWERSHELL_REMOVE_ITEM_EXECUTABLES
+
+
+def _is_powershell_remove_item_executable(token: str) -> bool:
+    executable = _shell_executable_name(token)
+    if executable in _POWERSHELL_REMOVE_ITEM_EXECUTABLES:
+        return True
+    return (
+        any(quote in token for quote in {'"', "'"})
+        and _shell_executable_name(token.replace('"', "").replace("'", ""))
+        in _POWERSHELL_REMOVE_ITEM_EXECUTABLES
+    )
 
 
 def _is_quote_concatenated_rm_executable(token: str) -> bool:
@@ -886,6 +904,16 @@ def _has_recursive_rm_option(arguments: list[str]) -> bool:
     return False
 
 
+def _has_powershell_whatif_option(arguments: list[str]) -> bool:
+    for argument in arguments:
+        normalized = argument.casefold()
+        if normalized == "--":
+            break
+        if normalized == "-whatif":
+            return True
+    return False
+
+
 def _is_world_writable_chmod_mode(argument: str) -> bool:
     """Return True for numeric modes that grant world rwx (e.g. 777, 0777)."""
     return re.fullmatch(r"0*777", argument) is not None
@@ -907,7 +935,11 @@ def _is_dangerous_rm_command(command: str) -> bool:
                 continue
             if not (_is_rm_executable(token) or _is_quote_concatenated_rm_executable(token)):
                 continue
-            if _has_recursive_rm_option(_command_segment_arguments(tokens, index)):
+            arguments = _command_segment_arguments(tokens, index)
+            if _has_recursive_rm_option(arguments) and not (
+                _is_powershell_remove_item_executable(token)
+                and _has_powershell_whatif_option(arguments)
+            ):
                 return True
     return False
 
@@ -1080,7 +1112,7 @@ class PermissionGuard:
         re.compile(pattern, re.IGNORECASE)
         for pattern in (
             r"(^|[\s;&|])rm\s+-[a-z]*r[a-z]*\b",
-            r"\bremove-item\b(?=[^;\r\n|]*\s-recurse\b)(?=[^;\r\n|]*\s-force\b)",
+            r"\bremove-item\b(?=[^;\r\n|]*\s-recurse\b)(?![^;\r\n|]*\s-whatif\b)",
             r"\bgit\s+push\b[^\r\n;&|<>]*(?<!\S)(?:--force(?:-with-lease|-if-includes)?|-[a-z]*f[a-z]*)\b",
             r"\bgit\s+clean\b[^\r\n;&|<>]*(?<!\S)(?:--force\b|-[a-z]*f[a-z]*\b)",
             r"git\s+reset\s+--hard\b",

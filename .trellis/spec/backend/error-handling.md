@@ -95,7 +95,7 @@ def requires_confirm(self, tool_name, tool_input):
 
 ## Dangerous shell patterns are blocked *before* the handler runs
 
-`PermissionGuard.DANGEROUS_PATTERNS` (regex list in `guard.py`) covers `rm -rf`, forced `git push` / `git clean`, recursive forced PowerShell `Remove-Item`, `git reset --hard`, `DROP TABLE`, shell-wrapper bypass (`bash -c`), absolute-path `rm`, `env`-prefix bypass, `curl | sh`, `mkfs`, `dd if=`, `find -delete`, `chmod 777`, etc. Any of these forces a permission prompt regardless of mode (except BYPASS). Recursive `rm` and world-writable `chmod 777` are also classified from normalized command tokens so option order, long options, quoting, transparent prefixes, and redirections cannot hide them from the legacy regexes.
+`PermissionGuard.DANGEROUS_PATTERNS` (regex list in `guard.py`) covers `rm -rf`, forced `git push` / `git clean`, recursive PowerShell `Remove-Item`, `git reset --hard`, `DROP TABLE`, shell-wrapper bypass (`bash -c`), absolute-path `rm`, `env`-prefix bypass, `curl | sh`, `mkfs`, `dd if=`, `find -delete`, `chmod 777`, etc. Any of these forces a permission prompt regardless of mode (except BYPASS). Recursive `rm` and world-writable `chmod 777` are also classified from normalized command tokens so option order, long options, quoting, transparent prefixes, and redirections cannot hide them from the legacy regexes.
 
 **Rule when adding tools that take shell input**: extend `DANGEROUS_PATTERNS` rather than adding ad-hoc checks in the handler. The handler's job is to *execute*; the guard's job is to *gate*. Splitting that boundary would let a future caller invoke the handler directly and skip the check.
 
@@ -148,10 +148,10 @@ redirections can all hide the same destructive intent from the legacy regexes.
 Use the shared shell token views in `permission/guard.py` to classify these
 forms before allow rules:
 
-- treat an `rm` / `rm.exe` executable or a Windows PowerShell
-  `Remove-Item` alias (`del`, `erase`, `rd`, `rmdir`, `ri`) as destructive
+- treat an `rm` / `rm.exe` executable or the Windows PowerShell `Remove-Item`
+  cmdlet and its aliases (`del`, `erase`, `rd`, `rmdir`, `ri`) as destructive
   when any argument before `--` is recursive (`-r` / bundled short flags /
-  `--recursive`);
+  `--recursive`); a `-WhatIf` dry run remains safe;
 - treat a `chmod` / `chmod.exe` executable as destructive when any argument is
   a numeric mode granting world rwx (`777`, `0777`, `00777`, …), including
   when combined with `-R`;
