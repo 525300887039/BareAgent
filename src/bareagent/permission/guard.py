@@ -88,6 +88,15 @@ _POWERSHELL_REMOVE_ITEM_EXECUTABLES = {
     "rmdir",
     "ri",
 }
+_POWERSHELL_RECURSE_OPTIONS = {
+    "-r",
+    "-re",
+    "-rec",
+    "-recu",
+    "-recur",
+    "-recurs",
+    "-recurse",
+}
 _CHMOD_EXECUTABLES = {"chmod", "chmod.exe"}
 _POSIX_SHELL_EXECUTABLES = {
     executable for shell in _SHELLS.split("|") for executable in (shell, f"{shell}.exe")
@@ -891,12 +900,27 @@ def _is_quote_concatenated_chmod_executable(token: str) -> bool:
     )
 
 
-def _has_recursive_rm_option(arguments: list[str]) -> bool:
+def _is_powershell_switch_enabled(argument: str, option: str) -> bool:
+    normalized = argument.casefold()
+    name, separator, value = normalized.partition(":")
+    if name != option:
+        return False
+    return not separator or value not in {"$false", "false", "0"}
+
+
+def _has_recursive_rm_option(arguments: list[str], *, powershell: bool = False) -> bool:
     """Return True when rm arguments enable recursive deletion in any order."""
     for argument in arguments:
         normalized = argument.casefold()
         if normalized == "--":
             break
+        if powershell:
+            option = normalized.partition(":")[0]
+            if option in _POWERSHELL_RECURSE_OPTIONS and _is_powershell_switch_enabled(
+                normalized, option
+            ):
+                return True
+            continue
         if normalized == "--recursive" or normalized.startswith("--recursive="):
             return True
         if re.fullmatch(r"-[a-z]*r[a-z]*", normalized):
@@ -909,7 +933,8 @@ def _has_powershell_whatif_option(arguments: list[str]) -> bool:
         normalized = argument.casefold()
         if normalized == "--":
             break
-        if normalized == "-whatif":
+        option, separator, value = normalized.partition(":")
+        if option == "-whatif" and (not separator or value in {"$true", "true", "1"}):
             return True
     return False
 
@@ -936,9 +961,9 @@ def _is_dangerous_rm_command(command: str) -> bool:
             if not (_is_rm_executable(token) or _is_quote_concatenated_rm_executable(token)):
                 continue
             arguments = _command_segment_arguments(tokens, index)
-            if _has_recursive_rm_option(arguments) and not (
-                _is_powershell_remove_item_executable(token)
-                and _has_powershell_whatif_option(arguments)
+            powershell = _is_powershell_remove_item_executable(token)
+            if _has_recursive_rm_option(arguments, powershell=powershell) and not (
+                powershell and _has_powershell_whatif_option(arguments)
             ):
                 return True
     return False
@@ -1112,7 +1137,9 @@ class PermissionGuard:
         re.compile(pattern, re.IGNORECASE)
         for pattern in (
             r"(^|[\s;&|])rm\s+-[a-z]*r[a-z]*\b",
-            r"\bremove-item\b(?=[^;\r\n|]*\s-recurse\b)(?![^;\r\n|]*\s-whatif\b)",
+            r"\bremove-item\b"
+            r"(?=[^;\r\n|]*[ \t]-recurse(?::\$?true)?(?:[ \t]|$))"
+            r"(?![^;\r\n|]*[ \t]-whatif(?::\$?true)?(?:[ \t]|$))",
             r"\bgit\s+push\b[^\r\n;&|<>]*(?<!\S)(?:--force(?:-with-lease|-if-includes)?|-[a-z]*f[a-z]*)\b",
             r"\bgit\s+clean\b[^\r\n;&|<>]*(?<!\S)(?:--force\b|-[a-z]*f[a-z]*\b)",
             r"git\s+reset\s+--hard\b",

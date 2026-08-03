@@ -112,6 +112,14 @@ SAFE_RM_NEIGHBORS = [
     "Remove-Item -Recurse -WhatIf build",
     "Remove-Item -Recurse -WhatIf -Force build",
     "del -Recurse -WhatIf build",
+    "Remove-Item -Recurse:$false build",
+    "Remove-Item -Filter *.tmp build",
+]
+
+POWERSHELL_REMOVE_ITEM_SWITCH_VARIANTS = [
+    ("Remove-Item -Recurse:$true build", True),
+    ("Remove-Item -Recurse:$true -WhatIf:$false build", True),
+    ("Remove-Item -Recurse:$true -WhatIf:$true build", False),
 ]
 
 DESTRUCTIVE_CHMOD_VARIANTS = [
@@ -440,6 +448,18 @@ def test_powershell_remove_item_cmdlet_is_detected(command: str, tool_name: str)
 
     assert guard.requires_confirm(tool_name, tool_input) is True
     assert guard.is_dangerous(tool_name, tool_input) is True
+
+
+@pytest.mark.parametrize("tool_name", ["bash", "background_run"])
+@pytest.mark.parametrize("command,expected", POWERSHELL_REMOVE_ITEM_SWITCH_VARIANTS)
+def test_powershell_remove_item_switch_values_are_classified(
+    command: str, expected: bool, tool_name: str
+) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": command}
+
+    assert guard.requires_confirm(tool_name, tool_input) is expected
+    assert guard.is_dangerous(tool_name, tool_input) is expected
 
 
 @pytest.mark.parametrize("tool_name", ["bash", "background_run"])

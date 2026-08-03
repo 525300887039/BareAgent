@@ -151,7 +151,8 @@ forms before allow rules:
 - treat an `rm` / `rm.exe` executable or the Windows PowerShell `Remove-Item`
   cmdlet and its aliases (`del`, `erase`, `rd`, `rmdir`, `ri`) as destructive
   when any argument before `--` is recursive (`-r` / bundled short flags /
-  `--recursive`); a `-WhatIf` dry run remains safe;
+  `--recursive`, including PowerShell `-Recurse:$true`); a `-WhatIf` or
+  `-WhatIf:$true` dry run remains safe, while `-WhatIf:$false` does not;
 - treat a `chmod` / `chmod.exe` executable as destructive when any argument is
   a numeric mode granting world rwx (`777`, `0777`, `00777`, …), including
   when combined with `-R`;
