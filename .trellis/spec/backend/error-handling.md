@@ -193,9 +193,13 @@ consistently by PowerShell and POSIX shells and therefore must fail closed.
 
 Treat shell payload launchers as dangerous when they occupy an executable
 command position: `sh`-family `-c`, PowerShell/pwsh command or encoded-command
-forms, `cmd /c` or `/k`, and `env` with arguments. Normalize quoted/full-path
+forms, `cmd /c` or `/k`, `env` with arguments, and PowerShell's `&` call
+operator when its target is an expression, script block, or variable (for
+example, `& (Get-Alias ri) -Recurse build`), plus PowerShell's
+`Invoke-Expression` / `iex` evaluators. Normalize quoted/full-path
 executables, shell-specific quote concatenation, escapes, and line
-continuations without executing the input.
+continuations without executing the input; never evaluate a dynamic call
+target to decide whether it is safe.
 
 The command-position parser must pass through only explicitly modeled prefixes
 and their real option grammar: assignments, redirections, `sudo`, and the

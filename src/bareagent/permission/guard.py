@@ -102,6 +102,7 @@ _POSIX_SHELL_EXECUTABLES = {
     executable for shell in _SHELLS.split("|") for executable in (shell, f"{shell}.exe")
 }
 _POWERSHELL_EXECUTABLES = {"powershell", "powershell.exe", "pwsh", "pwsh.exe"}
+_POWERSHELL_EVAL_EXECUTABLES = {"invoke-expression", "iex"}
 _CMD_EXECUTABLES = {"cmd", "cmd.exe"}
 _ENV_EXECUTABLES = {"env", "env.exe"}
 _POSIX_SHELL_OPTIONS_WITH_VALUE = {"-o", "--init-file", "--rcfile"}
@@ -715,10 +716,19 @@ def _has_powershell_payload_option(arguments: list[str]) -> bool:
 def _is_opaque_shell_wrapper(command: str) -> bool:
     for raw_tokens in _shell_token_views(command, include_escape_normalizations=True):
         tokens = _without_shell_redirections(raw_tokens)
+        if any(
+            token == "&" and (next_token in {"(", "{"} or next_token.startswith("$"))
+            for token, next_token in zip(tokens, tokens[1:], strict=False)
+        ):
+            # PowerShell can resolve a destructive alias or cmdlet through an
+            # expression/script block; evaluating it here would execute user input.
+            return True
         for index, token in enumerate(tokens):
             if not _is_wrapper_command_position(tokens, index):
                 continue
             executable = _shell_executable_name(token)
+            if executable in _POWERSHELL_EVAL_EXECUTABLES:
+                return True
             end = index + 1
             while end < len(tokens) and not _is_shell_command_separator(tokens[end]):
                 end += 1
