@@ -205,6 +205,10 @@ The command-position parser must pass through only explicitly modeled prefixes
 and their real option grammar: assignments, redirections, `sudo`, and the
 `command`, `exec`, and `nohup` launch prefixes. Non-executing forms such as
 `command -v` / `-V` and `nohup --help` / `--version` terminate this traversal.
+PowerShell script-block braces (`{` / `}`) are command boundaries too: inspect
+commands inside `ForEach-Object`, `if`, and similar blocks (including aliases
+such as `ri`) without executing the script. Preserve escaped literal braces as
+arguments rather than treating them as script blocks.
 For redirections embedded in an argv segment, remove both the operator and its
 target before parsing the remaining Git or wrapper tokens; never reinterpret a
 redirection target as a command argument.

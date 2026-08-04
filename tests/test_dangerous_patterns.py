@@ -100,6 +100,18 @@ POWERSHELL_REMOVE_ITEM_CMDLET_VARIANTS = [
     "& Remove-Item -Recurse build",
 ]
 
+POWERSHELL_SCRIPT_BLOCK_DESTRUCTIVE_VARIANTS = [
+    "ForEach-Object { ri -Recurse build }",
+    "if ($true) { Re`move-Item -Recurse build }",
+    "1..2 | ForEach-Object { ri -Recurse build }",
+]
+
+POWERSHELL_SCRIPT_BLOCK_SAFE_NEIGHBORS = [
+    "ForEach-Object { ri -Recurse -WhatIf build }",
+    "if ($true) { ri -Recurse:$false build }",
+    "1..2 | ForEach-Object { Get-ChildItem build }",
+]
+
 SAFE_RM_NEIGHBORS = [
     "rm file.txt",
     "rm -f file.txt",
@@ -452,6 +464,30 @@ def test_powershell_remove_item_cmdlet_is_detected(command: str, tool_name: str)
 
     assert guard.requires_confirm(tool_name, tool_input) is True
     assert guard.is_dangerous(tool_name, tool_input) is True
+
+
+@pytest.mark.parametrize("tool_name", ["bash", "background_run"])
+@pytest.mark.parametrize("command", POWERSHELL_SCRIPT_BLOCK_DESTRUCTIVE_VARIANTS)
+def test_powershell_script_block_destructive_commands_are_detected(
+    command: str, tool_name: str
+) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": command}
+
+    assert guard.requires_confirm(tool_name, tool_input) is True
+    assert guard.is_dangerous(tool_name, tool_input) is True
+
+
+@pytest.mark.parametrize("tool_name", ["bash", "background_run"])
+@pytest.mark.parametrize("command", POWERSHELL_SCRIPT_BLOCK_SAFE_NEIGHBORS)
+def test_powershell_script_block_safe_neighbors_remain_allowed(
+    command: str, tool_name: str
+) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": command}
+
+    assert guard.requires_confirm(tool_name, tool_input) is False
+    assert guard.is_dangerous(tool_name, tool_input) is False
 
 
 @pytest.mark.parametrize("tool_name", ["bash", "background_run"])

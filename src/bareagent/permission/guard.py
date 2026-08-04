@@ -22,7 +22,7 @@ class PermissionMode(Enum):
 _SHELLS = "bash|sh|zsh|dash|ksh|fish"
 _SHELL_WHITESPACE = " \t"
 _SHELL_CONTROL_CHARACTERS = ";&|<>()\r\n"
-_SHELL_COMMAND_SEPARATOR_CHARACTERS = ";&|()\r\n"
+_SHELL_COMMAND_SEPARATOR_CHARACTERS = ";&|(){}\r\n"
 _SHELL_COMMAND_TOOLS = {"bash", "background_run"}
 _TRANSPARENT_SHELL_PREFIXES = {"command", "exec", "nohup", "sudo"}
 _SUDO_OPTIONS_WITH_VALUE = {
@@ -106,7 +106,7 @@ _POWERSHELL_EVAL_EXECUTABLES = {"invoke-expression", "iex"}
 _CMD_EXECUTABLES = {"cmd", "cmd.exe"}
 _ENV_EXECUTABLES = {"env", "env.exe"}
 _POSIX_SHELL_OPTIONS_WITH_VALUE = {"-o", "--init-file", "--rcfile"}
-_POWERSHELL_51_SPECIAL_ESCAPES = "0abfnrtv\"'` \t"
+_POWERSHELL_51_SPECIAL_ESCAPES = "0abfnrtv\"'`{} \t"
 _BASH_ANSI_ESCAPE_PATTERN = re.compile(
     r"\\(?:[abefnrtvE\\'\"]|x[0-9a-fA-F]{1,2}|u[0-9a-fA-F]{1,4}|"
     r"U[0-9a-fA-F]{1,8}|[0-7]{1,3}|\r?\n)"
@@ -183,8 +183,10 @@ def _is_mcp_tool(tool_name: str) -> bool:
     return tool_name.startswith(_MCP_TOOL_PREFIX)
 
 
-def _tokenize_shell(command: str, *, posix: bool) -> list[str] | None:
-    lexer = shlex.shlex(command, posix=posix, punctuation_chars=_SHELL_CONTROL_CHARACTERS)
+def _tokenize_shell(
+    command: str, *, posix: bool, punctuation_chars: str = _SHELL_CONTROL_CHARACTERS
+) -> list[str] | None:
+    lexer = shlex.shlex(command, posix=posix, punctuation_chars=punctuation_chars)
     lexer.whitespace = _SHELL_WHITESPACE
     lexer.whitespace_split = True
     lexer.commenters = ""
@@ -319,7 +321,9 @@ def _powershell_shell_tokens(command: str) -> list[str] | None:
         escape_character="`",
         special_escapes=_POWERSHELL_51_SPECIAL_ESCAPES,
     )
-    return _tokenize_shell(normalized, posix=False)
+    return _tokenize_shell(
+        normalized, posix=False, punctuation_chars=f"{_SHELL_CONTROL_CHARACTERS}{{}}"
+    )
 
 
 def _shell_token_views(
