@@ -64,6 +64,15 @@ DESTRUCTIVE_GIT_VARIANTS = [
     "git push origin -- :main",
 ]
 
+ABBREVIATED_DESTRUCTIVE_GIT_OPTIONS = [
+    "git clean --for -d",
+    "git push --mir origin",
+    "git push --pru origin",
+    "git push --dele origin main",
+    "git branch --dele old-branch",
+    "git reset --har HEAD~1",
+]
+
 DESTRUCTIVE_RM_VARIANTS = [
     "rm -f -r build",
     "rm -r -f build",
@@ -437,6 +446,15 @@ def test_destructive_git_invocation_variants_are_detected(command: str) -> None:
     assert guard.is_dangerous("bash", tool_input) is True
 
 
+@pytest.mark.parametrize("command", ABBREVIATED_DESTRUCTIVE_GIT_OPTIONS)
+def test_git_long_option_abbreviations_are_detected(command: str) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": command}
+
+    assert guard.requires_confirm("bash", tool_input) is True
+    assert guard.is_dangerous("bash", tool_input) is True
+
+
 @pytest.mark.parametrize("command", DESTRUCTIVE_RM_VARIANTS)
 def test_destructive_rm_invocation_variants_are_detected(command: str) -> None:
     guard = PermissionGuard(mode=PermissionMode.AUTO)
@@ -595,7 +613,16 @@ def test_read_only_git_invocation_variants_remain_safe_in_default(command: str) 
     assert guard.is_dangerous("bash", tool_input) is False
 
 
-@pytest.mark.parametrize("command", ["git branch new-branch", "git branch -m old new"])
+@pytest.mark.parametrize("command", ["git log --out=log.txt -1", "git diff --out=diff.txt"])
+def test_git_output_option_abbreviations_are_not_read_only(command: str) -> None:
+    guard = PermissionGuard(mode=PermissionMode.DEFAULT)
+
+    assert guard.requires_confirm("bash", {"command": command}) is True
+
+
+@pytest.mark.parametrize(
+    "command", ["git branch new-branch", "git branch --forc new-branch", "git branch -m old new"]
+)
 def test_mutating_branch_forms_are_not_default_safe(command: str) -> None:
     guard = PermissionGuard(mode=PermissionMode.DEFAULT)
 

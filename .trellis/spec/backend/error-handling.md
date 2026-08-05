@@ -129,6 +129,8 @@ dangerous and DEFAULT-mode read-only classification. It must:
   they appear after `--` or without an explicit `--force` flag;
 - keep option boundaries precise so `clean -n`, ordinary refspecs such as
   `main:main`, and a ref such as `release-f` remain safe neighbors;
+- recognize Git's unique long-option abbreviations (`--mir`, `--pru`,
+  `--dele`, `--forc`, `--har`, and `--out`) while excluding `--no-*` forms;
 - treat tokenization failure as not newly safe while retaining the legacy
   dangerous regexes as a conservative fallback.
 

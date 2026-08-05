@@ -800,13 +800,26 @@ def _git_invocations(command: str) -> list[tuple[str, list[str]]]:
     return invocations
 
 
+def _is_git_long_option(argument: str, option: str) -> bool:
+    normalized = argument.casefold()
+    option = option.casefold()
+    name = normalized.partition("=")[0]
+    return (
+        name.startswith("--")
+        and name != "--"
+        and not name.startswith("--no-")
+        and option.startswith(name)
+    )
+
+
 def _has_force_option(arguments: list[str]) -> bool:
     for argument in arguments:
         normalized = argument.casefold()
         if normalized == "--":
             break
-        if normalized == "--force" or normalized.startswith(
-            ("--force=", "--force-if-includes", "--force-with-lease")
+        if any(
+            _is_git_long_option(argument, option)
+            for option in ("--force", "--force-if-includes", "--force-with-lease")
         ):
             return True
         if re.fullmatch(r"-[a-z]*f[a-z]*", normalized):
@@ -819,7 +832,7 @@ def _has_branch_delete_option(arguments: list[str]) -> bool:
         normalized = argument.casefold()
         if normalized == "--":
             break
-        if normalized == "--delete" or normalized.startswith("--delete="):
+        if _is_git_long_option(argument, "--delete"):
             return True
         if re.fullmatch(r"-[a-z]*d[a-z]*", normalized):
             return True
@@ -859,7 +872,7 @@ def _has_dangerous_push_option(arguments: list[str]) -> bool:
         normalized = argument.casefold()
         if normalized == "--":
             break
-        if normalized in {"--mirror", "--prune"}:
+        if any(_is_git_long_option(argument, option) for option in ("--mirror", "--prune")):
             return True
     return False
 
@@ -875,7 +888,9 @@ def _is_dangerous_git_command(command: str) -> bool:
             or _has_dangerous_push_refspec(arguments)
         ):
             return True
-        if subcommand == "reset" and any(argument.casefold() == "--hard" for argument in arguments):
+        if subcommand == "reset" and any(
+            _is_git_long_option(argument, "--hard") for argument in arguments
+        ):
             return True
         if subcommand == "branch" and _has_branch_delete_option(arguments):
             return True
@@ -1015,15 +1030,12 @@ def _has_dangerous_shell_substitution(command: str, patterns: list[re.Pattern[st
 
 
 def _has_output_option(arguments: list[str]) -> bool:
-    return any(
-        argument.casefold() == "--output" or argument.casefold().startswith("--output=")
-        for argument in arguments
-    )
+    return any(_is_git_long_option(argument, "--output") for argument in arguments)
 
 
 def _has_mutating_branch_option(argument: str) -> bool:
     normalized = argument.casefold()
-    if normalized in _BRANCH_MUTATING_OPTIONS:
+    if any(_is_git_long_option(argument, option) for option in _BRANCH_MUTATING_OPTIONS):
         return True
     if any(normalized.startswith(f"{option}=") for option in _BRANCH_MUTATING_OPTIONS):
         return True
