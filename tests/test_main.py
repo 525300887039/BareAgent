@@ -526,6 +526,18 @@ def test_load_config_falls_back_for_malformed_boolean_values(tmp_path: Path) -> 
     assert config.memory.semantic_recall is False
 
 
+@pytest.mark.parametrize(
+    "section",
+    ["provider", "permission", "ui", "subagent", "thinking", "debug", "tracing", "memory"],
+)
+def test_load_config_rejects_non_table_core_sections(tmp_path: Path, section: str) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(f'{section} = "not-a-table"\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=rf"{section} must be a table"):
+        load_config(config_path)
+
+
 def test_parse_retry_config_rejects_invalid_backoff_values() -> None:
     retry = main_module._parse_retry_config(
         {

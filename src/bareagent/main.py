@@ -555,6 +555,13 @@ def _read_config_file(config_path: Path) -> dict:
     return base
 
 
+def _config_section(raw: dict[str, Any], key: str) -> dict[str, Any]:
+    value = raw.get(key, {})
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be a table")
+    return value
+
+
 def _resolve_string(
     file_value: str,
     env_name: str,
@@ -1047,14 +1054,14 @@ def load_config(
     model_override: str | None = None,
 ) -> Config:
     raw_config = _read_config_file(config_path)
-    provider_raw = raw_config.get("provider", {})
-    permission_raw = raw_config.get("permission", {})
-    ui_raw = raw_config.get("ui", {})
-    subagent_raw = raw_config.get("subagent", {})
-    thinking_raw = raw_config.get("thinking", {})
-    debug_raw = raw_config.get("debug", {})
-    tracing_raw = raw_config.get("tracing", {})
-    allow_rules, deny_rules = parse_permission_rules(raw_config)
+    provider_raw = _config_section(raw_config, "provider")
+    permission_raw = _config_section(raw_config, "permission")
+    ui_raw = _config_section(raw_config, "ui")
+    subagent_raw = _config_section(raw_config, "subagent")
+    thinking_raw = _config_section(raw_config, "thinking")
+    debug_raw = _config_section(raw_config, "debug")
+    tracing_raw = _config_section(raw_config, "tracing")
+    allow_rules, deny_rules = parse_permission_rules({"permission": permission_raw})
     configured_provider_name = str(provider_raw.get("name", "anthropic"))
     provider_name = _resolve_string(
         configured_provider_name,
@@ -1237,7 +1244,7 @@ def load_config(
         capabilities_raw if isinstance(capabilities_raw, dict) else {}
     )
 
-    memory_raw = raw_config.get("memory", {})
+    memory_raw = _config_section(raw_config, "memory")
     memory_config = MemoryConfig(
         enabled=_resolve_bool(
             _config_bool(memory_raw, "enabled", True),
