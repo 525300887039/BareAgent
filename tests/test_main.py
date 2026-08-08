@@ -483,6 +483,49 @@ def test_load_config_debug_env_overrides(tmp_path: Path, monkeypatch) -> None:
     )
 
 
+def test_load_config_falls_back_for_malformed_boolean_values(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[provider]",
+                'name = "openai"',
+                'model = "gpt-5-codex-mini"',
+                'api_key_env = "OPENAI_API_KEY"',
+                "",
+                "[permission]",
+                'mode = "default"',
+                "",
+                "[ui]",
+                "stream = true",
+                'theme = "dark"',
+                "",
+                "[debug]",
+                'enabled = "false"',
+                "",
+                "[tracing]",
+                'langfuse = "false"',
+                'opentelemetry = "false"',
+                "",
+                "[memory]",
+                'semantic_recall = "false"',
+                "",
+                "[thinking]",
+                'mode = "adaptive"',
+                "budget_tokens = 10000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.debug.enabled is False
+    assert config.tracing.langfuse is False
+    assert config.tracing.opentelemetry is False
+    assert config.memory.semantic_recall is False
+
+
 def test_parse_retry_config_rejects_invalid_backoff_values() -> None:
     retry = main_module._parse_retry_config(
         {

@@ -565,6 +565,11 @@ def _resolve_string(
     return os.getenv(env_name, file_value)
 
 
+def _config_bool(raw: dict[str, Any], key: str, default: bool) -> bool:
+    value = raw.get(key, default)
+    return value if isinstance(value, bool) else default
+
+
 def _resolve_bool(file_value: bool, env_name: str) -> bool:
     raw_value = os.getenv(env_name)
     if raw_value is None:
@@ -669,7 +674,7 @@ def _parse_retry_config(retry_raw: dict) -> RetryConfig:
     defaults = RetryConfig()
     try:
         enabled = _resolve_bool(
-            bool(retry_raw.get("enabled", defaults.enabled)),
+            _config_bool(retry_raw, "enabled", defaults.enabled),
             "BAREAGENT_RETRY_ENABLED",
         )
     except (TypeError, ValueError):
@@ -694,7 +699,7 @@ def _parse_retry_config(retry_raw: dict) -> RetryConfig:
     except (TypeError, ValueError):
         multiplier = defaults.multiplier
     try:
-        jitter = bool(retry_raw.get("jitter", defaults.jitter))
+        jitter = _config_bool(retry_raw, "jitter", defaults.jitter)
     except (TypeError, ValueError):
         jitter = defaults.jitter
     if max_attempts < 1:
@@ -741,7 +746,7 @@ def _parse_cache_config(cache_raw: dict) -> CacheConfig:
     defaults = CacheConfig()
     try:
         enabled = _resolve_bool(
-            bool(cache_raw.get("enabled", defaults.enabled)),
+            _config_bool(cache_raw, "enabled", defaults.enabled),
             "BAREAGENT_CACHE_ENABLED",
         )
     except (TypeError, ValueError):
@@ -762,7 +767,7 @@ def _parse_skills_config(skills_raw: dict) -> SkillsConfig:
     defaults = SkillsConfig()
     try:
         auto_generate = _resolve_bool(
-            bool(skills_raw.get("auto_generate", defaults.auto_generate)),
+            _config_bool(skills_raw, "auto_generate", defaults.auto_generate),
             "BAREAGENT_SKILLS_AUTO_GENERATE",
         )
     except (TypeError, ValueError):
@@ -824,7 +829,7 @@ def _parse_workflow_config(workflow_raw: dict) -> WorkflowConfig:
     defaults = WorkflowConfig()
     try:
         enabled = _resolve_bool(
-            bool(workflow_raw.get("enabled", defaults.enabled)),
+            _config_bool(workflow_raw, "enabled", defaults.enabled),
             "BAREAGENT_WORKFLOW_ENABLED",
         )
     except (TypeError, ValueError):
@@ -887,7 +892,7 @@ def _parse_team_config(team_raw: dict) -> TeamConfig:
 
     try:
         memory_enabled = _resolve_bool(
-            bool(team_raw.get("memory_enabled", defaults.memory_enabled)),
+            _config_bool(team_raw, "memory_enabled", defaults.memory_enabled),
             "BAREAGENT_TEAM_MEMORY_ENABLED",
         )
     except (TypeError, ValueError):
@@ -927,7 +932,7 @@ def _parse_code_search_config(raw: dict) -> CodeSearchConfig:
 
     try:
         enabled = _resolve_bool(
-            bool(raw.get("enabled", defaults.enabled)),
+            _config_bool(raw, "enabled", defaults.enabled),
             "BAREAGENT_CODE_SEARCH_ENABLED",
         )
     except (TypeError, ValueError):
@@ -961,7 +966,7 @@ def _parse_repo_map_config(raw: dict) -> RepoMapConfig:
 
     try:
         enabled = _resolve_bool(
-            bool(raw.get("enabled", defaults.enabled)),
+            _config_bool(raw, "enabled", defaults.enabled),
             "BAREAGENT_REPO_MAP_ENABLED",
         )
     except (TypeError, ValueError):
@@ -1101,7 +1106,7 @@ def load_config(
         deny=deny_rules,
     )
     ui = UIConfig(
-        stream=_resolve_bool(ui_raw.get("stream", True), "BAREAGENT_UI_STREAM"),
+        stream=_resolve_bool(_config_bool(ui_raw, "stream", True), "BAREAGENT_UI_STREAM"),
         theme=_resolve_string(ui_raw.get("theme", "dark"), "BAREAGENT_UI_THEME"),
     )
     try:
@@ -1144,7 +1149,7 @@ def load_config(
     )
     debug = DebugConfig(
         enabled=_resolve_bool(
-            bool(debug_raw.get("enabled", False)),
+            _config_bool(debug_raw, "enabled", False),
             "BAREAGENT_DEBUG",
         ),
         log_dir=_resolve_string(
@@ -1156,21 +1161,21 @@ def load_config(
             "BAREAGENT_DEBUG_VIEWER_PORT",
         ),
         pretty=_resolve_bool(
-            bool(debug_raw.get("pretty", True)),
+            _config_bool(debug_raw, "pretty", True),
             "BAREAGENT_DEBUG_PRETTY",
         ),
     )
     tracing = TracingConfig(
         langfuse=_resolve_bool(
-            bool(tracing_raw.get("langfuse", False)),
+            _config_bool(tracing_raw, "langfuse", False),
             "BAREAGENT_TRACING_LANGFUSE",
         ),
         opentelemetry=_resolve_bool(
-            bool(tracing_raw.get("opentelemetry", False)),
+            _config_bool(tracing_raw, "opentelemetry", False),
             "BAREAGENT_TRACING_OPENTELEMETRY",
         ),
         content_enabled=_resolve_bool(
-            bool(tracing_raw.get("content_enabled", True)),
+            _config_bool(tracing_raw, "content_enabled", True),
             "BAREAGENT_CONTENT_TRACING_ENABLED",
         ),
     )
@@ -1235,7 +1240,7 @@ def load_config(
     memory_raw = raw_config.get("memory", {})
     memory_config = MemoryConfig(
         enabled=_resolve_bool(
-            bool(memory_raw.get("enabled", True)),
+            _config_bool(memory_raw, "enabled", True),
             "BAREAGENT_MEMORY_ENABLED",
         ),
         dir=_resolve_string(
@@ -1251,7 +1256,7 @@ def load_config(
             "BAREAGENT_MEMORY_RECALL_K",
         ),
         semantic_recall=_resolve_bool(
-            bool(memory_raw.get("semantic_recall", False)),
+            _config_bool(memory_raw, "semantic_recall", False),
             "BAREAGENT_MEMORY_SEMANTIC_RECALL",
         ),
         embedding_backend=str(memory_raw.get("embedding_backend", "openai")).strip() or "openai",

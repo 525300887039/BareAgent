@@ -263,6 +263,8 @@ Config is resolved in this order — later sources override earlier ones:
 4. CLI arguments (`--provider`, `--model`, `--config`)
 
 Implemented in `src/main.py`:`_read_config_file` (deep merges base + `.local`) and the `_resolve_string` / `_resolve_bool` / `_resolve_int` helpers (env > file).
+Boolean fields accept TOML booleans only; malformed values fall back to the
+field default instead of being coerced with Python's truthiness rules.
 
 **Rule for new config keys**:
 
