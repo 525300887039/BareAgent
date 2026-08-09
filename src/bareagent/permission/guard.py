@@ -97,6 +97,16 @@ _POWERSHELL_RECURSE_OPTIONS = {
     "-recurs",
     "-recurse",
 }
+# GNU rm accepts unique prefixes of long options, including --r/--rec.
+_RM_RECURSIVE_LONG_OPTION_PREFIXES = {
+    "--r",
+    "--re",
+    "--rec",
+    "--recu",
+    "--recur",
+    "--recurs",
+    "--recursive",
+}
 _CHMOD_EXECUTABLES = {"chmod", "chmod.exe"}
 _POSIX_SHELL_EXECUTABLES = {
     executable for shell in _SHELLS.split("|") for executable in (shell, f"{shell}.exe")
@@ -950,7 +960,7 @@ def _has_recursive_rm_option(arguments: list[str], *, powershell: bool = False) 
             ):
                 return True
             continue
-        if normalized == "--recursive" or normalized.startswith("--recursive="):
+        if normalized.partition("=")[0] in _RM_RECURSIVE_LONG_OPTION_PREFIXES:
             return True
         if re.fullmatch(r"-[a-z]*r[a-z]*", normalized):
             return True

@@ -267,6 +267,8 @@ Boolean fields accept TOML booleans only; malformed values fall back to the
 field default instead of being coerced with Python's truthiness rules.
 Core config sections must remain TOML tables; a malformed section is rejected
 as a `ValueError` so the CLI can report it without an uncaught parser error.
+Permission `allow` / `deny` values accept a string or array; other scalar TOML
+values are ignored rather than escaping configuration loading.
 
 **Rule for new config keys**:
 

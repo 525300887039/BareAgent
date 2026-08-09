@@ -341,6 +341,14 @@ def test_parse_permission_rules_reads_allow_and_deny_lists() -> None:
     assert deny == ["Bash(prefix:rm*)"]
 
 
+@pytest.mark.parametrize("key", ["allow", "deny"])
+def test_parse_permission_rules_ignores_non_list_scalars(key: str) -> None:
+    allow, deny = parse_permission_rules({"permission": {key: 42}})
+
+    assert allow == []
+    assert deny == []
+
+
 def test_tool_search_placeholder_returns_empty_list() -> None:
     assert tool_search("todo", max_results=3) == []
 

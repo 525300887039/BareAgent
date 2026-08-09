@@ -16,4 +16,6 @@ def _coerce_rule_list(value: Any) -> list[str]:
         return []
     if isinstance(value, str):
         return [value]
+    if not isinstance(value, (list, tuple)):
+        return []
     return [str(rule) for rule in value]
