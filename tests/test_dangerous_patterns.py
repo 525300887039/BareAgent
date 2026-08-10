@@ -83,6 +83,8 @@ DESTRUCTIVE_RM_VARIANTS = [
     "rm --recu build",
     "rm --recur build",
     "rm --recurs build",
+    "rm --recursi build",
+    "rm --recursiv build",
     "rm --recursive build",
     "rm --recursive --force build",
     "rm --no-preserve-root -rf /",

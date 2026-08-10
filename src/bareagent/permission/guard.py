@@ -105,6 +105,8 @@ _RM_RECURSIVE_LONG_OPTION_PREFIXES = {
     "--recu",
     "--recur",
     "--recurs",
+    "--recursi",
+    "--recursiv",
     "--recursive",
 }
 _CHMOD_EXECUTABLES = {"chmod", "chmod.exe"}

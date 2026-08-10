@@ -159,7 +159,7 @@ forms before allow rules:
   a numeric mode granting world rwx (`777`, `0777`, `00777`, …), including
   when combined with `-R`;
 - treat GNU `rm`'s unique `--recursive` abbreviations (`--r`, `--re`,
-  `--rec`, and longer prefixes) as recursive too;
+  `--rec`, `--recursi`, `--recursiv`, and longer prefixes) as recursive too;
 - honor command position via transparent prefixes and strip redirections the
   same way Git/wrapper detection does;
 - keep non-recursive `rm -f file`, `rm -- -rf`, and non-777 modes such as
