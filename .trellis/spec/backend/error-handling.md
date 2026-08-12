@@ -160,6 +160,10 @@ forms before allow rules:
   when combined with `-R`;
 - treat GNU `rm`'s unique `--recursive` abbreviations (`--r`, `--re`,
   `--rec`, `--recursi`, `--recursiv`, and longer prefixes) as recursive too;
+- resolve sudo's value-taking and flag long options by their unique prefixes
+  (`--us` / `--u` -> `--user`, `--chd` -> `--chdir`, `--non` ->
+  `--non-interactive`, and `--preserve-e` -> `--preserve-env`) so an
+  abbreviated sudo option cannot hide the destructive command;
 - honor command position via transparent prefixes and strip redirections the
   same way Git/wrapper detection does;
 - keep non-recursive `rm -f file`, `rm -- -rf`, and non-777 modes such as
