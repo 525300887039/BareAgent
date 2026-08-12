@@ -69,6 +69,9 @@ _SUDO_COMMAND_FLAGS = {
     "-s",
     "--shell",
 }
+_SUDO_LONG_OPTIONS = {
+    option for option in _SUDO_OPTIONS_WITH_VALUE | _SUDO_COMMAND_FLAGS if option.startswith("--")
+}
 _ALWAYS_MUTATING_TOOLS = {
     "edit_file",
     "write_file",
@@ -548,18 +551,31 @@ def _is_shell_assignment(token: str) -> bool:
     return re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*\+?=.*", token) is not None
 
 
+def _resolve_sudo_long_option(option: str) -> str | None:
+    """Map a sudo long option, or a unique abbreviation of one, to its full name.
+
+    ``getopt_long`` accepts any unambiguous prefix of a long option (for example
+    ``--us`` for ``--user``).  Return ``None`` when the prefix is ambiguous so the
+    caller keeps fail-safe instead of guessing.
+    """
+    name = option.partition("=")[0]
+    if not name.startswith("--") or name == "--":
+        return None
+    matches = [candidate for candidate in _SUDO_LONG_OPTIONS if candidate.startswith(name)]
+    return matches[0] if len(matches) == 1 else None
+
+
 def _sudo_option_end(tokens: list[str], index: int, end: int) -> int | None:
     option = _strip_shell_quotes(tokens[index])
     if option.startswith("--"):
-        if option in _SUDO_OPTIONS_WITH_VALUE:
+        resolved = _resolve_sudo_long_option(option)
+        if resolved is None:
+            return None
+        if resolved in _SUDO_OPTIONS_WITH_VALUE:
+            if "=" in option:
+                return index + 1
             return index + 2 if index + 1 < end else None
-        if any(
-            option.startswith(f"{value_option}=")
-            for value_option in _SUDO_OPTIONS_WITH_VALUE
-            if value_option.startswith("--")
-        ):
-            return index + 1
-        if option in _SUDO_COMMAND_FLAGS or option.startswith("--preserve-env="):
+        if resolved in _SUDO_COMMAND_FLAGS:
             return index + 1
         return None
 

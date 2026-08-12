@@ -73,6 +73,25 @@ ABBREVIATED_DESTRUCTIVE_GIT_OPTIONS = [
     "git reset --har HEAD~1",
 ]
 
+ABBREVIATED_SUDO_OPTION_DESTRUCTIVE_RM_VARIANTS = [
+    "sudo --us root rm --recursive build",
+    "sudo --u root rm --recursive build",
+    "sudo --us=root rm --recursive build",
+    "sudo --user=root rm --recursive build",
+    "sudo --chd /tmp rm --recursive build",
+    "sudo --cl 3 rm --recursive build",
+    "sudo --non rm --recursive build",
+    "sudo --preserve-e rm --recursive build",
+]
+
+SUDO_OPTION_ABBREVIATION_SAFE_NEIGHBORS = [
+    "sudo --us root echo harmless",
+    "sudo --chd /tmp echo harmless",
+    "sudo --cl 3 echo harmless",
+    "sudo --non echo harmless",
+    "sudo --preserve-e echo harmless",
+]
+
 DESTRUCTIVE_RM_VARIANTS = [
     "rm -f -r build",
     "rm -r -f build",
@@ -461,6 +480,26 @@ def test_git_long_option_abbreviations_are_detected(command: str) -> None:
 
     assert guard.requires_confirm("bash", tool_input) is True
     assert guard.is_dangerous("bash", tool_input) is True
+
+
+@pytest.mark.parametrize("tool_name", ["bash", "background_run"])
+@pytest.mark.parametrize("command", ABBREVIATED_SUDO_OPTION_DESTRUCTIVE_RM_VARIANTS)
+def test_sudo_long_option_abbreviations_are_detected(command: str, tool_name: str) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": command}
+
+    assert guard.requires_confirm(tool_name, tool_input) is True
+    assert guard.is_dangerous(tool_name, tool_input) is True
+
+
+@pytest.mark.parametrize("tool_name", ["bash", "background_run"])
+@pytest.mark.parametrize("command", SUDO_OPTION_ABBREVIATION_SAFE_NEIGHBORS)
+def test_sudo_long_option_abbreviations_safe_neighbors(command: str, tool_name: str) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": command}
+
+    assert guard.requires_confirm(tool_name, tool_input) is False
+    assert guard.is_dangerous(tool_name, tool_input) is False
 
 
 @pytest.mark.parametrize("command", DESTRUCTIVE_RM_VARIANTS)
