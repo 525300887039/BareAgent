@@ -25,6 +25,14 @@ _SHELL_CONTROL_CHARACTERS = ";&|<>()\r\n"
 _SHELL_COMMAND_SEPARATOR_CHARACTERS = ";&|(){}\r\n"
 _SHELL_COMMAND_TOOLS = {"bash", "background_run"}
 _TRANSPARENT_SHELL_PREFIXES = {"command", "exec", "nohup", "sudo"}
+# A shell launched through a transparent prefix after a pipe (``curl | sudo
+# sh``) still executes the piped input from stdin, so the pipe-to-shell
+# patterns must tolerate modeled prefixes and their option arguments.
+_PIPE_TO_SHELL_PREFIX_PATTERN = (
+    "(?:(?:"
+    + "|".join(sorted(_TRANSPARENT_SHELL_PREFIXES - {"env"}))
+    + r")(?:\s+-\S+(?:\s+\S+)?)*(?:\s+--)?\s*)?"
+)
 _SUDO_OPTIONS_WITH_VALUE = {
     "-C",
     "--close-from",
@@ -997,8 +1005,8 @@ def _has_powershell_whatif_option(arguments: list[str]) -> bool:
 
 
 def _is_world_writable_chmod_mode(argument: str) -> bool:
-    """Return True for numeric modes that grant world rwx (e.g. 777, 0777)."""
-    return re.fullmatch(r"0*777", argument) is not None
+    """Return True for numeric modes that grant world rwx (e.g. 777, 1777, 0777)."""
+    return re.fullmatch(r"[0-7]?0*777", argument) is not None
 
 
 def _command_segment_arguments(tokens: list[str], executable_index: int) -> list[str]:
@@ -1206,8 +1214,8 @@ class PermissionGuard:
             # env prefix bypass
             r"(^|\s)env\s+",
             # pipe-to-shell execution
-            rf"curl\b.*\|\s*({_SHELLS})\b",
-            rf"wget\b.*\|\s*({_SHELLS})\b",
+            rf"curl\b.*\|\s*{_PIPE_TO_SHELL_PREFIX_PATTERN}({_SHELLS})\b",
+            rf"wget\b.*\|\s*{_PIPE_TO_SHELL_PREFIX_PATTERN}({_SHELLS})\b",
             # destructive system commands
             r"(^|\s)chmod\s+777\b",
             r"(^|\s)mkfs\b",

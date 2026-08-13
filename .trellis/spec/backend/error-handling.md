@@ -95,7 +95,7 @@ def requires_confirm(self, tool_name, tool_input):
 
 ## Dangerous shell patterns are blocked *before* the handler runs
 
-`PermissionGuard.DANGEROUS_PATTERNS` (regex list in `guard.py`) covers `rm -rf`, forced `git push` / `git clean`, recursive PowerShell `Remove-Item`, `git reset --hard`, `DROP TABLE`, shell-wrapper bypass (`bash -c`), absolute-path `rm`, `env`-prefix bypass, `curl | sh`, `mkfs`, `dd if=`, `find -delete`, `chmod 777`, etc. Any of these forces a permission prompt regardless of mode (except BYPASS). Recursive `rm` and world-writable `chmod 777` are also classified from normalized command tokens so option order, long options, quoting, transparent prefixes, and redirections cannot hide them from the legacy regexes.
+`PermissionGuard.DANGEROUS_PATTERNS` (regex list in `guard.py`) covers `rm -rf`, forced `git push` / `git clean`, recursive PowerShell `Remove-Item`, `git reset --hard`, `DROP TABLE`, shell-wrapper bypass (`bash -c`), absolute-path `rm`, `env`-prefix bypass, `curl | sh` (including through a transparent prefix such as `curl | sudo sh`, which still feeds stdin to the shell), `mkfs`, `dd if=`, `find -delete`, `chmod 777`, etc. Any of these forces a permission prompt regardless of mode (except BYPASS). Recursive `rm` and world-writable `chmod 777` are also classified from normalized command tokens so option order, long options, quoting, transparent prefixes, and redirections cannot hide them from the legacy regexes.
 
 **Rule when adding tools that take shell input**: extend `DANGEROUS_PATTERNS` rather than adding ad-hoc checks in the handler. The handler's job is to *execute*; the guard's job is to *gate*. Splitting that boundary would let a future caller invoke the handler directly and skip the check.
 
@@ -156,8 +156,8 @@ forms before allow rules:
   `--recursive`, including PowerShell `-Recurse:$true`); a `-WhatIf` or
   `-WhatIf:$true` dry run remains safe, while `-WhatIf:$false` does not;
 - treat a `chmod` / `chmod.exe` executable as destructive when any argument is
-  a numeric mode granting world rwx (`777`, `0777`, `00777`, …), including
-  when combined with `-R`;
+  a numeric mode granting world rwx (`777`, `0777`, `00777`, `1777`, `4777`,
+  `7777`, …), including when combined with `-R`;
 - treat GNU `rm`'s unique `--recursive` abbreviations (`--r`, `--re`,
   `--rec`, `--recursi`, `--recursiv`, and longer prefixes) as recursive too;
 - resolve sudo's value-taking and flag long options by their unique prefixes

@@ -118,7 +118,7 @@ BareAgent 的权限系统由 `src/bareagent/permission/guard.py` 中的 `Permiss
 | shell wrapper 绕过 | `bash -c`、`sh -c`、`zsh -c` 等 |
 | 绝对路径 `rm` 绕过 | `/bin/rm`、`/usr/bin/rm` |
 | `env` 前缀绕过 | `env ...` |
-| 下载后管道执行 | `curl ... | bash`、`wget ... | sh` |
+| 下载后管道执行 | `curl ... | bash`、`wget ... | sh`（含 `curl ... | sudo bash` 等透明前缀形式） |
 | 破坏性系统命令 | `chmod 777`、`mkfs`、`dd if=`、`find ... -delete` |
 
 这组规则的优先级高于 `allow` 规则。也就是说，即使你写了：
