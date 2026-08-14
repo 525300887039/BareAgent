@@ -121,6 +121,9 @@ _RM_RECURSIVE_LONG_OPTION_PREFIXES = {
     "--recursive",
 }
 _CHMOD_EXECUTABLES = {"chmod", "chmod.exe"}
+# Pipe sources for the pipe-to-shell classification. Only curl/wget carry the
+# remote-content execution risk the legacy ``curl | sh`` patterns model.
+_PIPE_SOURCE_EXECUTABLES = {"curl", "curl.exe", "wget", "wget.exe"}
 _POSIX_SHELL_EXECUTABLES = {
     executable for shell in _SHELLS.split("|") for executable in (shell, f"{shell}.exe")
 }
@@ -790,6 +793,59 @@ def _is_opaque_shell_wrapper(command: str) -> bool:
     return False
 
 
+def _pipe_target_command_index(tokens: list[str], start: int, end: int) -> int | None:
+    """Resolve the command a pipeline feeds into, skipping env assignments.
+
+    Mirrors the transparent-prefix walk used for command positions: after a
+    pipe, ``FOO=bar`` assignments and ``sudo``/``command``/``exec``/``nohup``
+    chains are transparent, so ``curl x | sudo -u root sh`` and
+    ``curl x | FOO=bar sh`` resolve to ``sh`` just like ``curl x | sh``.
+    """
+    cursor = start
+    while cursor < end:
+        if _is_shell_assignment(tokens[cursor]):
+            cursor += 1
+            continue
+        command_index = _transparent_prefix_command_index(tokens, cursor, end)
+        if command_index is None:
+            return cursor
+        cursor = command_index
+    return None
+
+
+def _is_pipe_to_shell_command(command: str) -> bool:
+    """Return True when a curl/wget pipeline feeds a shell executable stdin.
+
+    The legacy ``curl\\b.*\\|\\s*(?:prefix)?(sh|bash|...)`` regexes miss
+    quoted shells (``curl x | "sh"``), path-qualified shells
+    (``curl x | /bin/sh``), and quoted shells behind a transparent prefix
+    (``curl x | sudo 'bash'``) — all of which still execute the piped bytes
+    through a shell. Token-based classification closes those gaps while
+    keeping non-shell targets (``grep sh``, ``cat``) and ``||`` safe.
+    """
+    for raw_tokens in _shell_token_views(command, include_escape_normalizations=True):
+        tokens = _without_shell_redirections(raw_tokens)
+        for index, token in enumerate(tokens):
+            if _shell_executable_name(token) not in _PIPE_SOURCE_EXECUTABLES:
+                continue
+            segment_end = index + 1
+            while segment_end < len(tokens) and not _is_shell_command_separator(
+                tokens[segment_end]
+            ):
+                segment_end += 1
+            if segment_end >= len(tokens) or tokens[segment_end] not in {"|", "|&"}:
+                continue
+            target_end = segment_end + 1
+            while target_end < len(tokens) and not _is_shell_command_separator(tokens[target_end]):
+                target_end += 1
+            target = _pipe_target_command_index(tokens, segment_end + 1, target_end)
+            if target is not None and (
+                _shell_executable_name(tokens[target]) in _POSIX_SHELL_EXECUTABLES
+            ):
+                return True
+    return False
+
+
 def _parse_git_invocation(tokens: list[str], executable_index: int) -> tuple[str, list[str]] | None:
     end = executable_index + 1
     while end < len(tokens) and not _is_shell_command_separator(tokens[end]):
@@ -1004,9 +1060,55 @@ def _has_powershell_whatif_option(arguments: list[str]) -> bool:
     return False
 
 
+_CHMOD_SYMBOLIC_CLAUSE = re.compile(r"([ugoa]+)([+\-=])([rwxXstugo]*)")
+# Octal modes whose significant digits are ``[0-7]?777`` (world rwx plus any
+# special-bit digit). Leading zeros are stripped first so 5-digit forms such
+# as ``07777`` / ``01777`` (value <= 0o7777, accepted by GNU chmod) cannot
+# hide a world-rwx mode, while over-long modes like ``17777`` stay unmatchable.
+_CHMOD_WORLD_RWX_OCTAL = re.compile(r"0*[0-7]?0*777")
+
+
+def _symbolic_chmod_grants_world_rwx(argument: str) -> bool:
+    """Return True when symbolic mode clauses end with rwx for every class.
+
+    Simulates the clauses in order (``[ugoa][+-=][perms]``): ``=`` sets a
+    class's permissions, ``+`` adds, ``-`` removes. A mode is world-rwx only
+    when each of u/g/o is left with explicit ``r``/``w``/``x`` — the symbolic
+    spelling of 777. This flags ``a=rwx``, ``ugo=rwx``, ``a+rwx``, and
+    ``u=rwx,g=rwx,o=rwx`` while keeping ``o=rwx`` (the 007 analog), ``+x``,
+    ``u+rwx``, ``a=r``, and removal forms such as ``a=rwx,o-rwx`` safe.
+    """
+    permissions: dict[str, set[str] | None] = {"u": None, "g": None, "o": None}
+    for clause in argument.split(","):
+        match = _CHMOD_SYMBOLIC_CLAUSE.fullmatch(clause)
+        if match is None:
+            return False
+        who, operator, symbols = match.groups()
+        classes = {"u", "g", "o"} if "a" in who else set(who)
+        granted = set(symbols) & {"r", "w", "x"}
+        for class_name in classes:
+            current = permissions[class_name]
+            if operator == "=":
+                permissions[class_name] = granted
+            elif operator == "+":
+                permissions[class_name] = (current or set()) | granted
+            elif current is not None:
+                permissions[class_name] = current - granted
+    return all(
+        current is not None and {"r", "w", "x"} <= current for current in permissions.values()
+    )
+
+
 def _is_world_writable_chmod_mode(argument: str) -> bool:
-    """Return True for numeric modes that grant world rwx (e.g. 777, 1777, 0777)."""
-    return re.fullmatch(r"[0-7]?0*777", argument) is not None
+    """Return True for modes that grant world rwx (the 777 family).
+
+    Covers octal modes (``777``, ``0777``, ``00777``, ``1777``, ``07777``,
+    ``7777``, ...) and their symbolic spellings (``a=rwx``, ``ugo=rwx``,
+    ``a+rwx``, ``u=rwx,g=rwx,o=rwx``, ...).
+    """
+    if _CHMOD_WORLD_RWX_OCTAL.fullmatch(argument) is not None:
+        return True
+    return _symbolic_chmod_grants_world_rwx(argument)
 
 
 def _command_segment_arguments(tokens: list[str], executable_index: int) -> list[str]:
@@ -1055,6 +1157,7 @@ def _has_dangerous_shell_substitution(command: str, patterns: list[re.Pattern[st
     for body in _shell_substitution_bodies(command):
         if (
             _is_opaque_shell_wrapper(body)
+            or _is_pipe_to_shell_command(body)
             or _is_dangerous_git_command(body)
             or _is_dangerous_rm_command(body)
             or _is_dangerous_chmod_command(body)
@@ -1213,9 +1316,10 @@ class PermissionGuard:
             r"(^|\s)/(?:usr/)?bin/rm\b",
             # env prefix bypass
             r"(^|\s)env\s+",
-            # pipe-to-shell execution
-            rf"curl\b.*\|\s*{_PIPE_TO_SHELL_PREFIX_PATTERN}({_SHELLS})\b",
-            rf"wget\b.*\|\s*{_PIPE_TO_SHELL_PREFIX_PATTERN}({_SHELLS})\b",
+            # pipe-to-shell execution (the negative lookbehind keeps ``||``
+            # from matching its second bar while ``.*`` crosses real pipes)
+            rf"curl\b.*(?<![|])\|\s*{_PIPE_TO_SHELL_PREFIX_PATTERN}({_SHELLS})\b",
+            rf"wget\b.*(?<![|])\|\s*{_PIPE_TO_SHELL_PREFIX_PATTERN}({_SHELLS})\b",
             # destructive system commands
             r"(^|\s)chmod\s+777\b",
             r"(^|\s)mkfs\b",
@@ -1278,6 +1382,7 @@ class PermissionGuard:
                 return True
             if (
                 _is_opaque_shell_wrapper(cmd)
+                or _is_pipe_to_shell_command(cmd)
                 or _has_dangerous_shell_substitution(cmd, self.DANGEROUS_PATTERNS)
                 or _is_dangerous_git_command(cmd)
                 or _is_dangerous_rm_command(cmd)
@@ -1329,6 +1434,7 @@ class PermissionGuard:
             cmd = str(tool_input.get("command", ""))
             return (
                 _is_opaque_shell_wrapper(cmd)
+                or _is_pipe_to_shell_command(cmd)
                 or _has_dangerous_shell_substitution(cmd, self.DANGEROUS_PATTERNS)
                 or _is_dangerous_git_command(cmd)
                 or _is_dangerous_rm_command(cmd)
