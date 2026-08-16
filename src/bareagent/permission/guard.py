@@ -121,6 +121,40 @@ _RM_RECURSIVE_LONG_OPTION_PREFIXES = {
     "--recursive",
 }
 _CHMOD_EXECUTABLES = {"chmod", "chmod.exe"}
+_FIND_EXECUTABLES = {"find", "find.exe"}
+# Executables that run their arguments as a command (find -exec / -execdir,
+# xargs, nice, ionice, setsid, timeout, stdbuf, taskset, watch, chrt). A
+# destructive rm/chmod/dd behind one of these is still the destructive
+# command; the launcher merely hides it from the wrapper-position walk.
+_LAUNCHER_EXECUTABLES = {
+    "xargs",
+    "nice",
+    "ionice",
+    "setsid",
+    "timeout",
+    "stdbuf",
+    "taskset",
+    "watch",
+    "chrt",
+}
+_FIND_EXEC_OPTIONS = {"-exec", "-execdir"}
+# Value-taking launcher options, per launcher, so the launched command can be
+# located after them (``nice -n 5 rm -r`` -> ``rm``). ``--opt=value`` and
+# ``-ovalue`` forms carry their value attached and need no +2 skip.
+_LAUNCHER_OPTIONS_WITH_VALUE = {
+    "xargs": {"-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s", "-S"},
+    "nice": {"-n", "--adjustment"},
+    "ionice": {"-c", "-n", "-p", "--class", "--classdata", "--pid"},
+    "setsid": set(),
+    "timeout": {"-k", "-s", "--kill-after", "--signal"},
+    "stdbuf": {"-i", "-o", "-e", "--input", "--output", "--error"},
+    "taskset": {"-c", "-P", "--cpu-list", "--pid"},
+    "watch": {"-n", "--interval"},
+    "chrt": {"-P", "--pid"},
+}
+# Launchers whose command follows a numeric positional (timeout's duration,
+# chrt's priority): ``timeout 5 rm -r``.
+_LAUNCHER_POSITIONAL_BEFORE_COMMAND = {"timeout", "chrt"}
 # Pipe sources for the pipe-to-shell classification. Only curl/wget carry the
 # remote-content execution risk the legacy ``curl | sh`` patterns model.
 _PIPE_SOURCE_EXECUTABLES = {"curl", "curl.exe", "wget", "wget.exe"}
@@ -720,6 +754,69 @@ def _is_wrapper_command_position(tokens: list[str], index: int) -> bool:
     return cursor == index
 
 
+def _launcher_command_index(tokens: list[str], launcher_index: int, end: int) -> int:
+    """Resolve the command a launcher runs, walking past its options.
+
+    Value-taking options consume their next token (``-I {}``); ``--opt=v``
+    and ``-ov`` forms carry the value attached and consume one token only.
+    ``timeout``/``chrt`` additionally take a numeric positional before the
+    command (``timeout 5 rm -r``).
+    """
+    executable = _shell_executable_name(tokens[launcher_index])
+    value_options = _LAUNCHER_OPTIONS_WITH_VALUE.get(executable, set())
+    cursor = launcher_index + 1
+    while cursor < end:
+        argument = _strip_shell_quotes(tokens[cursor])
+        if not argument.startswith("-"):
+            break
+        if argument in value_options:
+            cursor += 2
+        else:
+            cursor += 1
+    if (
+        executable in _LAUNCHER_POSITIONAL_BEFORE_COMMAND
+        and cursor < end
+        and _strip_shell_quotes(tokens[cursor]).isdecimal()
+    ):
+        cursor += 1
+    return cursor
+
+
+def _is_launcher_command_position(tokens: list[str], index: int) -> bool:
+    """Return True when ``tokens[index]`` is the command a launcher runs.
+
+    Covers ``find -exec CMD`` / ``-execdir CMD`` and the launcher executables
+    (``xargs``, ``nice``, ``timeout``, ...): ``find . -exec rm --recursive``
+    and ``nice -n 5 rm --recursive`` execute the same destructive command as
+    a bare ``rm --recursive``, so the destructive handlers must see through
+    the launcher. The launcher itself must sit at a command position, and
+    the walk past its options must land exactly on ``index``, so
+    ``echo xargs rm`` and ``xargs echo rm`` stay safe.
+    """
+    if index == 0:
+        return False
+    previous = _strip_shell_quotes(tokens[index - 1])
+    if previous in _FIND_EXEC_OPTIONS:
+        segment_start = index - 1
+        while segment_start > 0 and not _is_shell_command_separator(tokens[segment_start - 1]):
+            segment_start -= 1
+        return any(
+            _is_wrapper_command_position(tokens, cursor)
+            and _shell_executable_name(tokens[cursor]) in _FIND_EXECUTABLES
+            for cursor in range(segment_start, index - 1)
+        )
+
+    segment_start = index
+    while segment_start > 0 and not _is_shell_command_separator(tokens[segment_start - 1]):
+        segment_start -= 1
+    return any(
+        _shell_executable_name(tokens[launcher_index]) in _LAUNCHER_EXECUTABLES
+        and _is_wrapper_command_position(tokens, launcher_index)
+        and _launcher_command_index(tokens, launcher_index, index) == index
+        for launcher_index in range(segment_start, index)
+    )
+
+
 def _is_powershell_payload_option(argument: str) -> bool:
     if argument.startswith("/"):
         argument = f"-{argument[1:]}"
@@ -1185,7 +1282,10 @@ def _is_dangerous_rm_command(command: str) -> bool:
     for raw_tokens in _shell_token_views(command, include_escape_normalizations=True):
         tokens = _without_shell_redirections(raw_tokens)
         for index, token in enumerate(tokens):
-            if not _is_wrapper_command_position(tokens, index):
+            if not (
+                _is_wrapper_command_position(tokens, index)
+                or _is_launcher_command_position(tokens, index)
+            ):
                 continue
             if not (_is_rm_executable(token) or _is_quote_concatenated_rm_executable(token)):
                 continue
@@ -1203,7 +1303,10 @@ def _is_dangerous_chmod_command(command: str) -> bool:
     for raw_tokens in _shell_token_views(command, include_escape_normalizations=True):
         tokens = _without_shell_redirections(raw_tokens)
         for index, token in enumerate(tokens):
-            if not _is_wrapper_command_position(tokens, index):
+            if not (
+                _is_wrapper_command_position(tokens, index)
+                or _is_launcher_command_position(tokens, index)
+            ):
                 continue
             if not (_is_chmod_executable(token) or _is_quote_concatenated_chmod_executable(token)):
                 continue
@@ -1226,7 +1329,10 @@ def _is_dangerous_dd_command(command: str) -> bool:
     for raw_tokens in _shell_token_views(command, include_escape_normalizations=True):
         tokens = _without_shell_redirections(raw_tokens)
         for index, token in enumerate(tokens):
-            if not _is_wrapper_command_position(tokens, index):
+            if not (
+                _is_wrapper_command_position(tokens, index)
+                or _is_launcher_command_position(tokens, index)
+            ):
                 continue
             if _shell_executable_name(token) not in {"dd", "dd.exe"}:
                 continue

@@ -459,6 +459,43 @@ SAFE_DD_NEIGHBORS = [
     "dd bs=1M iflag=fullblock of=/tmp/x",
 ]
 
+LAUNCHED_DESTRUCTIVE_VARIANTS = [
+    "find . -exec rm --recursive {} +",
+    "find . -execdir rm --recursive {} ;",
+    "find /tmp -exec chmod 0777 {} +",
+    "find /tmp -exec chmod a=rwx {} +",
+    "find /tmp -exec chmod ugo=rwx {} ;",
+    'find /tmp -exec dd "if=/dev/zero" of=/tmp/x {} ;',
+    "xargs rm --recursive",
+    "xargs -I {} rm --recursive {}",
+    "nice -n 5 rm --recursive /tmp/x",
+    "nice -n -5 rm -r /tmp/x",
+    "timeout 5 rm --recursive /tmp/x",
+    "timeout -s KILL 5 chmod a=rwx /tmp/x",
+    "stdbuf -oL rm --recursive /tmp/x",
+    "taskset -c 0 rm --recursive /tmp/x",
+    "setsid rm --recursive /tmp/x",
+    "watch -n 1 chmod a=rwx /tmp/x",
+    "sudo xargs rm --recursive",
+    'echo "$(xargs rm --recursive)"',
+]
+
+LAUNCHED_SAFE_NEIGHBORS = [
+    "find . -exec ls {} +",
+    "find . -exec echo rm --recursive {} +",
+    "find . -exec rm {} +",
+    "find . -exec chmod 755 {} +",
+    "echo xargs rm --recursive",
+    "echo find -exec rm --recursive",
+    "xargs echo rm --recursive",
+    "xargs rm -f file.txt",
+    "nice -n 5 ls -l",
+    "nice -n 5 echo rm --recursive",
+    "timeout 10 ls",
+    "xargs -r ls",
+    "find . -name '*.tmp'",
+]
+
 DANGEROUS_SHELL_SUBSTITUTIONS = [
     '''echo "$(powershell -Command 'Write-Output safe')"''',
     '''echo "$(\"/bin/bash\" -c 'echo safe')"''',
@@ -939,6 +976,26 @@ def test_destructive_dd_variants_are_detected(command: str, tool_name: str) -> N
 @pytest.mark.parametrize("tool_name", ["bash", "background_run"])
 @pytest.mark.parametrize("command", SAFE_DD_NEIGHBORS)
 def test_safe_dd_near_neighbors_are_not_dangerous(command: str, tool_name: str) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": command}
+
+    assert guard.requires_confirm(tool_name, tool_input) is False
+    assert guard.is_dangerous(tool_name, tool_input) is False
+
+
+@pytest.mark.parametrize("tool_name", ["bash", "background_run"])
+@pytest.mark.parametrize("command", LAUNCHED_DESTRUCTIVE_VARIANTS)
+def test_launcher_hidden_destructive_commands_are_detected(command: str, tool_name: str) -> None:
+    guard = PermissionGuard(mode=PermissionMode.AUTO)
+    tool_input = {"command": command}
+
+    assert guard.requires_confirm(tool_name, tool_input) is True
+    assert guard.is_dangerous(tool_name, tool_input) is True
+
+
+@pytest.mark.parametrize("tool_name", ["bash", "background_run"])
+@pytest.mark.parametrize("command", LAUNCHED_SAFE_NEIGHBORS)
+def test_launcher_hidden_safe_neighbors_remain_allowed(command: str, tool_name: str) -> None:
     guard = PermissionGuard(mode=PermissionMode.AUTO)
     tool_input = {"command": command}
 
