@@ -124,6 +124,10 @@ _CHMOD_EXECUTABLES = {"chmod", "chmod.exe"}
 # Pipe sources for the pipe-to-shell classification. Only curl/wget carry the
 # remote-content execution risk the legacy ``curl | sh`` patterns model.
 _PIPE_SOURCE_EXECUTABLES = {"curl", "curl.exe", "wget", "wget.exe"}
+# Pipeline groups (``{ ... }`` / ``( ... )``) inherit the pipeline's stdin, so
+# a shell inside one still executes the piped bytes.
+_PIPE_GROUP_OPEN = {"{", "("}
+_PIPE_GROUP_CLOSE = {"}", ")"}
 _POSIX_SHELL_EXECUTABLES = {
     executable for shell in _SHELLS.split("|") for executable in (shell, f"{shell}.exe")
 }
@@ -813,13 +817,56 @@ def _pipe_target_command_index(tokens: list[str], start: int, end: int) -> int |
     return None
 
 
+def _pipe_group_contains_shell(tokens: list[str], start: int, end: int) -> bool:
+    """Return True when a ``{ ... }`` / ``( ... )`` group runs a shell.
+
+    Every command in a pipeline group inherits the pipeline's stdin, so
+    ``curl x | { sh; }`` and ``curl x | ( sh )`` execute the piped bytes
+    through ``sh`` just like ``curl x | sh``. Scan the group body for a
+    shell executable at a command position (after assignments and
+    transparent prefixes), skipping arguments, separators, and nested
+    groups.
+    """
+    depth = 1
+    cursor = start
+    while cursor < end:
+        token = tokens[cursor]
+        if token in _PIPE_GROUP_OPEN:
+            depth += 1
+            cursor += 1
+            continue
+        if token in _PIPE_GROUP_CLOSE:
+            depth -= 1
+            if depth == 0:
+                return False
+            cursor += 1
+            continue
+        if _is_shell_command_separator(token):
+            cursor += 1
+            continue
+        if _is_shell_assignment(token):
+            cursor += 1
+            continue
+        command_index = _transparent_prefix_command_index(tokens, cursor, end)
+        if command_index is None:
+            command_index = cursor
+        if _shell_executable_name(tokens[command_index]) in _POSIX_SHELL_EXECUTABLES:
+            return True
+        # Skip this command's arguments (``{ echo sh; }`` must stay safe).
+        cursor = command_index + 1
+        while cursor < end and not _is_shell_command_separator(tokens[cursor]):
+            cursor += 1
+    return False
+
+
 def _is_pipe_to_shell_command(command: str) -> bool:
     """Return True when a curl/wget pipeline feeds a shell executable stdin.
 
     The legacy ``curl\\b.*\\|\\s*(?:prefix)?(sh|bash|...)`` regexes miss
     quoted shells (``curl x | "sh"``), path-qualified shells
-    (``curl x | /bin/sh``), and quoted shells behind a transparent prefix
-    (``curl x | sudo 'bash'``) — all of which still execute the piped bytes
+    (``curl x | /bin/sh``), quoted shells behind a transparent prefix
+    (``curl x | sudo 'bash'``), and pipeline groups (``curl x | { sh; }``,
+    ``curl x | ( sh )``) — all of which still execute the piped bytes
     through a shell. Token-based classification closes those gaps while
     keeping non-shell targets (``grep sh``, ``cat``) and ``||`` safe.
     """
@@ -836,11 +883,26 @@ def _is_pipe_to_shell_command(command: str) -> bool:
             if segment_end >= len(tokens) or tokens[segment_end] not in {"|", "|&"}:
                 continue
             target_end = segment_end + 1
-            while target_end < len(tokens) and not _is_shell_command_separator(tokens[target_end]):
+            group_depth = 0
+            while target_end < len(tokens):
+                target_token = tokens[target_end]
+                if target_token in _PIPE_GROUP_OPEN:
+                    group_depth += 1
+                elif target_token in _PIPE_GROUP_CLOSE:
+                    group_depth -= 1
+                elif group_depth == 0 and _is_shell_command_separator(target_token):
+                    break
                 target_end += 1
-            target = _pipe_target_command_index(tokens, segment_end + 1, target_end)
+            target_start = segment_end + 1
+            target = _pipe_target_command_index(tokens, target_start, target_end)
             if target is not None and (
                 _shell_executable_name(tokens[target]) in _POSIX_SHELL_EXECUTABLES
+            ):
+                return True
+            if (
+                target_start < target_end
+                and tokens[target_start] in _PIPE_GROUP_OPEN
+                and _pipe_group_contains_shell(tokens, target_start + 1, target_end)
             ):
                 return True
     return False
@@ -1153,6 +1215,29 @@ def _is_dangerous_chmod_command(command: str) -> bool:
     return False
 
 
+def _is_dangerous_dd_command(command: str) -> bool:
+    """Detect ``dd`` invocations with an ``if=`` operand.
+
+    The legacy ``(^|\\s)dd\\s+if=`` regex misses quoted operands
+    (``dd "if=/dev/zero" of=x``), quote-concatenated executables
+    (``d""d if=x``), and operand order such as ``dd bs=1M if=x of=y``.
+    Operands are case-sensitive for dd, so only lowercase ``if=`` counts.
+    """
+    for raw_tokens in _shell_token_views(command, include_escape_normalizations=True):
+        tokens = _without_shell_redirections(raw_tokens)
+        for index, token in enumerate(tokens):
+            if not _is_wrapper_command_position(tokens, index):
+                continue
+            if _shell_executable_name(token) not in {"dd", "dd.exe"}:
+                continue
+            if any(
+                _strip_shell_quotes(argument).startswith("if=")
+                for argument in _command_segment_arguments(tokens, index)
+            ):
+                return True
+    return False
+
+
 def _has_dangerous_shell_substitution(command: str, patterns: list[re.Pattern[str]]) -> bool:
     for body in _shell_substitution_bodies(command):
         if (
@@ -1161,6 +1246,7 @@ def _has_dangerous_shell_substitution(command: str, patterns: list[re.Pattern[st
             or _is_dangerous_git_command(body)
             or _is_dangerous_rm_command(body)
             or _is_dangerous_chmod_command(body)
+            or _is_dangerous_dd_command(body)
             or any(pattern.search(body) for pattern in patterns)
             or _has_dangerous_shell_substitution(body, patterns)
         ):
@@ -1387,6 +1473,7 @@ class PermissionGuard:
                 or _is_dangerous_git_command(cmd)
                 or _is_dangerous_rm_command(cmd)
                 or _is_dangerous_chmod_command(cmd)
+                or _is_dangerous_dd_command(cmd)
                 or any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS)
             ):
                 return True
@@ -1439,6 +1526,7 @@ class PermissionGuard:
                 or _is_dangerous_git_command(cmd)
                 or _is_dangerous_rm_command(cmd)
                 or _is_dangerous_chmod_command(cmd)
+                or _is_dangerous_dd_command(cmd)
                 or any(pattern.search(cmd) for pattern in self.DANGEROUS_PATTERNS)
             )
         return False
