@@ -478,6 +478,15 @@ LAUNCHED_DESTRUCTIVE_VARIANTS = [
     "watch -n 1 chmod a=rwx /tmp/x",
     "sudo xargs rm --recursive",
     'echo "$(xargs rm --recursive)"',
+    # transparent prefixes after find -exec / launchers
+    "find . -exec sudo rm --recursive {} +",
+    "find . -exec command sudo rm -r {} +",
+    "find . -exec exec rm -r {} +",
+    "sudo find . -exec rm --recursive {} +",
+    "xargs sudo rm --recursive /tmp/x",
+    "nice sudo rm --recursive /tmp/x",
+    "timeout 5 sudo chmod a=rwx /tmp/x",
+    'timeout 3 sudo dd "if=/dev/zero" of=/tmp/x',
 ]
 
 LAUNCHED_SAFE_NEIGHBORS = [
@@ -485,14 +494,21 @@ LAUNCHED_SAFE_NEIGHBORS = [
     "find . -exec echo rm --recursive {} +",
     "find . -exec rm {} +",
     "find . -exec chmod 755 {} +",
+    "find . -exec sudo ls {} +",
+    "find . -exec /bin/ls {} +",
     "echo xargs rm --recursive",
     "echo find -exec rm --recursive",
     "xargs echo rm --recursive",
+    "xargs sudo echo rm --recursive",
     "xargs rm -f file.txt",
     "nice -n 5 ls -l",
     "nice -n 5 echo rm --recursive",
     "timeout 10 ls",
     "xargs -r ls",
+    "xargs --no-run-if-empty ls",
+    "nice sudo ls -l",
+    "timeout 5 sudo ls",
+    "xargs sudo ls",
     "find . -name '*.tmp'",
 ]
 

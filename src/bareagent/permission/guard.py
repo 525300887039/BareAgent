@@ -760,7 +760,8 @@ def _launcher_command_index(tokens: list[str], launcher_index: int, end: int) ->
     Value-taking options consume their next token (``-I {}``); ``--opt=v``
     and ``-ov`` forms carry the value attached and consume one token only.
     ``timeout``/``chrt`` additionally take a numeric positional before the
-    command (``timeout 5 rm -r``).
+    command (``timeout 5 rm -r``). Transparent prefixes after the launcher
+    (``xargs sudo rm -r``) are resolved too.
     """
     executable = _shell_executable_name(tokens[launcher_index])
     value_options = _LAUNCHER_OPTIONS_WITH_VALUE.get(executable, set())
@@ -779,6 +780,11 @@ def _launcher_command_index(tokens: list[str], launcher_index: int, end: int) ->
         and _strip_shell_quotes(tokens[cursor]).isdecimal()
     ):
         cursor += 1
+    while cursor < end:
+        command_index = _transparent_prefix_command_index(tokens, cursor, end)
+        if command_index is None:
+            break
+        cursor = command_index
     return cursor
 
 
@@ -786,33 +792,43 @@ def _is_launcher_command_position(tokens: list[str], index: int) -> bool:
     """Return True when ``tokens[index]`` is the command a launcher runs.
 
     Covers ``find -exec CMD`` / ``-execdir CMD`` and the launcher executables
-    (``xargs``, ``nice``, ``timeout``, ...): ``find . -exec rm --recursive``
-    and ``nice -n 5 rm --recursive`` execute the same destructive command as
-    a bare ``rm --recursive``, so the destructive handlers must see through
-    the launcher. The launcher itself must sit at a command position, and
-    the walk past its options must land exactly on ``index``, so
-    ``echo xargs rm`` and ``xargs echo rm`` stay safe.
+    (``xargs``, ``nice``, ``timeout``, ...): ``find . -exec rm --recursive``,
+    ``find . -exec sudo rm --recursive``, and ``nice -n 5 rm --recursive``
+    execute the same destructive command as a bare ``rm --recursive``, so the
+    destructive handlers must see through the launcher. The launcher itself
+    must sit at a command position, and the walk past its options must land
+    exactly on ``index``, so ``echo xargs rm`` and ``xargs echo rm`` stay
+    safe.
     """
     if index == 0:
         return False
-    previous = _strip_shell_quotes(tokens[index - 1])
-    if previous in _FIND_EXEC_OPTIONS:
-        segment_start = index - 1
-        while segment_start > 0 and not _is_shell_command_separator(tokens[segment_start - 1]):
-            segment_start -= 1
-        return any(
-            _is_wrapper_command_position(tokens, cursor)
-            and _shell_executable_name(tokens[cursor]) in _FIND_EXECUTABLES
-            for cursor in range(segment_start, index - 1)
-        )
-
     segment_start = index
     while segment_start > 0 and not _is_shell_command_separator(tokens[segment_start - 1]):
         segment_start -= 1
+    segment_end = index + 1
+    while segment_end < len(tokens) and not _is_shell_command_separator(tokens[segment_end]):
+        segment_end += 1
+    find_present = any(
+        _is_wrapper_command_position(tokens, cursor)
+        and _shell_executable_name(tokens[cursor]) in _FIND_EXECUTABLES
+        for cursor in range(segment_start, index)
+    )
+    if find_present:
+        for exec_index in range(segment_start, index):
+            if _strip_shell_quotes(tokens[exec_index]) not in _FIND_EXEC_OPTIONS:
+                continue
+            command_index = exec_index + 1
+            while command_index < index:
+                resolved = _transparent_prefix_command_index(tokens, command_index, segment_end)
+                if resolved is None:
+                    break
+                command_index = resolved
+            if command_index == index:
+                return True
     return any(
         _shell_executable_name(tokens[launcher_index]) in _LAUNCHER_EXECUTABLES
         and _is_wrapper_command_position(tokens, launcher_index)
-        and _launcher_command_index(tokens, launcher_index, index) == index
+        and _launcher_command_index(tokens, launcher_index, segment_end) == index
         for launcher_index in range(segment_start, index)
     )
 
