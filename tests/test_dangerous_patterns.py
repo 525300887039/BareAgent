@@ -487,6 +487,17 @@ LAUNCHED_DESTRUCTIVE_VARIANTS = [
     "nice sudo rm --recursive /tmp/x",
     "timeout 5 sudo chmod a=rwx /tmp/x",
     'timeout 3 sudo dd "if=/dev/zero" of=/tmp/x',
+    # wsl (Windows Subsystem for Linux) and PowerShell Start-Process launchers
+    "wsl rm --recursive /tmp/x",
+    "wsl.exe rm --recursive /tmp/x",
+    "wsl -e rm --recursive /tmp/x",
+    "wsl -d Ubuntu rm -r /tmp/x",
+    "wsl --user root rm -r /tmp/x",
+    "sudo wsl rm --recursive /tmp/x",
+    "Start-Process Remove-Item -ArgumentList '-Recurse','x'",
+    "Start-Process -FilePath rm -ArgumentList '--recursive'",
+    "Start-Process rm -ArgumentList '--recursive','x'",
+    'echo "$(wsl rm --recursive /tmp/x)"',
 ]
 
 LAUNCHED_SAFE_NEIGHBORS = [
@@ -509,6 +520,17 @@ LAUNCHED_SAFE_NEIGHBORS = [
     "nice sudo ls -l",
     "timeout 5 sudo ls",
     "xargs sudo ls",
+    # wsl / Start-Process safe neighbors
+    "wsl ls -la",
+    "wsl -e ls",
+    "wsl -d Ubuntu ls",
+    "wsl echo rm --recursive",
+    "echo wsl rm --recursive",
+    "wsl --list",
+    "wsl --status",
+    "Start-Process ls",
+    "Start-Process notepad",
+    "Start-Process echo rm --recursive",
     "find . -name '*.tmp'",
 ]
 

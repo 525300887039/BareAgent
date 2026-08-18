@@ -123,9 +123,10 @@ _RM_RECURSIVE_LONG_OPTION_PREFIXES = {
 _CHMOD_EXECUTABLES = {"chmod", "chmod.exe"}
 _FIND_EXECUTABLES = {"find", "find.exe"}
 # Executables that run their arguments as a command (find -exec / -execdir,
-# xargs, nice, ionice, setsid, timeout, stdbuf, taskset, watch, chrt). A
-# destructive rm/chmod/dd behind one of these is still the destructive
-# command; the launcher merely hides it from the wrapper-position walk.
+# xargs, nice, ionice, setsid, timeout, stdbuf, taskset, watch, chrt, wsl,
+# and PowerShell's Start-Process). A destructive rm/chmod/dd behind one of
+# these is still the destructive command; the launcher merely hides it from
+# the wrapper-position walk.
 _LAUNCHER_EXECUTABLES = {
     "xargs",
     "nice",
@@ -136,11 +137,15 @@ _LAUNCHER_EXECUTABLES = {
     "taskset",
     "watch",
     "chrt",
+    "wsl",
+    "wsl.exe",
+    "start-process",
 }
 _FIND_EXEC_OPTIONS = {"-exec", "-execdir"}
 # Value-taking launcher options, per launcher, so the launched command can be
 # located after them (``nice -n 5 rm -r`` -> ``rm``). ``--opt=value`` and
-# ``-ovalue`` forms carry their value attached and need no +2 skip.
+# ``-ovalue`` forms carry their value attached and need no +2 skip. Matched
+# case-insensitively (PowerShell options like ``-FilePath`` are case-blind).
 _LAUNCHER_OPTIONS_WITH_VALUE = {
     "xargs": {"-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s", "-S"},
     "nice": {"-n", "--adjustment"},
@@ -151,6 +156,19 @@ _LAUNCHER_OPTIONS_WITH_VALUE = {
     "taskset": {"-c", "-P", "--cpu-list", "--pid"},
     "watch": {"-n", "--interval"},
     "chrt": {"-P", "--pid"},
+    "wsl": {"-d", "-u", "--distribution", "--user", "--cd"},
+    "start-process": {
+        "-filepath",
+        "-argumentlist",
+        "-workingdirectory",
+        "-credential",
+        "-windowstyle",
+        "-environment",
+        "-verb",
+        "-redirectstandardoutput",
+        "-redirectstandarderror",
+        "-redirectstandardinput",
+    },
 }
 # Launchers whose command follows a numeric positional (timeout's duration,
 # chrt's priority): ``timeout 5 rm -r``.
@@ -770,7 +788,7 @@ def _launcher_command_index(tokens: list[str], launcher_index: int, end: int) ->
         argument = _strip_shell_quotes(tokens[cursor])
         if not argument.startswith("-"):
             break
-        if argument in value_options:
+        if argument.casefold() in value_options:
             cursor += 2
         else:
             cursor += 1
